@@ -33,22 +33,21 @@ const SurveyCreator: React.FC = () => {
       const newSurvey = {
         title: surveyData.title,
         description: surveyData.description,
-        stats: { participants: 0 },
+        author: user?.user_metadata?.full_name || user?.email || 'Anonymous',
         questions: [
           {
             question: surveyData.question1,
-            type: 'text',
+            type: "text" as const,
             required: true,
             order_number: 1
           },
           {
             question: surveyData.question2,
-            type: 'text',
+            type: "text" as const,
             required: true,
             order_number: 2
           }
-        ],
-        author: user?.user_metadata?.full_name || user?.email || 'Anonymous'
+        ]
       };
 
       await addSurvey(newSurvey);

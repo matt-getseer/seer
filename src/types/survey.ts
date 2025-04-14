@@ -28,4 +28,13 @@ export interface SurveyResponse {
   participant_id: string;
   completed_at: string | null;
   answers?: SurveyAnswer[];
+}
+
+export interface Survey {
+  id: string;
+  title: string;
+  description?: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
 } 

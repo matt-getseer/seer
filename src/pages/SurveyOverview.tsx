@@ -81,8 +81,10 @@ const SurveyOverview: React.FC = () => {
     if (!survey) return;
 
     try {
+      setError(null);
+      setShowDeleteDialog(false);
       await deleteSurvey(survey.id);
-      navigate('/surveys');
+      navigate('/surveys', { replace: true });
     } catch (err) {
       console.error('Error deleting survey:', err);
       setError(err instanceof Error ? err.message : 'An error occurred while deleting the survey');
