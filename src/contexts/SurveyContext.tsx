@@ -1,13 +1,23 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import { supabase, Survey } from '../lib/supabase';
+import { Survey } from '../types/survey';
 import { useAuth } from './AuthContext';
 import { logger } from '../lib/logger';
+import { api } from '../services/api';
 
 interface SurveyContextType {
   surveys: Survey[];
   loading: boolean;
   error: string | null;
-  addSurvey: (survey: Omit<Survey, 'id' | 'created_at' | 'user_id'>) => Promise<void>;
+  addSurvey: (survey: { 
+    title: string; 
+    description?: string;
+    questions?: Array<{
+      question: string;
+      type: "text" | "multiple_choice" | "boolean" | "rating";
+      required: boolean;
+      order_number: number;
+    }>;
+  }) => Promise<void>;
   deleteSurvey: (id: string) => Promise<void>;
   retryConnection: () => Promise<void>;
 }
@@ -31,7 +41,7 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const fetchSurveys = useCallback(async () => {
     if (!user) {
-      logger.info('No user authenticated, skipping survey fetch', null, { context: 'SurveyContext' });
+      logger.info('No user authenticated, skipping survey fetch', { userId: undefined }, { context: 'SurveyContext' });
       return;
     }
 
@@ -40,184 +50,107 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setError(null);
       logger.info('Starting survey fetch', { userId: user.id }, { context: 'SurveyContext' });
       
-      // First fetch the surveys for the current user
-      const { data: surveysData, error: fetchError } = await supabase
-        .from('surveys')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
+      const data = await api.getSurveys();
       logger.info('Survey fetch response', { 
-        data: surveysData, 
-        error: fetchError,
-        count: surveysData?.length 
+        count: data.length 
       }, { context: 'SurveyContext' });
 
-      if (fetchError) {
-        logger.error('Error fetching surveys', fetchError, { context: 'SurveyContext' });
-        throw new Error(`Database error: ${fetchError.message}`);
-      }
-
-      if (!surveysData || surveysData.length === 0) {
-        logger.info('No surveys found for user', { userId: user.id }, { context: 'SurveyContext' });
-        setSurveys([]);
-        return;
-      }
-
-      // Then fetch participant counts for each survey
-      const surveysWithCounts = await Promise.all(surveysData.map(async (survey) => {
-        const { count, error: countError } = await supabase
-          .from('participants')
-          .select('*', { count: 'exact', head: true })
-          .eq('survey_id', survey.id);
-
-        logger.info('Participant count fetch response', { 
-          surveyId: survey.id,
-          count,
-          error: countError
-        }, { context: 'SurveyContext' });
-
-        if (countError) {
-          logger.error('Error fetching participant count', countError, { context: 'SurveyContext' });
-          return {
-            ...survey,
-            stats: {
-              participants: 0
-            }
-          };
-        }
-
-        return {
-          ...survey,
-          stats: {
-            participants: count || 0
-          }
-        };
-      }));
-
-      logger.info('Final surveys with counts', { 
-        count: surveysWithCounts.length,
-        surveys: surveysWithCounts
-      }, { context: 'SurveyContext' });
-      
-      setSurveys(surveysWithCounts);
-    } catch (err) {
-      logger.error('Error in fetchSurveys', err, { context: 'SurveyContext' });
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching surveys');
+      setSurveys(data);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred while fetching surveys';
+      logger.error('Error in fetchSurveys', { error: errorMessage }, { context: 'SurveyContext' });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   }, [user]);
 
-  // Fetch surveys when user changes
   useEffect(() => {
     if (user) {
       logger.info('User authenticated, fetching surveys', { userId: user.id }, { context: 'SurveyContext' });
       fetchSurveys();
     } else {
-      logger.info('No user authenticated, clearing surveys', null, { context: 'SurveyContext' });
+      logger.info('No user authenticated, clearing surveys', { userId: undefined }, { context: 'SurveyContext' });
       setSurveys([]);
     }
   }, [user, retryCount, fetchSurveys]);
+
+  const addSurvey = async (survey: { 
+    title: string; 
+    description?: string;
+    questions?: Array<{
+      question: string;
+      type: "text" | "multiple_choice" | "boolean" | "rating";
+      required: boolean;
+      order_number: number;
+    }>;
+  }) => {
+    try {
+      // First create the survey
+      const newSurvey = await api.createSurvey({
+        title: survey.title,
+        description: survey.description
+      });
+
+      // Then add questions if they exist
+      if (survey.questions && survey.questions.length > 0) {
+        for (const question of survey.questions) {
+          await api.addSurveyQuestion(newSurvey.id, question);
+        }
+      }
+
+      setSurveys(prev => [newSurvey, ...prev]);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error adding survey';
+      logger.error('Error adding survey', { error: errorMessage }, { context: 'SurveyContext' });
+      throw error;
+    }
+  };
+
+  const deleteSurvey = async (id: string) => {
+    try {
+      logger.info('Starting survey deletion', { surveyId: id }, { context: 'SurveyContext' });
+      await api.deleteSurvey(id);
+      logger.info('Survey deleted successfully', { surveyId: id }, { context: 'SurveyContext' });
+      
+      // First update local state for immediate feedback
+      setSurveys(prev => {
+        const newSurveys = prev.filter(s => s.id !== id);
+        logger.info('Updated local state', { 
+          surveyId: id, 
+          previousCount: prev.length, 
+          newCount: newSurveys.length 
+        }, { context: 'SurveyContext' });
+        return newSurveys;
+      });
+      
+      // Then refresh the full list
+      logger.info('Refreshing survey list', { surveyId: id }, { context: 'SurveyContext' });
+      await fetchSurveys();
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error deleting survey';
+      logger.error('Error deleting survey', { 
+        surveyId: id, 
+        error: errorMessage 
+      }, { context: 'SurveyContext' });
+      throw error;
+    }
+  };
 
   const retryConnection = async () => {
     logger.info('Retrying connection', { retryCount }, { context: 'SurveyContext' });
     setRetryCount(prev => prev + 1);
   };
 
-  const addSurvey = async (newSurvey: Omit<Survey, 'id' | 'created_at' | 'user_id'>) => {
-    if (!user) {
-      logger.error('Attempt to add survey without user', null, { context: 'SurveyContext' });
-      throw new Error('User must be logged in to create a survey');
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      logger.info('Adding new survey', { ...newSurvey, userId: user.id }, { context: 'SurveyContext' });
-      
-      // First create the survey
-      const { data: surveyData, error: insertError } = await supabase
-        .from('surveys')
-        .insert([{
-          ...newSurvey,
-          user_id: user.id,
-          stats: { participants: 0 }
-        }])
-        .select()
-        .single();
-
-      if (insertError) {
-        logger.error('Error adding survey', insertError, { context: 'SurveyContext' });
-        throw new Error(`Database error: ${insertError.message}`);
-      }
-
-      // Then create the questions in the survey_questions table
-      if (newSurvey.questions && newSurvey.questions.length > 0) {
-        const questionsToInsert = newSurvey.questions.map((question: { question: string; type: string; required: boolean; order_number: number }, index: number) => ({
-          survey_id: surveyData.id,
-          question: question.question,
-          type: question.type,
-          required: question.required,
-          order_number: question.order_number
-        }));
-
-        const { error: questionsError } = await supabase
-          .from('survey_questions')
-          .insert(questionsToInsert);
-
-        if (questionsError) {
-          logger.error('Error adding questions', questionsError, { context: 'SurveyContext' });
-          throw new Error(`Database error: ${questionsError.message}`);
-        }
-      }
-
-      setSurveys(prev => [surveyData, ...prev]);
-    } catch (err) {
-      logger.error('Error in addSurvey', err, { context: 'SurveyContext' });
-      setError(err instanceof Error ? err.message : 'An error occurred while adding the survey');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteSurvey = async (id: string) => {
-    if (!user) {
-      logger.error('Attempt to delete survey without user', null, { context: 'SurveyContext' });
-      throw new Error('User must be logged in to delete a survey');
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      logger.info('Deleting survey', { surveyId: id, userId: user.id }, { context: 'SurveyContext' });
-
-      const { error: deleteError } = await supabase
-        .from('surveys')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
-
-      logger.info('Delete survey response', { error: deleteError }, { context: 'SurveyContext' });
-
-      if (deleteError) {
-        logger.error('Error deleting survey', deleteError, { context: 'SurveyContext' });
-        throw new Error(`Database error: ${deleteError.message}`);
-      }
-
-      setSurveys(prev => prev.filter(survey => survey.id !== id));
-    } catch (err) {
-      logger.error('Error in deleteSurvey', err, { context: 'SurveyContext' });
-      setError(err instanceof Error ? err.message : 'An error occurred while deleting the survey');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <SurveyContext.Provider value={{ surveys, loading, error, addSurvey, deleteSurvey, retryConnection }}>
+    <SurveyContext.Provider value={{
+      surveys,
+      loading,
+      error,
+      addSurvey,
+      deleteSurvey,
+      retryConnection,
+    }}>
       {children}
     </SurveyContext.Provider>
   );
