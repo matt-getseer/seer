@@ -45,18 +45,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 // Wrapper component to handle layout selection
 const LayoutWrapper: React.FC = () => {
-  const location = useLocation();
-  const isPublicRoute = location.pathname.startsWith('/take-survey/') ||
-    location.pathname.startsWith('/analytics/') ||
-    location.pathname === '/sign-in' ||
-    location.pathname === '/sign-up' ||
-    location.pathname === '/reset-password' ||
-    location.pathname === '/email-verification';
-
-  if (isPublicRoute) {
-    return <PublicLayout><Outlet /></PublicLayout>;
-  }
-
   return (
     <div className="min-h-screen bg-gray-100">
       <Sidebar />
@@ -149,8 +137,10 @@ const App: React.FC = () => {
                 <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
                 <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>
+            <ConnectionStatus />
           </Router>
         </SurveyProvider>
       </AuthProvider>
