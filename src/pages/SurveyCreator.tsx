@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSurveyContext } from '../contexts/SurveyContext';
 import { useAuth } from '../contexts/AuthContext';
 import usePageTitle from '../hooks/usePageTitle';
+import Input from '../components/Input';
 
 const SurveyCreator: React.FC = () => {
   usePageTitle('Create Survey');
@@ -65,66 +66,44 @@ const SurveyCreator: React.FC = () => {
     <div className="max-w-2xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">Create New Survey</h1>
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-            Survey Title
-          </label>
-          <input
-            type="text"
-            id="title"
-            name="title"
-            value={surveyData.title}
-            onChange={handleSurveyDataChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            required
-          />
-        </div>
+        <Input
+          id="title"
+          name="title"
+          label="Survey Title"
+          value={surveyData.title}
+          onChange={handleSurveyDataChange}
+          required
+        />
 
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-            Description
-          </label>
-          <textarea
-            id="description"
-            name="description"
-            value={surveyData.description}
-            onChange={handleSurveyDataChange}
-            rows={4}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-          />
-        </div>
+        <Input
+          id="description"
+          name="description"
+          label="Description"
+          value={surveyData.description}
+          onChange={handleSurveyDataChange}
+          multiline
+          rows={4}
+        />
 
-        <div>
-          <label htmlFor="question1" className="block text-sm font-medium text-gray-700">
-            First Question
-          </label>
-          <input
-            type="text"
-            id="question1"
-            name="question1"
-            value={surveyData.question1}
-            onChange={handleSurveyDataChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            required
-            placeholder="Enter your first question"
-          />
-        </div>
+        <Input
+          id="question1"
+          name="question1"
+          label="First Question"
+          value={surveyData.question1}
+          onChange={handleSurveyDataChange}
+          required
+          placeholder="Enter your first question"
+        />
 
-        <div>
-          <label htmlFor="question2" className="block text-sm font-medium text-gray-700">
-            Second Question
-          </label>
-          <input
-            type="text"
-            id="question2"
-            name="question2"
-            value={surveyData.question2}
-            onChange={handleSurveyDataChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            required
-            placeholder="Enter your second question"
-          />
-        </div>
+        <Input
+          id="question2"
+          name="question2"
+          label="Second Question"
+          value={surveyData.question2}
+          onChange={handleSurveyDataChange}
+          required
+          placeholder="Enter your second question"
+        />
 
         {error && (
           <div className="text-red-600 text-sm">
