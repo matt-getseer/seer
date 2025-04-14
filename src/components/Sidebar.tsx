@@ -60,7 +60,7 @@ const Sidebar = () => {
               <p className="text-sm font-medium text-gray-700">{user?.email ?? 'User'}</p>
               <button
                 onClick={handleSignOut}
-                className="text-xs text-gray-500 hover:text-indigo-600"
+                className="text-sm text-gray-500 hover:text-indigo-600"
               >
                 Sign out
               </button>
