@@ -125,7 +125,14 @@ const App: React.FC = () => {
               <Route path="/sign-up" element={<PublicLayout><SignUp /></PublicLayout>} />
               <Route path="/reset-password" element={<PublicLayout><ResetPassword /></PublicLayout>} />
               <Route path="/email-verification" element={<PublicLayout><EmailVerification /></PublicLayout>} />
-              <Route path="/take-survey/:mode/:id" element={<PublicLayout><TakeSurvey /></PublicLayout>} />
+              <Route 
+                path="/take-survey/:mode/:id" 
+                element={
+                  <PublicLayout>
+                    <TakeSurvey isPreview={window.location.pathname.includes('/preview/')} />
+                  </PublicLayout>
+                } 
+              />
               <Route path="/analytics/:token" element={<PublicLayout><SharedAnalytics /></PublicLayout>} />
               <Route element={<LayoutWrapper />}>
                 <Route path="/" element={<Navigate to="/surveys" replace />} />

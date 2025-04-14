@@ -55,7 +55,7 @@ interface TakeSurveyProps {
 }
 
 const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
-  const { token, surveyId } = useParams<{ token?: string; surveyId?: string }>();
+  const { token, id, mode } = useParams<{ token?: string; id?: string; mode?: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +72,17 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number>(180); // 3 minutes in seconds
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const effectiveIsPreview = isPreview || mode === 'preview';
+
+  console.log('TakeSurvey component mounted:', {
+    isPreview,
+    effectiveIsPreview,
+    token,
+    surveyId: id,
+    mode,
+    params: useParams(),
+    currentUrl: window.location.href
+  });
 
   const handleAnswerChange = useCallback((questionId: string, answer: string | number | boolean) => {
     setAnswers(prev => ({
@@ -85,13 +96,13 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
       try {
         setLoading(true);
         
-        if (isPreview) {
-          console.log('Preview mode - attempting to fetch survey with ID:', surveyId);
+        if (effectiveIsPreview) {
+          console.log('Preview mode - attempting to fetch survey with ID:', id);
           // First fetch the survey data
           const { data: surveyData, error: surveyError } = await supabase
             .from('surveys')
             .select('*')
-            .eq('id', surveyId)
+            .eq('id', id)
             .single();
 
           console.log('Preview survey fetch result:', { 
@@ -102,7 +113,8 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
               details: surveyError.details,
               hint: surveyError.hint,
               code: surveyError.code
-            } : null
+            } : null,
+            currentUrl: window.location.href
           });
 
           if (surveyError) {
@@ -116,7 +128,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
           }
 
           if (!surveyData) {
-            console.error('No survey data found for ID:', surveyId);
+            console.error('No survey data found for ID:', id);
             throw new Error('Survey not found');
           }
 
@@ -133,11 +145,11 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
           }
 
           // Fetch survey questions
-          console.log('Attempting to fetch questions for survey:', surveyId);
+          console.log('Attempting to fetch questions for survey:', id);
           const { data: questions, error: questionsError } = await supabase
             .from('survey_questions')
             .select('*')
-            .eq('survey_id', surveyId)
+            .eq('survey_id', id)
             .order('order_number', { ascending: true });
 
           if (questionsError) {
@@ -245,11 +257,11 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
       }
     };
 
-    if (token || (isPreview && surveyId)) {
-      console.log('Initializing with:', { isPreview, surveyId, token });
+    if (token || (effectiveIsPreview && id)) {
+      console.log('Initializing with:', { effectiveIsPreview, id, token });
       fetchSurveyData();
     }
-  }, [token, surveyId, isPreview]);
+  }, [token, id, effectiveIsPreview]);
 
   // Initialize speech recognition once
   useEffect(() => {
@@ -358,11 +370,11 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
   };
 
   const handleSubmit = async () => {
-    if (isPreview) {
+    if (effectiveIsPreview) {
       // In preview mode, just show completion message and return to survey overview
       setCurrentStep('complete');
       setTimeout(() => {
-        navigate(`/surveys/${surveyId}`);
+        navigate(`/surveys/${id}`);
       }, 3000);
       return;
     }
@@ -450,7 +462,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
     );
   }
 
-  if (!surveyData.survey || (!surveyData.participant && !isPreview)) {
+  if (!surveyData.survey || (!surveyData.participant && !effectiveIsPreview)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -470,17 +482,17 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
     currentQuestionIndex,
     currentQuestion,
     questionCount: surveyData.questions.length,
-    isPreview
+    effectiveIsPreview
   });
 
   return (
     <>
-      {isPreview && (
+      {effectiveIsPreview && (
         <div className="fixed top-0 left-0 right-0 bg-primary-600 text-white px-4 py-2 text-center text-sm z-50">
           Preview Mode - Responses will not be saved
         </div>
       )}
-      <div className={`min-h-screen bg-gray-50 flex flex-col ${isPreview ? 'pt-10' : ''}`}>
+      <div className={`min-h-screen bg-gray-50 flex flex-col ${effectiveIsPreview ? 'pt-10' : ''}`}>
         <div className="max-w-3xl mx-auto w-full px-4 py-8">
           <div className="flex justify-center mb-8 pt-10 pb-6">
             <img
@@ -496,7 +508,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
                   {surveyData.survey.title}
                 </h1>
                 <p className="text-gray-600 mb-6">{surveyData.survey.description}</p>
-                {!isPreview && surveyData.participant?.name && (
+                {!effectiveIsPreview && surveyData.participant?.name && (
                   <p className="text-sm text-gray-500 mb-6">
                     Welcome, {surveyData.participant.name}
                   </p>
