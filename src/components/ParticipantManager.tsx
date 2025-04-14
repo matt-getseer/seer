@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Participant } from '../lib/types';
-import { PlusIcon, TrashIcon, ArrowUpTrayIcon, ShareIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, ArrowUpTrayIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { logger } from '../lib/logger';
 import Toast from './Toast';
 
