@@ -6,14 +6,23 @@ import { logger } from '../utils/logger';
 export class SurveyController {
   static async getSurveys(req: Request, res: Response, next: NextFunction) {
     try {
-      const { data, error } = await supabase
+      const { data: surveys, error: surveysError } = await supabase
         .from('surveys')
-        .select('*')
+        .select(`
+          *,
+          participants:participants(count)
+        `)
         .eq('user_id', req.userId);
 
-      if (error) throw new AppError(500, 'Error fetching surveys');
+      if (surveysError) throw new AppError(500, 'Error fetching surveys');
 
-      res.json(data);
+      // Transform the data to include participant count
+      const transformedData = surveys.map(survey => ({
+        ...survey,
+        participant_count: survey.participants?.[0]?.count || 0
+      }));
+
+      res.json(transformedData);
     } catch (error) {
       next(error);
     }

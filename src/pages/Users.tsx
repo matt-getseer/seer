@@ -288,12 +288,12 @@ const Users: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Last Active</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Role</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Last Active</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">

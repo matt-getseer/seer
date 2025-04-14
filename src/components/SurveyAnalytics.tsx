@@ -47,10 +47,15 @@ const SurveyAnalytics: React.FC<AnalyticsProps> = ({ surveyId, isPublicView = fa
       // Fetch total participants
       const { count: totalParticipants, error: participantsError } = await supabase
         .from('participants')
-        .select('*', { count: 'exact', head: true })
+        .select('count', { count: 'exact', head: true })
         .eq('survey_id', surveyId);
 
-      if (participantsError) throw participantsError;
+      if (participantsError) {
+        logger.error('Error fetching participants count', participantsError, { context: 'SurveyAnalytics' });
+        throw participantsError;
+      }
+
+      console.log('Participants count:', totalParticipants); // Debug log
 
       // Fetch completed responses
       const { data: completedResponses, error: responsesError } = await supabase
@@ -79,6 +84,14 @@ const SurveyAnalytics: React.FC<AnalyticsProps> = ({ surveyId, isPublicView = fa
         averageTimeToComplete,
         responseRate: totalParticipants ? (completedResponses.length / totalParticipants) * 100 : 0
       });
+
+      logger.info('Survey metrics calculated', {
+        surveyId,
+        totalParticipants,
+        completedResponses: completedResponses.length,
+        context: 'SurveyAnalytics'
+      });
+
     } catch (err) {
       logger.error('Error fetching metrics', err, { context: 'SurveyAnalytics' });
       setError(err instanceof Error ? err.message : 'Failed to fetch metrics');

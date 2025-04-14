@@ -117,18 +117,17 @@ const Surveys: React.FC = () => {
                 <div className="mb-4 flex items-center justify-between">
                   <div className="h-8 w-8 rounded-full bg-gray-200">
                     <span className="flex h-full w-full items-center justify-center text-sm font-medium text-gray-600">
-                      {survey.author.split(' ').map(n => n[0]).join('')}
+                      {(survey.author || 'A').split(' ').map(n => n[0]).join('')}
                     </span>
                   </div>
                   <ArrowUpRightIcon className="h-5 w-5 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
                 </div>
                 <h3 className="mb-4 text-lg font-medium text-gray-900">{survey.title}</h3>
                 <p className="text-sm text-gray-500 mb-4">{survey.description}</p>
-                <div className="mt-4 flex space-x-4">
-                  <div className="flex items-center">
-                    <span className="text-sm font-medium text-gray-900">{survey.stats?.participants ?? 0}</span>
-                    <span className="ml-1 text-sm text-gray-500">Participants</span>
-                  </div>
+                <div className="flex space-x-4">
+                  <span className="text-sm text-gray-500">
+                    {survey.participant_count || 0} Participants
+                  </span>
                 </div>
               </div>
             ))}
