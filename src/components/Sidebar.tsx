@@ -28,8 +28,8 @@ const Sidebar = () => {
   return (
     <div className="fixed left-0 top-0 h-full w-56 bg-white shadow-lg">
       <div className="p-4">
-        <div className="mb-8">
-          <div className="h-8 w-8 rotate-45 bg-primary-900" />
+        <div className="mb-12 mt-6">
+          <img src="/CutOnce.png" alt="CutOnce Logo" className="h-6 w-auto ml-2" />
         </div>
         <nav>
           {menuItems.map((item) => (
