@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Participant } from '../lib/types';
-import { PlusIcon, TrashIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, ArrowUpTrayIcon, ShareIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { logger } from '../lib/logger';
+import Toast from './Toast';
 
 interface ParticipantManagerProps {
   surveyId: string;
@@ -13,7 +14,9 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newParticipant, setNewParticipant] = useState({ name: '', email: '' });
+  const [showToast, setShowToast] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout>();
 
   const fetchParticipants = useCallback(async () => {
     try {
@@ -158,6 +161,39 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
     }
   };
 
+  const copyToClipboard = async (token: string | null) => {
+    if (!token) {
+      logger.error('No participation token available');
+      return;
+    }
+    try {
+      const surveyUrl = `${window.location.origin}/take-survey/token/${token}`;
+      await navigator.clipboard.writeText(surveyUrl);
+      
+      // Clear any existing timeout
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+      
+      // Show toast and set timeout to hide it
+      setShowToast(true);
+      toastTimeoutRef.current = setTimeout(() => {
+        setShowToast(false);
+      }, 3000);
+    } catch (err) {
+      logger.error('Error copying to clipboard', err);
+    }
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
   if (error) {
     return (
       <div className="rounded-lg bg-red-50 p-4">
@@ -169,6 +205,12 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
 
   return (
     <div>
+      <Toast 
+        message="Survey link copied to clipboard!"
+        type="success"
+        isVisible={showToast}
+      />
+      
       <div className="mb-6 flex items-center justify-between">
         <form onSubmit={handleAddParticipant} className="flex-1 mr-4">
           <div className="flex space-x-4">
@@ -258,12 +300,22 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
                     {new Date(participant.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleDeleteParticipant(participant.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
+                    <div className="flex items-center justify-end space-x-4">
+                      <button
+                        onClick={() => copyToClipboard(participant.participation_token)}
+                        className="text-primary-600 hover:text-primary-900"
+                        title="Copy survey link"
+                      >
+                        <ShareIcon className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteParticipant(participant.id)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Delete participant"
+                      >
+                        <TrashIcon className="h-5 w-5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
