@@ -482,15 +482,13 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
       )}
       <div className={`min-h-screen bg-gray-50 flex flex-col ${isPreview ? 'pt-10' : ''}`}>
         <div className="max-w-3xl mx-auto w-full px-4 py-8">
-          {surveyData.creatorLogo && (
-            <div className="flex justify-center mb-8">
-              <img
-                src={surveyData.creatorLogo}
-                alt="Survey Creator Logo"
-                className="h-10 max-h-[40px] object-contain"
-              />
-            </div>
-          )}
+          <div className="flex justify-center mb-8 pt-10 pb-6">
+            <img
+              src={surveyData.creatorLogo || "/CutOnce.png"}
+              alt={surveyData.creatorLogo ? "Survey Creator Logo" : "CutOnce Logo"}
+              className="h-10 max-h-[40px] object-contain"
+            />
+          </div>
           {currentStep === 'welcome' && (
             <div className="bg-white shadow sm:rounded-lg">
               <div className="px-4 py-5 sm:p-6">
@@ -711,6 +709,9 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
               </div>
             </div>
           )}
+        </div>
+        <div className="text-center text-gray-400 text-sm mt-4">
+          Powered by CutOnce
         </div>
       </div>
     </>
