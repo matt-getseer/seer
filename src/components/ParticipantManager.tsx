@@ -9,8 +9,15 @@ interface ParticipantManagerProps {
   surveyId: string;
 }
 
+interface ParticipantWithResponse extends Participant {
+  survey_responses?: {
+    created_at: string | null;
+    completed_at: string | null;
+  }[];
+}
+
 const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => {
-  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [participants, setParticipants] = useState<ParticipantWithResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newParticipant, setNewParticipant] = useState({ name: '', email: '' });
@@ -24,7 +31,13 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
       logger.info('Fetching participants for survey', { surveyId }, { context: 'ParticipantManager' });
       const { data, error: fetchError } = await supabase
         .from('participants')
-        .select('*')
+        .select(`
+          *,
+          survey_responses!left (
+            created_at,
+            completed_at
+          )
+        `)
         .eq('survey_id', surveyId)
         .order('created_at', { ascending: false });
 
@@ -32,9 +45,15 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
         logger.error('Supabase fetch error', fetchError, { context: 'ParticipantManager' });
         throw fetchError;
       }
+      
+      // Debug logging
+      console.log('Fetched participants data:', data);
+      
       logger.info('Fetched participants', { count: data?.length }, { context: 'ParticipantManager' });
       setParticipants(data || []);
     } catch (err) {
+      // More detailed error logging
+      console.error('Full error details:', err);
       logger.error('Error fetching participants', {
         message: err instanceof Error ? err.message : 'Unknown error',
         code: (err as any)?.code,
@@ -306,37 +325,67 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
                 </td>
               </tr>
             ) : (
-              participants.map((participant) => (
-                <tr key={participant.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {participant.name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {participant.email}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(participant.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center justify-end space-x-4">
-                      <button
-                        onClick={() => copyToClipboard(participant.participation_token)}
-                        className="text-primary-600 hover:text-primary-900"
-                        title="Copy survey link"
+              participants.map((participant) => {
+                const response = participant.survey_responses?.[0];
+                const status = response?.completed_at 
+                  ? 'completed' 
+                  : response?.created_at 
+                  ? 'started' 
+                  : 'pending';
+
+                return (
+                  <tr key={participant.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {participant.name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {participant.email}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <span 
+                        className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                          status === 'completed' 
+                            ? 'bg-green-100 text-green-800'
+                            : status === 'started'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}
+                        title={
+                          status === 'completed'
+                            ? `Started: ${new Date(response?.created_at!).toLocaleString()}\nCompleted: ${new Date(response?.completed_at!).toLocaleString()}`
+                            : status === 'started'
+                            ? `Started: ${new Date(response?.created_at!).toLocaleString()}\nNot yet completed`
+                            : 'Survey not yet started'
+                        }
                       >
-                        <ShareIcon className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteParticipant(participant.id)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Delete participant"
-                      >
-                        <TrashIcon className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                        {status === 'completed' 
+                          ? 'Completed' 
+                          : status === 'started' 
+                          ? 'Started'
+                          : 'Pending'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-4">
+                        <button
+                          onClick={() => copyToClipboard(participant.participation_token)}
+                          className="text-primary-600 hover:text-primary-900"
+                          title="Copy survey link"
+                        >
+                          <ShareIcon className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteParticipant(participant.id)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete participant"
+                        >
+                          <TrashIcon className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
