@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Menu } from '@headlessui/react';
+import { EllipsisVerticalIcon, ShareIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { supabase, Survey } from '../lib/supabase';
 import { useSurveyContext } from '../contexts/SurveyContext';
 import ConfirmationDialog from '../components/ConfirmationDialog';
@@ -167,30 +169,53 @@ const SurveyOverview: React.FC = () => {
             <div className="flex items-center space-x-4">
               <button
                 onClick={() => navigate('/surveys')}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50"
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-primary-600 bg-white border border-primary-300 rounded-md shadow-sm hover:bg-primary-50 gap-2"
               >
-                Back to Surveys
-              </button>
-              <button
-                onClick={() => window.open(`/take-survey/preview/${survey.id}`, '_blank')}
-                className="px-4 py-2 text-sm font-medium text-primary-600 bg-white border border-primary-300 rounded-md shadow-sm hover:bg-primary-50"
-              >
-                Preview Survey
+                <ArrowLeftIcon className="w-4 h-4" />
+                Back
               </button>
               {activeTab === 'analytics' && (
                 <button
                   onClick={generateShareLink}
-                  className="px-4 py-2 text-sm font-medium text-green-600 bg-white border border-green-300 rounded-md shadow-sm hover:bg-green-50"
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-primary-600 bg-white border border-primary-300 rounded-md shadow-sm hover:bg-primary-50 gap-2"
                 >
-                  Share Analytics
+                  <ShareIcon className="w-4 h-4" />
+                  Share
                 </button>
               )}
-              <button
-                onClick={() => setShowDeleteDialog(true)}
-                className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-              >
-                Delete Survey
-              </button>
+              <Menu as="div" className="relative">
+                <Menu.Button className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100">
+                  <EllipsisVerticalIcon className="w-5 h-5 text-gray-500" />
+                </Menu.Button>
+                <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right bg-white border border-gray-200 divide-y divide-gray-100 rounded-md shadow-lg focus:outline-none">
+                  <div className="py-1">
+                    <Menu.Item>
+                      {({ active }) => (
+                        <button
+                          onClick={() => window.open(`/take-survey/preview/${survey.id}`, '_blank')}
+                          className={`${
+                            active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                          } group flex w-full items-center px-4 py-2 text-sm`}
+                        >
+                          Preview Survey
+                        </button>
+                      )}
+                    </Menu.Item>
+                    <Menu.Item>
+                      {({ active }) => (
+                        <button
+                          onClick={() => setShowDeleteDialog(true)}
+                          className={`${
+                            active ? 'bg-red-50 text-red-900' : 'text-red-700'
+                          } group flex w-full items-center px-4 py-2 text-sm`}
+                        >
+                          Delete Survey
+                        </button>
+                      )}
+                    </Menu.Item>
+                  </div>
+                </Menu.Items>
+              </Menu>
             </div>
           </div>
         </div>
