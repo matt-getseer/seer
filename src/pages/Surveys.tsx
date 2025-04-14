@@ -69,7 +69,7 @@ const Surveys: React.FC = () => {
             </div>
             <button 
               onClick={() => navigate('/surveys/new')}
-              className="flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
+              className="flex items-center rounded-lg bg-primary-600 px-4 py-2 text-white hover:bg-primary-700"
             >
               <span>+ Survey</span>
             </button>
@@ -101,7 +101,7 @@ const Surveys: React.FC = () => {
             </p>
             <button
               onClick={() => navigate('/surveys/new')}
-              className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
+              className="mt-4 rounded-lg bg-primary-600 px-4 py-2 text-white hover:bg-primary-700"
             >
               Create Survey
             </button>

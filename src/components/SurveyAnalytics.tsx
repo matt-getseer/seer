@@ -213,7 +213,7 @@ const SurveyAnalytics: React.FC<AnalyticsProps> = ({ surveyId, isPublicView = fa
           <h2 className="text-lg font-medium text-gray-900">Survey Analytics</h2>
           <button
             onClick={runAnalysis}
-            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700"
           >
             Run Analysis
           </button>
@@ -255,15 +255,15 @@ const SurveyAnalytics: React.FC<AnalyticsProps> = ({ surveyId, isPublicView = fa
             <div className="relative pt-1">
               <div className="flex mb-2 items-center justify-between">
                 <div>
-                  <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-indigo-600 bg-indigo-200">
+                  <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-primary-600 bg-primary-200">
                     Score: {analysisResults.sentiment_score}
                   </span>
                 </div>
               </div>
-              <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-indigo-200">
+              <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-primary-200">
                 <div
                   style={{ width: `${analysisResults.sentiment_score}%` }}
-                  className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500"
+                  className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-primary-500"
                 ></div>
               </div>
             </div>
@@ -290,7 +290,7 @@ const SurveyAnalytics: React.FC<AnalyticsProps> = ({ surveyId, isPublicView = fa
                 <div key={index} className="flex items-start space-x-3">
                   <div className="flex-shrink-0">
                     <svg
-                      className="h-5 w-5 text-indigo-500"
+                      className="h-5 w-5 text-primary-500"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"

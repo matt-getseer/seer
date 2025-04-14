@@ -173,7 +173,7 @@ const SurveyOverview: React.FC = () => {
               </button>
               <button
                 onClick={() => window.open(`/take-survey/preview/${survey.id}`, '_blank')}
-                className="px-4 py-2 text-sm font-medium text-indigo-600 bg-white border border-indigo-300 rounded-md shadow-sm hover:bg-indigo-50"
+                className="px-4 py-2 text-sm font-medium text-primary-600 bg-white border border-primary-300 rounded-md shadow-sm hover:bg-primary-50"
               >
                 Preview Survey
               </button>
@@ -201,7 +201,7 @@ const SurveyOverview: React.FC = () => {
               onClick={() => setActiveTab('analytics')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'analytics'
-                  ? 'border-indigo-500 text-indigo-600'
+                  ? 'border-primary-500 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
@@ -211,7 +211,7 @@ const SurveyOverview: React.FC = () => {
               onClick={() => setActiveTab('responses')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'responses'
-                  ? 'border-indigo-500 text-indigo-600'
+                  ? 'border-primary-500 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
@@ -221,7 +221,7 @@ const SurveyOverview: React.FC = () => {
               onClick={() => setActiveTab('participants')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'participants'
-                  ? 'border-indigo-500 text-indigo-600'
+                  ? 'border-primary-500 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
@@ -266,7 +266,7 @@ const SurveyOverview: React.FC = () => {
                 />
                 <button
                   onClick={copyToClipboard}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700"
                 >
                   Copy
                 </button>

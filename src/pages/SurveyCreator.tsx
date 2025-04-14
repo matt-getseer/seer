@@ -73,7 +73,7 @@ const SurveyCreator: React.FC = () => {
             name="title"
             value={surveyData.title}
             onChange={handleSurveyDataChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             required
           />
         </div>
@@ -88,7 +88,7 @@ const SurveyCreator: React.FC = () => {
             value={surveyData.description}
             onChange={handleSurveyDataChange}
             rows={4}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
           />
         </div>
 
@@ -102,7 +102,7 @@ const SurveyCreator: React.FC = () => {
             name="question1"
             value={surveyData.question1}
             onChange={handleSurveyDataChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             required
             placeholder="Enter your first question"
           />
@@ -118,7 +118,7 @@ const SurveyCreator: React.FC = () => {
             name="question2"
             value={surveyData.question2}
             onChange={handleSurveyDataChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             required
             placeholder="Enter your second question"
           />
@@ -134,7 +134,7 @@ const SurveyCreator: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
           >
             {loading ? 'Creating...' : 'Create Survey'}
           </button>

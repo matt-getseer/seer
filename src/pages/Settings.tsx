@@ -139,7 +139,7 @@ const Settings: React.FC = () => {
                 id="name"
                 value={formData.full_name}
                 onChange={(e) => handleInputChange('full_name', e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 placeholder="John Doe"
               />
             </div>
@@ -152,7 +152,7 @@ const Settings: React.FC = () => {
                 id="username"
                 value={formData.username || ''}
                 onChange={(e) => handleInputChange('username', e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 placeholder="johndoe"
               />
             </div>
@@ -165,7 +165,7 @@ const Settings: React.FC = () => {
                 rows={4}
                 value={formData.bio || ''}
                 onChange={(e) => handleInputChange('bio', e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 placeholder="Write a few sentences about yourself"
               />
             </div>
@@ -179,7 +179,7 @@ const Settings: React.FC = () => {
                 <h4 className="text-sm font-medium text-gray-900">Email Notifications</h4>
                 <p className="text-sm text-gray-500">Receive email updates about your account</p>
               </div>
-              <button className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+              <button className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary-600 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
                 <span className="translate-x-5 inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out" />
               </button>
             </div>
@@ -188,7 +188,7 @@ const Settings: React.FC = () => {
                 <h4 className="text-sm font-medium text-gray-900">Push Notifications</h4>
                 <p className="text-sm text-gray-500">Receive push notifications on your device</p>
               </div>
-              <button className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+              <button className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
                 <span className="translate-x-0 inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out" />
               </button>
             </div>
@@ -204,7 +204,7 @@ const Settings: React.FC = () => {
               <input
                 type="password"
                 id="current-password"
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
             </div>
             <div>
@@ -214,7 +214,7 @@ const Settings: React.FC = () => {
               <input
                 type="password"
                 id="new-password"
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
             </div>
             <div>
@@ -224,11 +224,11 @@ const Settings: React.FC = () => {
               <input
                 type="password"
                 id="confirm-password"
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
             </div>
             <div>
-              <button className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+              <button className="inline-flex items-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
                 Update Password
               </button>
             </div>
@@ -290,7 +290,7 @@ const Settings: React.FC = () => {
                     id="brand-name"
                     value={formData.brand_name || ''}
                     onChange={(e) => handleInputChange('brand_name', e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                     placeholder="Your Company Name"
                   />
                 </div>
@@ -349,7 +349,7 @@ const Settings: React.FC = () => {
                     id="brand-font"
                     value={formData.brand_font}
                     onChange={(e) => handleInputChange('brand_font', e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                   >
                     <option>Inter</option>
                     <option>Roboto</option>
@@ -386,7 +386,7 @@ const Settings: React.FC = () => {
               <button 
                 onClick={handleSaveChanges}
                 disabled={isSaving}
-                className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                className="inline-flex items-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
               >
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
@@ -413,13 +413,13 @@ const Settings: React.FC = () => {
                 onClick={() => setActiveSection(section.id)}
                 className={`flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium ${
                   activeSection === section.id
-                    ? 'bg-indigo-50 text-indigo-600'
+                    ? 'bg-primary-50 text-primary-600'
                     : 'text-gray-900 hover:bg-gray-50'
                 }`}
               >
                 <section.icon
                   className={`mr-3 h-5 w-5 ${
-                    activeSection === section.id ? 'text-indigo-600' : 'text-gray-400'
+                    activeSection === section.id ? 'text-primary-600' : 'text-gray-400'
                   }`}
                 />
                 {section.name}

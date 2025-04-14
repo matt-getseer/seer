@@ -29,7 +29,7 @@ const Sidebar = () => {
     <div className="fixed left-0 top-0 h-full w-56 bg-white shadow-lg">
       <div className="p-4">
         <div className="mb-8">
-          <div className="h-8 w-8 rotate-45 bg-indigo-600" />
+          <div className="h-8 w-8 rotate-45 bg-primary-900" />
         </div>
         <nav>
           {menuItems.map((item) => (
@@ -60,7 +60,7 @@ const Sidebar = () => {
               <p className="text-sm font-medium text-gray-700">{user?.email ?? 'User'}</p>
               <button
                 onClick={handleSignOut}
-                className="text-sm text-gray-500 hover:text-indigo-600"
+                className="text-sm text-gray-500 hover:text-primary-900"
               >
                 Sign out
               </button>

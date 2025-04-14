@@ -71,7 +71,7 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
                     className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm sm:ml-3 sm:w-auto ${
                       isDangerous
                         ? 'bg-red-600 hover:bg-red-500'
-                        : 'bg-indigo-600 hover:bg-indigo-500'
+                        : 'bg-primary-600 hover:bg-primary-500'
                     }`}
                     onClick={() => {
                       onConfirm();

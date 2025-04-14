@@ -45,14 +45,14 @@ export default function Projects() {
                 className="ml-2 border-none bg-transparent outline-none"
               />
             </div>
-            <button className="flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-white">
+            <button className="flex items-center rounded-lg bg-primary-600 px-4 py-2 text-white">
               <span>+ Project</span>
             </button>
           </div>
         </div>
 
         <div className="mb-6 flex space-x-4">
-          <button className="border-b-2 border-indigo-600 pb-2 text-sm font-medium text-gray-900">
+          <button className="border-b-2 border-primary-600 pb-2 text-sm font-medium text-gray-900">
             Active
           </button>
           <button className="pb-2 text-sm font-medium text-gray-500 hover:text-gray-900">

@@ -476,7 +476,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
   return (
     <>
       {isPreview && (
-        <div className="fixed top-0 left-0 right-0 bg-indigo-600 text-white px-4 py-2 text-center text-sm z-50">
+        <div className="fixed top-0 left-0 right-0 bg-primary-600 text-white px-4 py-2 text-center text-sm z-50">
           Preview Mode - Responses will not be saved
         </div>
       )}
@@ -505,7 +505,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
                 )}
                 <button
                   onClick={handleStartSurvey}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 >
                   Start Survey
                 </button>
@@ -526,20 +526,20 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
                       <div className="relative pt-1">
                         <div className="flex mb-2 items-center justify-between">
                           <div>
-                            <span className="text-xs font-semibold inline-block text-indigo-600">
+                            <span className="text-xs font-semibold inline-block text-primary-600">
                               Question {currentQuestionIndex + 1} of {surveyData.questions.length}
                             </span>
                           </div>
                           <div className="text-right">
-                            <span className="text-xs font-semibold inline-block text-indigo-600">
+                            <span className="text-xs font-semibold inline-block text-primary-600">
                               {Math.round(progress)}%
                             </span>
                           </div>
                         </div>
-                        <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-indigo-200">
+                        <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-primary-200">
                           <div
                             style={{ width: `${progress}%` }}
-                            className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500"
+                            className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-primary-500"
                           />
                         </div>
                       </div>
@@ -562,7 +562,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
                               className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm ${
                                 isRecording
                                   ? 'bg-red-600 text-white hover:bg-red-700'
-                                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                  : 'bg-primary-600 text-white hover:bg-primary-700'
                               }`}
                             >
                               {isRecording ? (
@@ -593,7 +593,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
                             )}
                           </div>
                           <textarea
-                            className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                            className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md"
                             rows={4}
                             value={answers[currentQuestion.id]?.answer as string || ''}
                             onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
@@ -613,7 +613,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
                                 value={option}
                                 checked={answers[currentQuestion.id]?.answer === option}
                                 onChange={() => handleAnswerChange(currentQuestion.id, option)}
-                                className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300"
+                                className="focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300"
                               />
                               <label
                                 htmlFor={`option-${index}`}
@@ -634,7 +634,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
                               onClick={() => handleAnswerChange(currentQuestion.id, rating)}
                               className={`px-4 py-2 rounded-md ${
                                 answers[currentQuestion.id]?.answer === rating
-                                  ? 'bg-indigo-600 text-white'
+                                  ? 'bg-primary-600 text-white'
                                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                               }`}
                             >
@@ -650,7 +650,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
                             onClick={() => handleAnswerChange(currentQuestion.id, true)}
                             className={`px-4 py-2 rounded-md ${
                               answers[currentQuestion.id]?.answer === true
-                                ? 'bg-indigo-600 text-white'
+                                ? 'bg-primary-600 text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
                           >
@@ -660,7 +660,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
                             onClick={() => handleAnswerChange(currentQuestion.id, false)}
                             className={`px-4 py-2 rounded-md ${
                               answers[currentQuestion.id]?.answer === false
-                                ? 'bg-indigo-600 text-white'
+                                ? 'bg-primary-600 text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
                           >
@@ -688,7 +688,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
                       </button>
                       <button
                         onClick={handleNext}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                       >
                         {currentQuestionIndex === surveyData.questions.length - 1 ? 'Submit' : 'Next'}
                       </button>
