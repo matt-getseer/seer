@@ -58,7 +58,7 @@ const SignIn: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <div className="mx-auto h-12 w-12 rotate-45 bg-primary-600" />
+          <img src="/CutOnce.png" alt="CutOnce Logo" className="mx-auto h-10 w-auto mb-12" />
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             {isResetMode ? 'Reset your password' : 'Sign in to your account'}
           </h2>
