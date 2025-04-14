@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUpRightIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import usePageTitle from '../hooks/usePageTitle';
 
 interface BillingItem {
   title: string;
@@ -12,6 +13,7 @@ interface BillingItem {
 }
 
 const Billing: React.FC = () => {
+  usePageTitle('Billing');
   const billingItems: BillingItem[] = [
     {
       title: 'Q1 2024 Enterprise License',

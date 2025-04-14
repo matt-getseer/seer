@@ -8,6 +8,7 @@ import ConfirmationDialog from '../components/ConfirmationDialog';
 import ParticipantManager from '../components/ParticipantManager';
 import SurveyResponses from '../components/SurveyResponses';
 import SurveyAnalytics from '../components/SurveyAnalytics';
+import usePageTitle from '../hooks/usePageTitle';
 
 type TabType = 'analytics' | 'responses' | 'participants';
 
@@ -55,6 +56,8 @@ const SurveyOverview: React.FC = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
+
+  usePageTitle(survey ? `Survey: ${survey.title}` : 'Survey Overview');
 
   useEffect(() => {
     const fetchSurvey = async () => {

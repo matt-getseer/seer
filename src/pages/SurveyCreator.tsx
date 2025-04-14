@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSurveyContext } from '../contexts/SurveyContext';
 import { useAuth } from '../contexts/AuthContext';
+import usePageTitle from '../hooks/usePageTitle';
 
 const SurveyCreator: React.FC = () => {
+  usePageTitle('Create Survey');
   const navigate = useNavigate();
   const { addSurvey } = useSurveyContext();
   const { user } = useAuth();

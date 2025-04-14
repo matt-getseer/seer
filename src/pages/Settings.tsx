@@ -4,6 +4,7 @@ import { useLogoUpload } from '../hooks/useLogoUpload';
 import { useAuth } from '../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import usePageTitle from '../hooks/usePageTitle';
 
 interface SettingsSection {
   id: string;
@@ -23,6 +24,7 @@ interface ProfileFormData {
 }
 
 const Settings: React.FC = () => {
+  usePageTitle('Settings');
   const { user, loading } = useAuth();
   const [activeSection, setActiveSection] = useState('profile');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);

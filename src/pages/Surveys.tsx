@@ -4,11 +4,13 @@ import { ArrowUpRightIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outli
 import { useSurveyContext } from '../contexts/SurveyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../lib/logger';
+import usePageTitle from '../hooks/usePageTitle';
 
 const Surveys: React.FC = () => {
   const navigate = useNavigate();
   const { surveys, loading, error, retryConnection } = useSurveyContext();
   const { user } = useAuth();
+  usePageTitle('Surveys');
 
   useEffect(() => {
     logger.info('Surveys component mounted', { 

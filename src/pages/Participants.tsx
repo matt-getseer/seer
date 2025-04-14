@@ -4,6 +4,7 @@ import { supabase, type Participant } from '../lib/supabase';
 import Pagination from '../components/Pagination';
 import { useAuth } from '../contexts/AuthContext';
 import { logger } from '../lib/logger';
+import usePageTitle from '../hooks/usePageTitle';
 
 const ROWS_PER_PAGE = 20;
 
@@ -15,6 +16,8 @@ const Participants: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [surveyId, setSurveyId] = useState<string | null>(null);
+
+  usePageTitle('Participants');
 
   const fetchParticipants = useCallback(async () => {
     if (!surveyId) return;
