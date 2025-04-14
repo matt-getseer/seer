@@ -42,7 +42,7 @@ const Sidebar = () => {
                   : 'hover:bg-gray-50'
               }`}
             >
-              <item.icon className="h-5 w-5 text-gray-500" />
+              <item.icon className="h-4 w-4 text-primary-900" />
               <span className="ml-3 text-sm font-medium text-gray-700">{item.name}</span>
             </Link>
           ))}
