@@ -19,6 +19,7 @@ interface SurveyContextType {
     }>;
   }) => Promise<void>;
   deleteSurvey: (id: string) => Promise<void>;
+  updateSurvey: (id: string, data: { title: string; description?: string }) => Promise<void>;
   retryConnection: () => Promise<void>;
 }
 
@@ -137,6 +138,24 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const updateSurvey = async (id: string, data: { title: string; description?: string }) => {
+    try {
+      logger.info('Starting survey update', { surveyId: id }, { context: 'SurveyContext' });
+      await api.updateSurvey(id, data);
+      logger.info('Survey updated successfully', { surveyId: id }, { context: 'SurveyContext' });
+      
+      // Refresh the surveys list to get the updated data
+      await fetchSurveys();
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error updating survey';
+      logger.error('Error updating survey', { 
+        surveyId: id, 
+        error: errorMessage 
+      }, { context: 'SurveyContext' });
+      throw error;
+    }
+  };
+
   const retryConnection = async () => {
     logger.info('Retrying connection', { retryCount }, { context: 'SurveyContext' });
     setRetryCount(prev => prev + 1);
@@ -149,6 +168,7 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       error,
       addSurvey,
       deleteSurvey,
+      updateSurvey,
       retryConnection,
     }}>
       {children}

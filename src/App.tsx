@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, Outlet } from 'react-router-dom';
 import Surveys from './pages/Surveys';
 import Participants from './pages/Participants';
 import Billing from './pages/Billing';
@@ -11,6 +11,7 @@ import ResetPassword from './pages/ResetPassword';
 import EmailVerification from './pages/EmailVerification';
 import SurveyCreator from './pages/SurveyCreator';
 import SurveyOverview from './pages/SurveyOverview';
+import SurveyEditor from './pages/SurveyEditor';
 import TakeSurvey from './pages/TakeSurvey';
 import SharedAnalytics from './pages/SharedAnalytics';
 import Sidebar from './components/Sidebar';
@@ -43,7 +44,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 // Wrapper component to handle layout selection
-const LayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const LayoutWrapper: React.FC = () => {
   const location = useLocation();
   const isPublicRoute = location.pathname.startsWith('/take-survey/') ||
     location.pathname.startsWith('/analytics/') ||
@@ -53,14 +54,14 @@ const LayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     location.pathname === '/email-verification';
 
   if (isPublicRoute) {
-    return <PublicLayout>{children}</PublicLayout>;
+    return <PublicLayout><Outlet /></PublicLayout>;
   }
 
   return (
     <div className="min-h-screen bg-gray-100">
       <Sidebar />
       <div className="pl-56">
-        <main>{children}</main>
+        <main><Outlet /></main>
       </div>
     </div>
   );
@@ -128,38 +129,31 @@ const NotFound = () => (
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <Router>
-        <AuthProvider>
-          <SurveyProvider>
-            <LayoutWrapper>
-              <Routes>
-                {/* Public routes */}
-                <Route path="/sign-in" element={<SignIn />} />
-                <Route path="/sign-up" element={<SignUp />} />
-                <Route path="/reset-password" element={<ResetPassword />} />
-                <Route path="/email-verification" element={<EmailVerification />} />
-                <Route path="/take-survey/:token" element={<TakeSurvey />} />
-                <Route path="/take-survey/preview/:surveyId" element={<TakeSurvey isPreview />} />
-                <Route path="/analytics/:token" element={<SharedAnalytics />} />
-
-                {/* Protected routes */}
-                <Route path="/" element={<ProtectedRoute><Surveys /></ProtectedRoute>} />
+      <AuthProvider>
+        <SurveyProvider>
+          <Router>
+            <Routes>
+              <Route path="/sign-in" element={<PublicLayout><SignIn /></PublicLayout>} />
+              <Route path="/sign-up" element={<PublicLayout><SignUp /></PublicLayout>} />
+              <Route path="/reset-password" element={<PublicLayout><ResetPassword /></PublicLayout>} />
+              <Route path="/email-verification" element={<PublicLayout><EmailVerification /></PublicLayout>} />
+              <Route path="/take-survey/:mode/:id" element={<PublicLayout><TakeSurvey /></PublicLayout>} />
+              <Route path="/analytics/:token" element={<PublicLayout><SharedAnalytics /></PublicLayout>} />
+              <Route element={<LayoutWrapper />}>
+                <Route path="/" element={<Navigate to="/surveys" replace />} />
                 <Route path="/surveys" element={<ProtectedRoute><Surveys /></ProtectedRoute>} />
                 <Route path="/surveys/new" element={<ProtectedRoute><SurveyCreator /></ProtectedRoute>} />
                 <Route path="/surveys/:id" element={<ProtectedRoute><SurveyOverview /></ProtectedRoute>} />
+                <Route path="/surveys/:id/edit" element={<ProtectedRoute><SurveyEditor /></ProtectedRoute>} />
                 <Route path="/participants" element={<ProtectedRoute><Participants /></ProtectedRoute>} />
-                <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
                 <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
+                <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-
-                {/* Catch-all route */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </LayoutWrapper>
-            <ConnectionStatus />
-          </SurveyProvider>
-        </AuthProvider>
-      </Router>
+              </Route>
+            </Routes>
+          </Router>
+        </SurveyProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 };

@@ -207,6 +207,18 @@ const SurveyOverview: React.FC = () => {
                     <Menu.Item>
                       {({ active }) => (
                         <button
+                          onClick={() => navigate(`/surveys/${survey.id}/edit`)}
+                          className={`${
+                            active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                          } group flex w-full items-center px-4 py-2 text-sm`}
+                        >
+                          Edit Survey
+                        </button>
+                      )}
+                    </Menu.Item>
+                    <Menu.Item>
+                      {({ active }) => (
+                        <button
                           onClick={() => setShowDeleteDialog(true)}
                           className={`${
                             active ? 'bg-red-50 text-red-900' : 'text-red-700'
