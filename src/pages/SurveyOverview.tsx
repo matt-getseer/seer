@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Menu } from '@headlessui/react';
-import { EllipsisVerticalIcon, ShareIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { EllipsisVerticalIcon, ShareIcon, ArrowLeftIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 import { supabase, Survey } from '../lib/supabase';
 import { useSurveyContext } from '../contexts/SurveyContext';
 import ConfirmationDialog from '../components/ConfirmationDialog';
 import ParticipantManager from '../components/ParticipantManager';
 import SurveyResponses from '../components/SurveyResponses';
 import SurveyAnalytics from '../components/SurveyAnalytics';
+import Toast from '../components/Toast';
 import usePageTitle from '../hooks/usePageTitle';
 
 type TabType = 'analytics' | 'responses' | 'participants';
@@ -56,6 +57,10 @@ const SurveyOverview: React.FC = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [sendingEmails, setSendingEmails] = useState(false);
 
   usePageTitle(survey ? `Survey: ${survey.title}` : 'Survey Overview');
 
@@ -141,6 +146,43 @@ const SurveyOverview: React.FC = () => {
     }
   };
 
+  const handleSendEmails = async () => {
+    if (!survey) return;
+    
+    try {
+      setSendingEmails(true);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/surveys/${survey.id}/send-invites`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        }
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) throw new Error(data.error || 'Failed to send emails');
+      
+      setToastMessage(`Successfully sent ${data.count} invitation emails`);
+      setToastType('success');
+      setShowToast(true);
+    } catch (err) {
+      console.error('Error sending emails:', err);
+      setToastMessage('Failed to send invitation emails');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setSendingEmails(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showToast) {
+      const timer = setTimeout(() => setShowToast(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showToast]);
+
   if (loading) {
     return (
       <div className="p-8">
@@ -163,6 +205,11 @@ const SurveyOverview: React.FC = () => {
   return (
     <div className="p-8">
       <div className="max-w-[1024px] mx-auto">
+        <Toast 
+          message={toastMessage}
+          type={toastType}
+          isVisible={showToast}
+        />
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
@@ -177,6 +224,16 @@ const SurveyOverview: React.FC = () => {
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
               </button>
+              {activeTab === 'participants' && (
+                <button
+                  onClick={handleSendEmails}
+                  disabled={sendingEmails}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-primary-600 bg-white border border-primary-300 rounded-md shadow-sm hover:bg-primary-50 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <EnvelopeIcon className="w-4 h-4" />
+                  {sendingEmails ? 'Sending...' : 'Send Invites'}
+                </button>
+              )}
               {activeTab === 'analytics' && (
                 <button
                   onClick={generateShareLink}

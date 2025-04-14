@@ -103,13 +103,31 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
   const handleDeleteParticipant = async (id: string) => {
     try {
       setLoading(true);
+      
+      // First delete associated survey responses
+      const { error: responseDeleteError } = await supabase
+        .from('survey_responses')
+        .delete()
+        .eq('participant_id', id);
+
+      if (responseDeleteError) {
+        logger.error('Error deleting survey responses', responseDeleteError, { context: 'ParticipantManager' });
+        throw responseDeleteError;
+      }
+
+      // Then delete the participant
       const { error: deleteError } = await supabase
         .from('participants')
         .delete()
         .eq('id', id);
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        logger.error('Error deleting participant', deleteError, { context: 'ParticipantManager' });
+        throw deleteError;
+      }
+
       setParticipants(prev => prev.filter(p => p.id !== id));
+      logger.info('Participant and associated responses deleted successfully', { participantId: id }, { context: 'ParticipantManager' });
     } catch (err) {
       logger.error('Error deleting participant', err, { context: 'ParticipantManager' });
       setError(err instanceof Error ? err.message : 'An error occurred while deleting the participant');

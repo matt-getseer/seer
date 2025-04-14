@@ -3,22 +3,32 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import path from 'path';
 import { errorHandler } from './middleware/errorHandler';
 import { setupRoutes } from './routes';
 import { setupLogging } from './utils/logger';
 import { initializeSupabase } from './services/supabaseService';
+import { initializeEmailService } from './services/emailService';
+
+// Setup logging first
+const logger = setupLogging();
 
 // Load environment variables
-dotenv.config();
+const envPath = path.resolve(__dirname, '../.env');
+logger.info('Loading environment variables from:', { path: envPath });
+const result = dotenv.config({ path: envPath });
 
-// Initialize Supabase
-initializeSupabase();
+if (result.error) {
+  logger.error('Error loading .env file:', result.error);
+} else {
+  logger.info('Environment variables loaded successfully');
+  // Initialize services that depend on environment variables
+  initializeSupabase();
+  initializeEmailService();
+}
 
 const app = express();
 const port = process.env.PORT || 5000;
-
-// Setup logging
-const logger = setupLogging();
 
 // Security middleware
 app.use(helmet());

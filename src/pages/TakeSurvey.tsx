@@ -165,31 +165,56 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
           });
         } else {
           // Participant token flow
-          console.log('Fetching survey data with token:', token);
-          
-          // First fetch the participant data
+          if (!token) {
+            throw new Error('No token provided');
+          }
+
+          console.log('Attempting to fetch participant with token:', {
+            token,
+            tokenLength: token.length,
+            tokenType: typeof token,
+            queryString: `participation_token=eq.${token}`
+          });
+
+          // First fetch the participant data without .single()
           const { data: participantData, error: participantError } = await supabase
             .from('participants')
-            .select('*')
-            .eq('participation_token', token)
-            .single();
+            .select('*, survey:surveys(title)')
+            .eq('participation_token', token);
 
-          console.log('Participant fetch result:', { data: participantData, error: participantError });
+          console.log('Raw participant query result:', {
+            data: participantData,
+            count: participantData?.length,
+            error: participantError,
+            requestDetails: {
+              endpoint: `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/participants`,
+              queryParams: `select=*&participation_token=eq.${token}`
+            }
+          });
 
           if (participantError) {
-            console.error('Participant fetch error:', participantError);
+            console.error('Participant fetch error:', {
+              message: participantError.message,
+              details: participantError.details,
+              hint: participantError.hint,
+              code: participantError.code
+            });
             throw participantError;
           }
-          if (!participantData) {
-            console.error('No participant found for token:', token);
-            throw new Error('Survey not found');
+
+          if (!participantData || participantData.length === 0) {
+            console.error('No participant found with token:', token);
+            throw new Error('Invalid or expired survey link. Please check your email for a valid link.');
           }
+
+          const participant = participantData[0];
+          console.log('Found participant:', participant);
 
           // Then fetch the survey data
           const { data: surveyData, error: surveyError } = await supabase
             .from('surveys')
             .select('*')
-            .eq('id', participantData.survey_id)
+            .eq('id', participant.survey_id)
             .single();
 
           console.log('Survey fetch result:', { data: surveyData, error: surveyError });
@@ -217,8 +242,8 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
           const { data: responseData, error: responseError } = await supabase
             .from('survey_responses')
             .select('*')
-            .eq('survey_id', participantData.survey_id)
-            .eq('participant_id', participantData.id)
+            .eq('survey_id', participant.survey_id)
+            .eq('participant_id', participant.id)
             .single();
 
           console.log('Response check result:', { data: responseData, error: responseError });
@@ -232,7 +257,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
           const { data: questions, error: questionsError } = await supabase
             .from('survey_questions')
             .select('*')
-            .eq('survey_id', participantData.survey_id)
+            .eq('survey_id', participant.survey_id)
             .order('order_number', { ascending: true });
 
           console.log('Questions fetch result:', { data: questions, error: questionsError });
@@ -244,7 +269,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
 
           setSurveyData({
             survey: surveyData,
-            participant: participantData,
+            participant: participant,
             questions: questions || [],
             creatorLogo: creatorLogo
           });

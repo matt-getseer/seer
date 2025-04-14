@@ -133,6 +133,14 @@ const App: React.FC = () => {
                   </PublicLayout>
                 } 
               />
+              <Route 
+                path="/take-survey/token/:token" 
+                element={
+                  <PublicLayout>
+                    <TakeSurvey />
+                  </PublicLayout>
+                } 
+              />
               <Route path="/analytics/:token" element={<PublicLayout><SharedAnalytics /></PublicLayout>} />
               <Route element={<LayoutWrapper />}>
                 <Route path="/" element={<Navigate to="/surveys" replace />} />

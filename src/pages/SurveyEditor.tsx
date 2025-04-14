@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useSurveyContext } from '../contexts/SurveyContext';
 import { api } from '../services/api';
 import { SurveyQuestion } from '../types/survey';
 import usePageTitle from '../hooks/usePageTitle';
