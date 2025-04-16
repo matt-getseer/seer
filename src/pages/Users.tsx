@@ -4,6 +4,20 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import usePageTitle from '../hooks/usePageTitle';
 
+interface EmailData {
+  user_id: string;
+  email: string;
+}
+
+interface Profile {
+  id: string;
+  updated_at: string;
+  invited_at: string | null;
+  status: 'active' | 'pending' | 'invited';
+  full_name: string | null;
+  username: string | null;
+}
+
 interface User {
   id: string;
   email: string;
@@ -52,41 +66,42 @@ const Users: React.FC = () => {
       // Get profiles with user information
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select(`
-          id,
-          email,
-          updated_at,
-          invited_at,
-          status,
-          full_name,
-          username
-        `)
+        .select('*')
         .order('updated_at', { ascending: false });
 
       if (profilesError) throw profilesError;
 
+      // Get user emails using our function
+      const { data: emails, error: emailsError } = await supabase
+        .rpc('get_user_emails');
+      
+      if (emailsError) throw emailsError;
+
       // Map profiles to user objects
-      const users = (profiles || []).map(profile => ({
-        id: profile.id,
-        email: profile.email || 'No email provided',
-        created_at: profile.updated_at,
-        last_sign_in_at: null, // We'll update this later if needed
-        invited_at: profile.invited_at,
-        status: profile.status || 'pending',
-        full_name: profile.full_name,
-        username: profile.username
-      }));
+      const users = (profiles || []).map(profile => {
+        const userEmail = emails?.find((e: EmailData) => e.user_id === profile.id);
+        return {
+          id: profile.id,
+          email: userEmail?.email || 'No email provided',
+          created_at: profile.updated_at,
+          last_sign_in_at: null, // We don't have access to this info from client side
+          invited_at: profile.invited_at,
+          status: profile.status || 'pending',
+          full_name: profile.full_name,
+          username: profile.username
+        };
+      });
 
       setUsers(users);
     } catch (err) {
       console.error('Error fetching users:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching users');
+      setError(err instanceof Error ? err.message : 'Failed to fetch users');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInviteUser = async (e: React.FormEvent) => {
+  const handleInviteUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!user) return;
 
@@ -98,69 +113,108 @@ const Users: React.FC = () => {
         throw new Error('Please enter an email address');
       }
 
-      console.log('Starting invite process for email:', inviteEmail);
-
-      // Generate a random temporary password
-      const tempPassword = Math.random().toString(36).slice(-8);
-      console.log('Generated temporary password');
-
-      // Create the user in auth.users
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email: inviteEmail,
-        password: tempPassword,
-        options: {
-          emailRedirectTo: `${window.location.origin}/sign-in`,
-        },
-      });
-
-      console.log('Auth signup response:', authData);
-      
-      if (signUpError) {
-        console.error('Sign up error:', signUpError);
-        throw signUpError;
-      }
-
-      if (!authData.user) {
-        throw new Error('Failed to create user: No user data returned');
-      }
-
-      console.log('User created in auth.users with ID:', authData.user.id);
-
-      // Create the profile with a delay to ensure the user is fully created
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Create or update the profile
-      const { error: upsertError } = await supabase
+      console.log('Step 1: Checking for existing user...');
+      // Check if user already exists
+      const { data: existingUsers, error: fetchError } = await supabase
         .from('profiles')
-        .upsert({
-          id: authData.user.id,
-          email: inviteEmail, // Explicitly set the email
-          invited_at: new Date().toISOString(),
-          status: 'invited',
-          updated_at: new Date().toISOString(),
-          full_name: null,
-          username: null,
-          avatar_url: null
-        }, {
-          onConflict: 'id'
+        .select('id, status, email')
+        .eq('email', inviteEmail);
+
+      if (fetchError) {
+        console.error('Error checking existing user:', fetchError);
+        throw fetchError;
+      }
+
+      console.log('Existing users check result:', existingUsers);
+
+      if (existingUsers && existingUsers.length > 0) {
+        const existingUser = existingUsers[0];
+        if (existingUser.status === 'invited') {
+          setInviteError('User has already been invited');
+          setInviteLoading(false);
+          return;
+        }
+      }
+
+      console.log('Step 2: Creating user via Edge Function...');
+      // Get the current session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('No active session found');
+      }
+
+      console.log('Calling Edge Function with session token...');
+      
+      // Log the request payload
+      const requestPayload = {
+        email: inviteEmail,
+        invitedBy: user.id
+      };
+      console.log('Edge Function request payload:', requestPayload);
+      
+      try {
+        // Call the Edge Function to create user and send invite
+        const { data: inviteData, error: inviteError } = await supabase.functions.invoke('invite-user', {
+          body: requestPayload
         });
 
-      if (upsertError) {
-        console.error('Profile creation error:', upsertError);
-        throw upsertError;
+        console.log('Raw Edge Function response:', inviteData, inviteError);
+        if (inviteError) {
+          console.error('Full error object:', inviteError);
+          console.error('Error details:', {
+            message: inviteError.message,
+            name: inviteError.name,
+            stack: inviteError.stack,
+            context: inviteError.context
+          });
+          throw inviteError;
+        }
+
+        if (!inviteData?.id) {
+          throw new Error('Failed to create user - no ID returned');
+        }
+
+        const newUserId = inviteData.id;
+        console.log('User created with ID:', newUserId);
+
+        console.log('Step 3: Creating profile...');
+        // Create or update profile
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: newUserId,
+            email: inviteEmail,
+            status: 'invited',
+            invited_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+          throw profileError;
+        }
+
+        addToast('User has been invited successfully. They will receive an email to set up their account.', 'success');
+
+        // Reset form and close modal
+        setInviteEmail('');
+        setShowInviteModal(false);
+        
+        console.log('Step 4: Refreshing user list...');
+        // Fetch users after a short delay to ensure the profile is available
+        setTimeout(() => {
+          fetchUsers();
+        }, 1000);
+        
+      } catch (functionError: unknown) {
+        console.error('Edge Function error details:', functionError);
+        if (functionError instanceof Error) {
+          throw functionError;
+        } else {
+          throw new Error('Unknown error occurred while inviting user');
+        }
       }
-
-      console.log('Profile created/updated successfully');
-
-      // Reset form and close modal
-      setInviteEmail('');
-      setShowInviteModal(false);
-      
-      // Fetch users after a short delay to ensure the profile is available
-      setTimeout(() => {
-        fetchUsers();
-      }, 1000);
-      
     } catch (err) {
       console.error('Invite error:', err);
       setInviteError(err instanceof Error ? err.message : 'Failed to invite user');
@@ -196,19 +250,26 @@ const Users: React.FC = () => {
       setDeleteLoading(true);
       setError(null);
 
-      // Delete the profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', userToDelete.id);
+      const payload = { userId: userToDelete.id };
+      console.log('Delete payload:', payload);
+      
+      // Call the Edge Function to delete the user
+      const { data, error: deleteError } = await supabase.functions.invoke('delete-user', {
+        body: payload
+      });
 
-      if (profileError) throw profileError;
+      console.log('Delete response:', { data, error: deleteError });
+
+      if (deleteError) {
+        console.error('Delete error details:', deleteError);
+        throw deleteError;
+      }
 
       // Update the local state to remove the deleted user
       setUsers(prevUsers => prevUsers.filter(u => u.id !== userToDelete.id));
 
       // Show success message using toast
-      addToast('Profile deleted. Please contact your Supabase admin to fully delete the user from auth.users.', 'info');
+      addToast('User deleted successfully', 'success');
 
       // Close the modal
       setShowDeleteModal(false);

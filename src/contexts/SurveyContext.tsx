@@ -64,7 +64,7 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -74,7 +74,7 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       logger.info('No user authenticated, clearing surveys', { userId: undefined }, { context: 'SurveyContext' });
       setSurveys([]);
     }
-  }, [user, retryCount, fetchSurveys]);
+  }, [user, retryCount]);
 
   const addSurvey = async (survey: { 
     title: string; 
@@ -100,6 +100,7 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
       }
 
+      // Update local state instead of fetching again
       setSurveys(prev => [newSurvey, ...prev]);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Error adding survey';
@@ -114,7 +115,7 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       await api.deleteSurvey(id);
       logger.info('Survey deleted successfully', { surveyId: id }, { context: 'SurveyContext' });
       
-      // First update local state for immediate feedback
+      // Just update local state, no need to fetch again
       setSurveys(prev => {
         const newSurveys = prev.filter(s => s.id !== id);
         logger.info('Updated local state', { 
@@ -124,10 +125,6 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }, { context: 'SurveyContext' });
         return newSurveys;
       });
-      
-      // Then refresh the full list
-      logger.info('Refreshing survey list', { surveyId: id }, { context: 'SurveyContext' });
-      await fetchSurveys();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Error deleting survey';
       logger.error('Error deleting survey', { 
@@ -144,8 +141,12 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       await api.updateSurvey(id, data);
       logger.info('Survey updated successfully', { surveyId: id }, { context: 'SurveyContext' });
       
-      // Refresh the surveys list to get the updated data
-      await fetchSurveys();
+      // Update local state instead of fetching again
+      setSurveys(prev => prev.map(survey => 
+        survey.id === id 
+          ? { ...survey, ...data }
+          : survey
+      ));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Error updating survey';
       logger.error('Error updating survey', { 

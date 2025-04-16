@@ -3,12 +3,13 @@ import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, Outlet }
 import Surveys from './pages/Surveys';
 import Participants from './pages/Participants';
 import Billing from './pages/Billing';
-import Users from './pages/Users';
+import Users from './pages/Users.tsx';
 import Settings from './pages/Settings';
 import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
 import ResetPassword from './pages/ResetPassword';
 import EmailVerification from './pages/EmailVerification';
+import SetPassword from './pages/SetPassword';
 import SurveyCreator from './pages/SurveyCreator';
 import SurveyOverview from './pages/SurveyOverview';
 import SurveyEditor from './pages/SurveyEditor';
@@ -19,6 +20,7 @@ import PublicLayout from './components/PublicLayout';
 import ConnectionStatus from './components/ConnectionStatus';
 import { SurveyProvider } from './contexts/SurveyContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import AuthCallback from './pages/AuthCallback';
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -125,6 +127,8 @@ const App: React.FC = () => {
               <Route path="/sign-up" element={<PublicLayout><SignUp /></PublicLayout>} />
               <Route path="/reset-password" element={<PublicLayout><ResetPassword /></PublicLayout>} />
               <Route path="/email-verification" element={<PublicLayout><EmailVerification /></PublicLayout>} />
+              <Route path="/set-password" element={<PublicLayout><SetPassword /></PublicLayout>} />
+              <Route path="/auth/callback" element={<PublicLayout><AuthCallback /></PublicLayout>} />
               <Route 
                 path="/take-survey/:mode/:id" 
                 element={
