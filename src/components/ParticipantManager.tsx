@@ -16,6 +16,11 @@ interface ParticipantWithResponse extends Participant {
   }[];
 }
 
+interface SurveyResponseStatus {
+  created_at: string;
+  completed_at: string | null;
+}
+
 const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => {
   const [participants, setParticipants] = useState<ParticipantWithResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,8 +54,19 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
       // Debug logging
       console.log('Fetched participants data:', data);
       
-      logger.info('Fetched participants', { count: data?.length }, { context: 'ParticipantManager' });
-      setParticipants(data || []);
+      // Transform the data to ensure we have the latest response status
+      const transformedData = data?.map(participant => ({
+        ...participant,
+        survey_responses: participant.survey_responses?.sort((a: SurveyResponseStatus, b: SurveyResponseStatus) => {
+          // Sort by completed_at (if exists) or created_at, most recent first
+          const aDate = a.completed_at ? new Date(a.completed_at) : new Date(a.created_at);
+          const bDate = b.completed_at ? new Date(b.completed_at) : new Date(b.created_at);
+          return bDate.getTime() - aDate.getTime();
+        })
+      })) || [];
+      
+      logger.info('Fetched participants', { count: transformedData?.length }, { context: 'ParticipantManager' });
+      setParticipants(transformedData);
     } catch (err) {
       // More detailed error logging
       console.error('Full error details:', err);
@@ -68,7 +84,30 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
 
   useEffect(() => {
     fetchParticipants();
-  }, [fetchParticipants]);
+
+    // Set up real-time subscription for survey responses
+    const subscription = supabase
+      .channel('survey_responses_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'survey_responses',
+          filter: `survey_id=eq.${surveyId}`
+        },
+        () => {
+          // Refetch participants when survey responses change
+          fetchParticipants();
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [fetchParticipants, surveyId]);
 
   const generateUUID = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -326,10 +365,11 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
               </tr>
             ) : (
               participants.map((participant) => {
-                const response = participant.survey_responses?.[0];
-                const status = response?.completed_at 
+                // Get the latest response
+                const latestResponse = participant.survey_responses?.[0];
+                const status = latestResponse?.completed_at 
                   ? 'completed' 
-                  : response?.created_at 
+                  : latestResponse?.created_at 
                   ? 'started' 
                   : 'pending';
 
@@ -352,9 +392,9 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
                         }`}
                         title={
                           status === 'completed'
-                            ? `Started: ${new Date(response?.created_at!).toLocaleString()}\nCompleted: ${new Date(response?.completed_at!).toLocaleString()}`
+                            ? `Started: ${new Date(latestResponse?.created_at!).toLocaleString()}\nCompleted: ${new Date(latestResponse?.completed_at!).toLocaleString()}`
                             : status === 'started'
-                            ? `Started: ${new Date(response?.created_at!).toLocaleString()}\nNot yet completed`
+                            ? `Started: ${new Date(latestResponse?.created_at!).toLocaleString()}\nNot yet completed`
                             : 'Survey not yet started'
                         }
                       >
