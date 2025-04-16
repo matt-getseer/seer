@@ -43,6 +43,7 @@ const SurveyResponses: React.FC<SurveyResponsesProps> = ({ surveyId }) => {
     const fetchParticipantsAndResponses = async () => {
       try {
         setLoading(true);
+        console.log('Fetching data for survey:', surveyId);
         
         // Fetch participants for this survey directly from participants table
         const { data: participants, error: participantsError } = await supabase
@@ -51,15 +52,7 @@ const SurveyResponses: React.FC<SurveyResponsesProps> = ({ surveyId }) => {
           .eq('survey_id', surveyId);
 
         if (participantsError) throw participantsError;
-
-        // Fetch questions for this survey
-        const { data: questions, error: questionsError } = await supabase
-          .from('survey_questions')
-          .select('*')
-          .eq('survey_id', surveyId)
-          .order('order_number', { ascending: true });
-
-        if (questionsError) throw questionsError;
+        console.log('Fetched participants:', participants);
 
         // Fetch responses for this survey
         const { data: responses, error: responsesError } = await supabase
@@ -68,14 +61,19 @@ const SurveyResponses: React.FC<SurveyResponsesProps> = ({ surveyId }) => {
           .eq('survey_id', surveyId);
 
         if (responsesError) throw responsesError;
+        console.log('Fetched responses:', responses);
 
-        // Combine participant data with their responses and questions
-        const participantsWithResponses = (participants as Participant[]).map(participant => ({
-          ...participant,
-          response: (responses as SurveyResponse[])?.find(r => r.participant_id === participant.id),
-          questions: questions as SurveyQuestion[]
-        }));
+        // Combine participant data with their responses
+        const participantsWithResponses = participants.map(participant => {
+          const response = responses?.find(r => r.participant_id === participant.id);
+          console.log(`Mapping participant ${participant.id}:`, { participant, response });
+          return {
+            ...participant,
+            response
+          };
+        });
 
+        console.log('Combined data:', participantsWithResponses);
         setParticipants(participantsWithResponses);
       } catch (err) {
         console.error('Error fetching participants and responses:', err);
@@ -86,6 +84,32 @@ const SurveyResponses: React.FC<SurveyResponsesProps> = ({ surveyId }) => {
     };
 
     fetchParticipantsAndResponses();
+
+    // Set up real-time subscription for survey responses
+    const subscription = supabase
+      .channel(`survey_responses_${surveyId}`) // Make channel name unique per survey
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'survey_responses',
+          filter: `survey_id=eq.${surveyId}`
+        },
+        (payload) => {
+          console.log('Received real-time update:', payload);
+          fetchParticipantsAndResponses();
+        }
+      )
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      console.log('Cleaning up subscription');
+      subscription.unsubscribe();
+    };
   }, [surveyId]);
 
   if (loading) {

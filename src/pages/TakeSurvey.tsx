@@ -73,6 +73,7 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
   const [timeRemaining, setTimeRemaining] = useState<number>(180); // 3 minutes in seconds
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const effectiveIsPreview = isPreview || mode === 'preview';
+  const [isCompleted, setIsCompleted] = useState(false);
 
   console.log('TakeSurvey component mounted:', {
     isPreview,
@@ -250,6 +251,8 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
 
           if (responseData?.completed_at) {
             setError('You have already completed this survey.');
+            setLoading(false);
+            setIsCompleted(true);
             return;
           }
 
@@ -368,7 +371,44 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
     }
   }, [isRecording]);
 
-  const handleStartSurvey = () => {
+  const handleStartSurvey = async () => {
+    if (!effectiveIsPreview && surveyData.participant) {
+      try {
+        // Check if survey is already completed
+        const { data: existingResponse, error: checkError } = await supabase
+          .from('survey_responses')
+          .select('*')
+          .eq('survey_id', surveyData.survey!.id)
+          .eq('participant_id', surveyData.participant.id)
+          .single();
+
+        if (existingResponse?.completed_at) {
+          setError('You have already completed this survey.');
+          setIsCompleted(true);
+          return;
+        }
+
+        // Create initial survey response when starting
+        const { error: createError } = await supabase
+          .from('survey_responses')
+          .upsert({
+            survey_id: surveyData.survey!.id,
+            participant_id: surveyData.participant.id,
+            created_at: new Date().toISOString(),
+            answers: [],
+          });
+
+        if (createError) {
+          console.error('Error creating initial survey response:', createError);
+          setError('Failed to start survey. Please try again.');
+          return;
+        }
+      } catch (err) {
+        console.error('Error in handleStartSurvey:', err);
+        setError('Failed to start survey. Please try again.');
+        return;
+      }
+    }
     setCurrentStep('questions');
   };
 
@@ -411,21 +451,38 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
         throw new Error('Survey data not found');
       }
 
-      console.log('Submitting survey response with data:', {
+      // First, get the existing response
+      const { data: existingResponse, error: fetchError } = await supabase
+        .from('survey_responses')
+        .select('*')
+        .eq('survey_id', surveyData.survey.id)
+        .eq('participant_id', surveyData.participant.id)
+        .single();
+
+      console.log('Existing response:', existingResponse);
+      console.log('Fetch error:', fetchError);
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      const submissionData = {
+        id: existingResponse?.id,
         survey_id: surveyData.survey.id,
         participant_id: surveyData.participant.id,
-        answers: Object.values(answers)
-      });
+        created_at: existingResponse?.created_at || new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        answers: Object.values(answers),
+      };
+
+      console.log('Submitting data:', submissionData);
 
       // Submit the response
       const { data, error: responseError } = await supabase
         .from('survey_responses')
-        .upsert({
-          survey_id: surveyData.survey.id,
-          participant_id: surveyData.participant.id,
-          completed_at: new Date().toISOString(),
-          answers: Object.values(answers),
-        });
+        .upsert(submissionData);
+
+      console.log('Submission result:', { data, error: responseError });
 
       if (responseError) {
         console.error('Survey submission error:', {
@@ -436,7 +493,21 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
         throw responseError;
       }
 
-      console.log('Survey response submitted successfully:', data);
+      // Verify the submission
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('survey_responses')
+        .select('*')
+        .eq('survey_id', surveyData.survey.id)
+        .eq('participant_id', surveyData.participant.id)
+        .single();
+
+      console.log('Verification result:', { data: verifyData, error: verifyError });
+
+      if (verifyError || !verifyData?.completed_at) {
+        throw new Error('Failed to verify survey submission');
+      }
+
+      console.log('Survey response submitted and verified successfully:', verifyData);
       setCurrentStep('complete');
     } catch (err) {
       console.error('Error submitting survey:', err);
@@ -474,13 +545,30 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
     );
   }
 
-  if (error) {
+  if (error || isCompleted) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="max-w-md w-full mx-auto p-6">
-          <div className="rounded-lg bg-red-50 p-4">
-            <h3 className="text-sm font-medium text-red-800">Error</h3>
-            <div className="mt-2 text-sm text-red-700">{error}</div>
+          <div className="flex justify-center mb-8">
+            <img
+              src={surveyData?.creatorLogo || "/CutOnce.png"}
+              alt={surveyData?.creatorLogo ? "Survey Creator Logo" : "CutOnce Logo"}
+              className="h-10 max-h-[40px] object-contain"
+            />
+          </div>
+          <div className="p-4">
+            {error && !isCompleted ? (
+              <>
+                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                <div className="mt-2 text-sm text-red-700">{error}</div>
+              </>
+            ) : (
+              <>
+                <div className="text-lg text-primary-700 text-center">
+                  You have already completed this survey.
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

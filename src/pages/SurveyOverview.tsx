@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Menu } from '@headlessui/react';
 import { EllipsisVerticalIcon, ShareIcon, ArrowLeftIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 import { supabase, Survey } from '../lib/supabase';
@@ -49,11 +49,15 @@ const SkeletonLoader = () => (
 const SurveyOverview: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { deleteSurvey } = useSurveyContext();
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('analytics');
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const tab = searchParams.get('tab');
+    return (tab === 'analytics' || tab === 'responses' || tab === 'participants') ? tab : 'analytics';
+  });
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -183,6 +187,11 @@ const SurveyOverview: React.FC = () => {
     }
   }, [showToast]);
 
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
+
   if (loading) {
     return (
       <div className="p-8">
@@ -295,32 +304,32 @@ const SurveyOverview: React.FC = () => {
         <div className="mb-6 border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
             <button
-              onClick={() => setActiveTab('analytics')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              onClick={() => handleTabChange('analytics')}
+              className={`${
                 activeTab === 'analytics'
                   ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              } whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium`}
             >
               Analytics
             </button>
             <button
-              onClick={() => setActiveTab('responses')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              onClick={() => handleTabChange('responses')}
+              className={`${
                 activeTab === 'responses'
                   ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              } whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium`}
             >
               Responses
             </button>
             <button
-              onClick={() => setActiveTab('participants')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              onClick={() => handleTabChange('participants')}
+              className={`${
                 activeTab === 'participants'
                   ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              } whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium`}
             >
               Participants
             </button>
