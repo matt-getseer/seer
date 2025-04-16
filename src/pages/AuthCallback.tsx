@@ -21,17 +21,6 @@ const AuthCallback: React.FC = () => {
 
           if (workspaceId) {
             try {
-              // First check if profile exists
-              const { data: existingProfile, error: checkError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', session.user.id)
-                .single();
-
-              if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found" error
-                throw checkError;
-              }
-
               // Update or create profile
               const { error: profileError } = await supabase
                 .from('profiles')
