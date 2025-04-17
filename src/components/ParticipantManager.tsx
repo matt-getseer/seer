@@ -33,12 +33,13 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
   const fetchParticipants = useCallback(async () => {
     try {
       setLoading(true);
-      logger.info('Fetching participants for survey', { surveyId }, { context: 'ParticipantManager' });
+      setError(null);
+
       const { data, error: fetchError } = await supabase
         .from('participants')
         .select(`
           *,
-          survey_responses!left (
+          survey_responses:survey_responses!left (
             created_at,
             completed_at
           )
@@ -47,36 +48,40 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
         .order('created_at', { ascending: false });
 
       if (fetchError) {
-        logger.error('Supabase fetch error', fetchError, { context: 'ParticipantManager' });
+        logger.error('Participant fetch error', fetchError, { context: 'ParticipantManager' });
         throw fetchError;
       }
       
-      // Debug logging
-      console.log('Fetched participants data:', data);
-      
       // Transform the data to ensure we have the latest response status
-      const transformedData = data?.map(participant => ({
+      const transformedData = (data || []).map(participant => ({
         ...participant,
-        survey_responses: participant.survey_responses?.sort((a: SurveyResponseStatus, b: SurveyResponseStatus) => {
-          // Sort by completed_at (if exists) or created_at, most recent first
-          const aDate = a.completed_at ? new Date(a.completed_at) : new Date(a.created_at);
-          const bDate = b.completed_at ? new Date(b.completed_at) : new Date(b.created_at);
-          return bDate.getTime() - aDate.getTime();
-        })
-      })) || [];
+        survey_responses: Array.isArray(participant.survey_responses) 
+          ? participant.survey_responses.sort((a: SurveyResponseStatus, b: SurveyResponseStatus) => {
+              const aDate = a.completed_at ? new Date(a.completed_at) : new Date(a.created_at);
+              const bDate = b.completed_at ? new Date(b.completed_at) : new Date(b.created_at);
+              return bDate.getTime() - aDate.getTime();
+            })
+          : []
+      }));
       
-      logger.info('Fetched participants', { count: transformedData?.length }, { context: 'ParticipantManager' });
       setParticipants(transformedData);
+      setError(null);
     } catch (err) {
-      // More detailed error logging
-      console.error('Full error details:', err);
-      logger.error('Error fetching participants', {
-        message: err instanceof Error ? err.message : 'Unknown error',
-        code: (err as any)?.code,
-        details: (err as any)?.details,
-        hint: (err as any)?.hint
-      }, { context: 'ParticipantManager' });
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching participants');
+      logger.error('Error in participant management', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+        surveyId,
+        context: 'ParticipantManager'
+      });
+      
+      if (err instanceof Error) {
+        if (err.message.includes('permission denied')) {
+          setError('You do not have permission to view these participants');
+        } else {
+          setError('Unable to load participants. Please try again.');
+        }
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -85,7 +90,15 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
   useEffect(() => {
     fetchParticipants();
 
-    // Set up real-time subscriptions
+    // Set up real-time subscriptions with debounced fetch
+    let debounceTimer: NodeJS.Timeout;
+    const debouncedFetch = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        fetchParticipants();
+      }, 1000); // 1 second debounce
+    };
+
     const participantsSubscription = supabase
       .channel('participant_changes')
       .on(
@@ -96,8 +109,14 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
           table: 'participants',
           filter: `survey_id=eq.${surveyId}`
         },
-        () => {
-          fetchParticipants();
+        (payload) => {
+          // If it's a delete event, update state directly
+          if (payload.eventType === 'DELETE') {
+            setParticipants(prev => prev.filter(p => p.id !== payload.old.id));
+            return;
+          }
+          // For other changes, use debounced fetch
+          debouncedFetch();
         }
       )
       .subscribe();
@@ -113,13 +132,14 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
           filter: `survey_id=eq.${surveyId}`
         },
         () => {
-          fetchParticipants();
+          debouncedFetch();
         }
       )
       .subscribe();
 
-    // Cleanup subscriptions on unmount
+    // Cleanup subscriptions and timer on unmount
     return () => {
+      clearTimeout(debounceTimer);
       participantsSubscription.unsubscribe();
       responsesSubscription.unsubscribe();
     };
@@ -139,72 +159,31 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
 
     try {
       setLoading(true);
-      
-      // Debug: Check workspace membership first
-      const { data: workspaceMember, error: workspaceError } = await supabase
-        .from('workspace_members')
-        .select('*')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-        .eq('status', 'active');
+      setError(null);
 
-      console.log('Debug - Workspace membership:', { workspaceMember, workspaceError });
-
-      // Debug: Check survey workspace
-      console.log('Debug - Attempting to fetch survey with ID:', surveyId);
-      
-      const { data: survey, error: surveyError } = await supabase
-        .from('surveys')
-        .select('workspace_id, user_id')
-        .eq('id', surveyId)
-        .single();
-
-      console.log('Debug - Raw survey query result:', {
-        surveyId,
-        survey,
-        surveyError,
-        currentUserId: (await supabase.auth.getUser()).data.user?.id
-      });
-
-      if (surveyError) {
-        console.error('Debug - Survey fetch error details:', {
-          code: surveyError.code,
-          message: surveyError.message,
-          details: surveyError.details,
-          hint: surveyError.hint
+      const { data, error: addError } = await supabase
+        .rpc('add_participant', {
+          p_name: newParticipant.name,
+          p_email: newParticipant.email,
+          p_survey_id: surveyId,
+          p_participation_token: generateUUID()
         });
+
+      if (addError) {
+        throw new Error(addError.message);
       }
 
-      logger.info('Adding participant', {
-        name: newParticipant.name,
-        email: newParticipant.email,
-        survey_id: surveyId
-      }, { context: 'ParticipantManager' });
-
-      const { data, error: insertError } = await supabase
-        .from('participants')
-        .insert([
-          {
-            name: newParticipant.name,
-            email: newParticipant.email,
-            survey_id: surveyId,
-            participation_token: generateUUID()
-          }
-        ])
-        .select()
-        .single();
-
-      console.log('Debug - Insert result:', { data, insertError });
-
-      if (insertError) {
-        logger.error('Supabase insert error', insertError, { context: 'ParticipantManager' });
-        throw insertError;
+      if (!data) {
+        throw new Error('Failed to add participant');
       }
 
-      logger.info('Participant added successfully', { participantId: data.id }, { context: 'ParticipantManager' });
       setParticipants(prev => [data, ...prev]);
       setNewParticipant({ name: '', email: '' });
     } catch (err) {
-      logger.error('Error adding participant', err, { context: 'ParticipantManager' });
+      logger.error('Error in participant management', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+        context: 'ParticipantManager'
+      });
       setError(err instanceof Error ? err.message : 'An error occurred while adding the participant');
     } finally {
       setLoading(false);
@@ -214,65 +193,35 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
   const handleDeleteParticipant = async (id: string) => {
     try {
       setLoading(true);
+      setError(null);
+
+      // Get current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      // Debug: Check workspace membership
-      const { data: workspaceMember, error: workspaceError } = await supabase
-        .from('workspace_members')
-        .select('*')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-        .eq('status', 'active');
-
-      console.log('Workspace membership check:', { workspaceMember, workspaceError });
-
-      // Debug: Check survey ownership
-      const participant = participants.find(p => p.id === id);
-      if (!participant) {
-        throw new Error('Participant not found');
+      if (sessionError || !session) {
+        throw new Error('Authentication required');
       }
 
-      const { data: survey, error: surveyError } = await supabase
-        .from('surveys')
-        .select('workspace_id, user_id')
-        .eq('id', participant.survey_id)
-        .single();
-
-      console.log('Survey check:', { survey, surveyError });
-      
-      if (surveyError) {
-        throw new Error('Failed to verify survey access. The survey may have been deleted or you may not have permission to access it.');
-      }
-
-      if (!survey) {
-        throw new Error('Survey not found');
-      }
-      
-      // First delete associated survey responses
-      const { error: responseDeleteError } = await supabase
-        .from('survey_responses')
-        .delete()
-        .eq('participant_id', id);
-
-      if (responseDeleteError) {
-        logger.error('Error deleting survey responses', responseDeleteError, { context: 'ParticipantManager' });
-        throw responseDeleteError;
-      }
-
-      // Then delete the participant
+      // Delete the participant with RPC call
       const { error: deleteError } = await supabase
-        .from('participants')
-        .delete()
-        .eq('id', id);
+        .rpc('delete_participant', {
+          p_participant_id: id,
+          p_survey_id: surveyId
+        });
 
       if (deleteError) {
-        logger.error('Error deleting participant', deleteError, { context: 'ParticipantManager' });
-        throw deleteError;
+        console.error('Delete error:', deleteError);
+        throw new Error('Failed to delete participant');
       }
 
-      // If we got here, the deletion was successful
+      // Only update local state if the delete was successful
       setParticipants(prev => prev.filter(p => p.id !== id));
-      logger.info('Participant and associated responses deleted successfully', { participantId: id }, { context: 'ParticipantManager' });
     } catch (err) {
-      logger.error('Error deleting participant', err, { context: 'ParticipantManager' });
+      logger.error('Error in participant deletion', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+        participantId: id,
+        context: 'ParticipantManager'
+      });
       setError(err instanceof Error ? err.message : 'An error occurred while deleting the participant');
     } finally {
       setLoading(false);
@@ -285,37 +234,81 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
 
     try {
       setLoading(true);
+      setError(null);
+
+      // Verify file type
+      if (!file.name.endsWith('.csv')) {
+        throw new Error('Please upload a CSV file');
+      }
+
       const text = await file.text();
       const rows = text.split('\n').map(row => row.split(','));
       
-      // Skip header row and filter out empty rows
+      // Validate CSV structure
+      if (rows.length < 2) {
+        throw new Error('CSV file must contain a header row and at least one participant');
+      }
+
+      const headerRow = rows[0].map(header => header.trim().toLowerCase());
+      const nameIndex = headerRow.indexOf('name');
+      const emailIndex = headerRow.indexOf('email');
+
+      if (nameIndex === -1 || emailIndex === -1) {
+        throw new Error('CSV must contain "name" and "email" columns');
+      }
+
+      // Process participants, skipping header row and empty rows
       const participants = rows.slice(1)
-        .filter(row => row.length >= 2 && row[0] && row[1])
+        .filter(row => row.length >= Math.max(nameIndex, emailIndex) + 1 && 
+                      row[nameIndex]?.trim() && 
+                      row[emailIndex]?.trim())
         .map(row => ({
-          name: row[0].trim(),
-          email: row[1].trim(),
-          survey_id: surveyId,
-          participation_token: generateUUID() // Generate a proper UUID for each participant
+          name: row[nameIndex].trim(),
+          email: row[emailIndex].trim()
         }));
 
       if (participants.length === 0) {
         throw new Error('No valid participants found in CSV');
       }
 
-      const { data, error: insertError } = await supabase
-        .from('participants')
-        .insert(participants)
-        .select();
+      // Add participants one by one using the RPC function
+      const addedParticipants: ParticipantWithResponse[] = [];
+      for (const participant of participants) {
+        const { data, error: addError } = await supabase.rpc('add_participant', {
+          p_name: participant.name,
+          p_email: participant.email,
+          p_survey_id: surveyId,
+          p_participation_token: generateUUID()
+        });
 
-      if (insertError) throw insertError;
-      setParticipants(prev => [...data, ...prev]);
+        if (addError) {
+          // If it's a duplicate email, continue with the next participant
+          if (addError.message.includes('already exists')) {
+            continue;
+          }
+          throw new Error(addError.message);
+        }
+
+        if (data) {
+          addedParticipants.push(data);
+        }
+      }
+
+      if (addedParticipants.length === 0) {
+        throw new Error('No participants were added. They may already exist in the survey.');
+      }
+
+      setParticipants(prev => [...addedParticipants, ...prev]);
       
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     } catch (err) {
-      logger.error('Error uploading participants', err, { context: 'ParticipantManager' });
+      logger.error('Error in CSV upload', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+        context: 'ParticipantManager'
+      });
       setError(err instanceof Error ? err.message : 'An error occurred while uploading participants');
     } finally {
       setLoading(false);

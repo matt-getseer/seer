@@ -96,73 +96,57 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
     const fetchSurveyData = async () => {
       try {
         setLoading(true);
+        setError(null);
         
         if (effectiveIsPreview) {
           console.log('Preview mode - attempting to fetch survey with ID:', id);
-          // First fetch the survey data
+          
+          // First fetch the survey data with explicit headers
           const { data: surveyData, error: surveyError } = await supabase
             .from('surveys')
             .select('*')
             .eq('id', id)
-            .single();
-
-          console.log('Preview survey fetch result:', { 
-            data: surveyData, 
-            error: surveyError,
-            errorDetails: surveyError ? {
-              message: surveyError.message,
-              details: surveyError.details,
-              hint: surveyError.hint,
-              code: surveyError.code
-            } : null,
-            currentUrl: window.location.href
-          });
-
-          if (surveyError) {
-            console.error('Survey fetch error details:', {
-              message: surveyError.message,
-              details: surveyError.details,
-              hint: surveyError.hint,
-              code: surveyError.code
-            });
-            throw surveyError;
-          }
+            .single()
+            .throwOnError();
 
           if (!surveyData) {
             console.error('No survey data found for ID:', id);
             throw new Error('Survey not found');
           }
 
-          // Then fetch the creator's profile separately
-          const { data: creatorProfile, error: profileError } = await supabase
-            .from('profiles')
-            .select('logo_url')
-            .eq('id', surveyData.user_id)
-            .single();
-
-          if (profileError) {
+          // Fetch the creator's profile with explicit error handling
+          let creatorLogo = null;
+          try {
+            const { data: creatorProfile } = await supabase
+              .from('profiles')
+              .select('logo_url')
+              .eq('id', surveyData.user_id)
+              .single()
+              .throwOnError();
+            
+            creatorLogo = creatorProfile?.logo_url;
+          } catch (profileError) {
             console.error('Profile fetch error:', profileError);
-            // Don't throw here, just log the error as logo is optional
+            // Continue without logo
           }
 
-          // Fetch survey questions
-          console.log('Attempting to fetch questions for survey:', id);
+          // Fetch survey questions with explicit error handling
           const { data: questions, error: questionsError } = await supabase
             .from('survey_questions')
             .select('*')
             .eq('survey_id', id)
-            .order('order_number', { ascending: true });
+            .order('order_number', { ascending: true })
+            .throwOnError();
 
-          if (questionsError) {
-            console.error('Questions fetch error:', questionsError);
-            throw questionsError;
+          if (!questions) {
+            throw new Error('Failed to fetch survey questions');
           }
 
           setSurveyData({
             survey: surveyData,
             participant: null,
-            questions: questions || [],
-            creatorLogo: creatorProfile?.logo_url || null
+            questions: questions,
+            creatorLogo
           });
         } else {
           // Participant token flow
@@ -170,111 +154,26 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
             throw new Error('No token provided');
           }
 
-          console.log('Attempting to fetch participant with token:', {
-            token,
-            tokenLength: token.length,
-            tokenType: typeof token,
-            queryString: `participation_token=eq.${token}`
-          });
-
-          // First fetch the participant data without .single()
-          const { data: participantData, error: participantError } = await supabase
-            .from('participants')
-            .select('*, survey:surveys(title)')
-            .eq('participation_token', token);
-
-          console.log('Raw participant query result:', {
-            data: participantData,
-            count: participantData?.length,
-            error: participantError,
-            requestDetails: {
-              endpoint: `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/participants`,
-              queryParams: `select=*&participation_token=eq.${token}`
-            }
-          });
-
-          if (participantError) {
-            console.error('Participant fetch error:', {
-              message: participantError.message,
-              details: participantError.details,
-              hint: participantError.hint,
-              code: participantError.code
+          // Use the RPC function to get all survey data in one call
+          const { data: surveyData, error: rpcError } = await supabase
+            .rpc('get_survey_by_token', {
+              p_token: token
             });
-            throw participantError;
+
+          if (rpcError) {
+            console.error('Error fetching survey data:', rpcError);
+            throw new Error(rpcError.message || 'Failed to fetch survey data');
           }
 
-          if (!participantData || participantData.length === 0) {
-            console.error('No participant found with token:', token);
+          if (!surveyData || !surveyData.survey) {
             throw new Error('Invalid or expired survey link. Please check your email for a valid link.');
           }
 
-          const participant = participantData[0];
-          console.log('Found participant:', participant);
-
-          // Then fetch the survey data
-          const { data: surveyData, error: surveyError } = await supabase
-            .from('surveys')
-            .select('*')
-            .eq('id', participant.survey_id)
-            .single();
-
-          console.log('Survey fetch result:', { data: surveyData, error: surveyError });
-
-          if (surveyError) {
-            console.error('Survey fetch error:', surveyError);
-            throw surveyError;
-          }
-
-          // Fetch creator's profile
-          let creatorLogo = null;
-          if (surveyData?.user_id) {
-            const { data: creatorProfile, error: profileError } = await supabase
-              .from('profiles')
-              .select('logo_url')
-              .eq('id', surveyData.user_id)
-              .single();
-            
-            console.log('Profile fetch result:', { data: creatorProfile, error: profileError });
-            
-            creatorLogo = creatorProfile?.logo_url;
-          }
-
-          // Check if survey is already completed
-          const { data: responseData, error: responseError } = await supabase
-            .from('survey_responses')
-            .select('*')
-            .eq('survey_id', participant.survey_id)
-            .eq('participant_id', participant.id)
-            .single();
-
-          console.log('Response check result:', { data: responseData, error: responseError });
-
-          if (responseData?.completed_at) {
-            setError('You have already completed this survey.');
-            setLoading(false);
-            setIsCompleted(true);
-            return;
-          }
-
-          // Fetch survey questions
-          const { data: questions, error: questionsError } = await supabase
-            .from('survey_questions')
-            .select('*')
-            .eq('survey_id', participant.survey_id)
-            .order('order_number', { ascending: true });
-
-          console.log('Questions fetch result:', { data: questions, error: questionsError });
-
-          if (questionsError) {
-            console.error('Questions fetch error:', questionsError);
-            throw questionsError;
-          }
-
           setSurveyData({
-            survey: surveyData,
-            participant: participant,
-            questions: questions || [],
-            creatorLogo: creatorLogo
+            survey: surveyData.survey,
+            participant: surveyData.participant,
+            questions: surveyData.questions || [],
+            creatorLogo: surveyData.creator_logo
           });
         }
       } catch (err) {
@@ -372,30 +271,13 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
   }, [isRecording]);
 
   const handleStartSurvey = async () => {
-    if (!effectiveIsPreview && surveyData.participant) {
+    if (!effectiveIsPreview && surveyData.participant && token) {
       try {
-        // Check if survey is already completed
-        const { data: existingResponse, error: checkError } = await supabase
-          .from('survey_responses')
-          .select('*')
-          .eq('survey_id', surveyData.survey!.id)
-          .eq('participant_id', surveyData.participant.id)
-          .single();
-
-        if (existingResponse?.completed_at) {
-          setError('You have already completed this survey.');
-          setIsCompleted(true);
-          return;
-        }
-
         // Create initial survey response when starting
-        const { error: createError } = await supabase
-          .from('survey_responses')
-          .upsert({
-            survey_id: surveyData.survey!.id,
-            participant_id: surveyData.participant.id,
-            created_at: new Date().toISOString(),
-            answers: [],
+        const { data, error: createError } = await supabase
+          .rpc('upsert_survey_response', {
+            p_participant_token: token,
+            p_answers: {}
           });
 
         if (createError) {
@@ -447,67 +329,32 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
     try {
       setLoading(true);
       
-      if (!surveyData.survey || !surveyData.participant) {
+      if (!surveyData.survey || !surveyData.participant || !token) {
         throw new Error('Survey data not found');
       }
 
-      // First, get the existing response
-      const { data: existingResponse, error: fetchError } = await supabase
-        .from('survey_responses')
-        .select('*')
-        .eq('survey_id', surveyData.survey.id)
-        .eq('participant_id', surveyData.participant.id)
-        .single();
-
-      console.log('Existing response:', existingResponse);
-      console.log('Fetch error:', fetchError);
-
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        throw fetchError;
-      }
-
-      const submissionData = {
-        id: existingResponse?.id,
-        survey_id: surveyData.survey.id,
-        participant_id: surveyData.participant.id,
-        created_at: existingResponse?.created_at || new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-        answers: Object.values(answers),
-      };
-
-      console.log('Submitting data:', submissionData);
-
-      // Submit the response
-      const { data, error: responseError } = await supabase
-        .from('survey_responses')
-        .upsert(submissionData);
-
-      console.log('Submission result:', { data, error: responseError });
-
-      if (responseError) {
-        console.error('Survey submission error:', {
-          message: responseError.message,
-          details: responseError.details,
-          hint: responseError.hint
+      // First save the final answers
+      const { error: saveError } = await supabase
+        .rpc('upsert_survey_response', {
+          p_participant_token: token,
+          p_answers: answers
         });
-        throw responseError;
+
+      if (saveError) {
+        throw saveError;
       }
 
-      // Verify the submission
-      const { data: verifyData, error: verifyError } = await supabase
-        .from('survey_responses')
-        .select('*')
-        .eq('survey_id', surveyData.survey.id)
-        .eq('participant_id', surveyData.participant.id)
-        .single();
+      // Then mark the survey as completed
+      const { data, error: completeError } = await supabase
+        .rpc('complete_survey_response', {
+          p_participant_token: token
+        });
 
-      console.log('Verification result:', { data: verifyData, error: verifyError });
-
-      if (verifyError || !verifyData?.completed_at) {
-        throw new Error('Failed to verify survey submission');
+      if (completeError) {
+        throw completeError;
       }
 
-      console.log('Survey response submitted and verified successfully:', verifyData);
+      console.log('Survey response submitted and completed successfully:', data);
       setCurrentStep('complete');
     } catch (err) {
       console.error('Error submitting survey:', err);

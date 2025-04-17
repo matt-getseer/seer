@@ -73,11 +73,29 @@ const SurveyOverview: React.FC = () => {
     const fetchSurvey = async () => {
       try {
         setLoading(true);
+        setError(null);
+        
+        // Get auth token
+        const session = await supabase.auth.getSession();
+        const token = session.data.session?.access_token;
+        
+        if (!token) {
+          throw new Error('Authentication required');
+        }
+
         const response = await fetch(`${import.meta.env.VITE_API_URL}/api/surveys/${id}`, {
           headers: {
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+            'Authorization': `Bearer ${token}`
           }
         });
+
+        if (response.status === 404) {
+          throw new Error('Survey not found');
+        }
+
+        if (response.status === 403) {
+          throw new Error('You do not have permission to view this survey');
+        }
 
         if (!response.ok) {
           throw new Error('Failed to fetch survey');
@@ -88,12 +106,19 @@ const SurveyOverview: React.FC = () => {
       } catch (err) {
         console.error('Error fetching survey:', err);
         setError(err instanceof Error ? err.message : 'An error occurred while fetching the survey');
+        // Reset active tab to analytics if we can't load the survey
+        setActiveTab('analytics');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchSurvey();
+    if (id) {
+      fetchSurvey();
+    } else {
+      setError('Survey ID is required');
+      setLoading(false);
+    }
   }, [id]);
 
   const handleDelete = async () => {
@@ -160,24 +185,43 @@ const SurveyOverview: React.FC = () => {
     
     try {
       setSendingEmails(true);
+      setError(null);
+      
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/surveys/${survey.id}/send-invites`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
       const data = await response.json();
       
-      if (!response.ok) throw new Error(data.error || 'Failed to send emails');
+      if (response.status === 404) {
+        throw new Error('Survey not found');
+      }
+
+      if (response.status === 403) {
+        throw new Error('You do not have permission to send invites for this survey');
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send emails');
+      }
       
       setToastMessage(`Successfully sent ${data.count} invitation emails`);
       setToastType('success');
       setShowToast(true);
     } catch (err) {
       console.error('Error sending emails:', err);
-      setToastMessage('Failed to send invitation emails');
+      setToastMessage(err instanceof Error ? err.message : 'Failed to send invitation emails');
       setToastType('error');
       setShowToast(true);
     } finally {
