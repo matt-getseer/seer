@@ -27,6 +27,7 @@ interface User {
   status: 'active' | 'pending' | 'invited';
   full_name: string | null;
   username: string | null;
+  role: 'admin' | 'user' | null;
 }
 
 interface Toast {
@@ -77,18 +78,27 @@ const Users: React.FC = () => {
       
       if (emailsError) throw emailsError;
 
+      // Get user roles
+      const { data: roles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+
+      if (rolesError) throw rolesError;
+
       // Map profiles to user objects
       const users = (profiles || []).map(profile => {
         const userEmail = emails?.find((e: EmailData) => e.user_id === profile.id);
+        const userRole = roles?.find((r: { user_id: string; role: string }) => r.user_id === profile.id);
         return {
           id: profile.id,
           email: userEmail?.email || 'No email provided',
           created_at: profile.updated_at,
-          last_sign_in_at: null, // We don't have access to this info from client side
+          last_sign_in_at: null,
           invited_at: profile.invited_at,
           status: profile.status || 'pending',
           full_name: profile.full_name,
-          username: profile.username
+          username: profile.username,
+          role: userRole?.role as 'admin' | 'user' | null || null
         };
       });
 
@@ -144,77 +154,56 @@ const Users: React.FC = () => {
         throw new Error('No active session found');
       }
 
-      console.log('Calling Edge Function with session token...');
-      
-      // Log the request payload
-      const requestPayload = {
+      console.log('Current user session:', {
+        userId: session?.user?.id,
+        userEmail: session?.user?.email,
+        hasAccessToken: !!session?.access_token
+      });
+
+      console.log('Sending invite request with:', {
         email: inviteEmail,
-        invitedBy: user.id
-      };
-      console.log('Edge Function request payload:', requestPayload);
+        invitedBy: session?.user?.id,
+        sessionToken: session?.access_token?.substring(0, 10) + '...' // Only log part of the token for security
+      });
       
-      try {
-        // Call the Edge Function to create user and send invite
-        const { data: inviteData, error: inviteError } = await supabase.functions.invoke('invite-user', {
-          body: requestPayload
-        });
-
-        console.log('Raw Edge Function response:', inviteData, inviteError);
-        if (inviteError) {
-          console.error('Full error object:', inviteError);
-          console.error('Error details:', {
-            message: inviteError.message,
-            name: inviteError.name,
-            stack: inviteError.stack,
-            context: inviteError.context
-          });
-          throw inviteError;
+      // Call the Edge Function to create user and send invite
+      const { data: inviteData, error: inviteError } = await supabase.functions.invoke('invite-user', {
+        body: {
+          email: inviteEmail,
+          invitedBy: session?.user?.id
+        },
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
         }
+      });
 
-        if (!inviteData?.id) {
-          throw new Error('Failed to create user - no ID returned');
-        }
+      console.log('Edge function response:', {
+        success: inviteData?.success,
+        error: inviteError,
+        data: inviteData
+      });
 
-        const newUserId = inviteData.id;
-        console.log('User created with ID:', newUserId);
-
-        console.log('Step 3: Creating profile...');
-        // Create or update profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: newUserId,
-            email: inviteEmail,
-            status: 'invited',
-            invited_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-
-        if (profileError) {
-          console.error('Error creating profile:', profileError);
-          throw profileError;
-        }
-
-        addToast('User has been invited successfully. They will receive an email to set up their account.', 'success');
-
-        // Reset form and close modal
-        setInviteEmail('');
-        setShowInviteModal(false);
-        
-        console.log('Step 4: Refreshing user list...');
-        // Fetch users after a short delay to ensure the profile is available
-        setTimeout(() => {
-          fetchUsers();
-        }, 1000);
-        
-      } catch (functionError: unknown) {
-        console.error('Edge Function error details:', functionError);
-        if (functionError instanceof Error) {
-          throw functionError;
-        } else {
-          throw new Error('Unknown error occurred while inviting user');
-        }
+      if (inviteError) {
+        console.error('Invite error:', inviteError);
+        throw new Error(inviteError.message || 'Failed to invite user');
       }
+
+      if (!inviteData?.success) {
+        throw new Error('Failed to create user - no success response');
+      }
+
+      addToast('User has been invited successfully. They will receive an email to set up their account.', 'success');
+
+      // Reset form and close modal
+      setInviteEmail('');
+      setShowInviteModal(false);
+      
+      console.log('Step 4: Refreshing user list...');
+      // Fetch users after a short delay to ensure the profile is available
+      setTimeout(() => {
+        fetchUsers();
+      }, 1000);
+      
     } catch (err) {
       console.error('Invite error:', err);
       setInviteError(err instanceof Error ? err.message : 'Failed to invite user');
@@ -302,6 +291,21 @@ const Users: React.FC = () => {
     );
   };
 
+  const getRoleBadge = (role: User['role']) => {
+    if (!role) return null;
+    
+    const colors = {
+      admin: 'bg-purple-100 text-purple-800',
+      user: 'bg-blue-100 text-blue-800'
+    };
+
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[role]}`}>
+        {role}
+      </span>
+    );
+  };
+
   return (
     <div className="p-8">
       {/* Toast Container */}
@@ -351,12 +355,21 @@ const Users: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Last Active</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Actions</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  User
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Role
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Joined
+                </th>
+                <th scope="col" className="relative px-6 py-3">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -375,44 +388,33 @@ const Users: React.FC = () => {
               ) : (
                 users.map((user) => (
                   <tr key={user.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {user.full_name}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{user.email}</div>
+                      {user.full_name && (
+                        <div className="text-sm text-gray-500">{user.full_name}</div>
+                      )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {user.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.username}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(user.status)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.last_sign_in_at
-                        ? new Date(user.last_sign_in_at).toLocaleDateString()
-                        : 'Never'}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getRoleBadge(user.role)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex items-center space-x-4">
-                        {user.status === 'invited' && (
-                          <button
-                            onClick={() => handleRevokeInvite(user.id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            Revoke
-                          </button>
-                        )}
+                      {new Date(user.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      {user.role !== 'admin' && (
                         <button
                           onClick={() => {
                             setUserToDelete(user);
                             setShowDeleteModal(true);
                           }}
-                          className="text-red-600 hover:text-red-900 flex items-center"
+                          className="text-red-600 hover:text-red-900"
                         >
-                          <TrashIcon className="h-4 w-4 mr-1" />
-                          Delete
+                          <TrashIcon className="h-5 w-5" />
                         </button>
-                      </div>
+                      )}
                     </td>
                   </tr>
                 ))

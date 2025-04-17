@@ -21,6 +21,7 @@ import ConnectionStatus from './components/ConnectionStatus';
 import { SurveyProvider } from './contexts/SurveyContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AuthCallback from './pages/AuthCallback';
+import EnvTest from './components/EnvTest';
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -45,13 +46,13 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
-// Wrapper component to handle layout selection
+// Layout wrapper for protected routes
 const LayoutWrapper: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       <Sidebar />
-      <div className="pl-56">
-        <main><Outlet /></main>
+      <div className="lg:pl-72">
+        <Outlet />
       </div>
     </div>
   );
@@ -119,50 +120,60 @@ const NotFound = () => (
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <SurveyProvider>
-          <Router>
-            <Routes>
-              <Route path="/sign-in" element={<PublicLayout><SignIn /></PublicLayout>} />
-              <Route path="/sign-up" element={<PublicLayout><SignUp /></PublicLayout>} />
-              <Route path="/reset-password" element={<PublicLayout><ResetPassword /></PublicLayout>} />
-              <Route path="/email-verification" element={<PublicLayout><EmailVerification /></PublicLayout>} />
-              <Route path="/set-password" element={<PublicLayout><SetPassword /></PublicLayout>} />
-              <Route path="/auth/callback" element={<PublicLayout><AuthCallback /></PublicLayout>} />
-              <Route 
-                path="/take-survey/:mode/:id" 
-                element={
-                  <PublicLayout>
-                    <TakeSurvey isPreview={window.location.pathname.includes('/preview/')} />
-                  </PublicLayout>
-                } 
-              />
-              <Route 
-                path="/take-survey/token/:token" 
-                element={
-                  <PublicLayout>
-                    <TakeSurvey />
-                  </PublicLayout>
-                } 
-              />
-              <Route path="/analytics/:token" element={<PublicLayout><SharedAnalytics /></PublicLayout>} />
-              <Route element={<LayoutWrapper />}>
-                <Route path="/" element={<Navigate to="/surveys" replace />} />
-                <Route path="/surveys" element={<ProtectedRoute><Surveys /></ProtectedRoute>} />
-                <Route path="/surveys/new" element={<ProtectedRoute><SurveyCreator /></ProtectedRoute>} />
-                <Route path="/surveys/:id" element={<ProtectedRoute><SurveyOverview /></ProtectedRoute>} />
-                <Route path="/surveys/:id/edit" element={<ProtectedRoute><SurveyEditor /></ProtectedRoute>} />
-                <Route path="/participants" element={<ProtectedRoute><Participants /></ProtectedRoute>} />
-                <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
-                <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
-                <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-                <Route path="*" element={<NotFound />} />
-              </Route>
-            </Routes>
-            <ConnectionStatus />
-          </Router>
-        </SurveyProvider>
-      </AuthProvider>
+      <Router>
+        <AuthProvider>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/env-test" element={<EnvTest />} />
+            <Route path="/sign-in" element={<PublicLayout><SignIn /></PublicLayout>} />
+            <Route path="/sign-up" element={<PublicLayout><SignUp /></PublicLayout>} />
+            <Route path="/reset-password" element={<PublicLayout><ResetPassword /></PublicLayout>} />
+            <Route path="/email-verification" element={<PublicLayout><EmailVerification /></PublicLayout>} />
+            <Route path="/set-password" element={<PublicLayout><SetPassword /></PublicLayout>} />
+            <Route path="/auth/callback" element={<PublicLayout><AuthCallback /></PublicLayout>} />
+            <Route 
+              path="/take-survey/:mode/:id" 
+              element={
+                <PublicLayout>
+                  <TakeSurvey isPreview={window.location.pathname.includes('/preview/')} />
+                </PublicLayout>
+              } 
+            />
+            <Route 
+              path="/take-survey/token/:token" 
+              element={
+                <PublicLayout>
+                  <TakeSurvey />
+                </PublicLayout>
+              } 
+            />
+            <Route path="/analytics/:token" element={<PublicLayout><SharedAnalytics /></PublicLayout>} />
+
+            {/* Protected routes wrapped in SurveyProvider */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <SurveyProvider>
+                    <LayoutWrapper />
+                  </SurveyProvider>
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/surveys" replace />} />
+              <Route path="/surveys" element={<Surveys />} />
+              <Route path="/surveys/new" element={<SurveyCreator />} />
+              <Route path="/surveys/:id" element={<SurveyOverview />} />
+              <Route path="/surveys/:id/edit" element={<SurveyEditor />} />
+              <Route path="/participants" element={<Participants />} />
+              <Route path="/users" element={<Users />} />
+              <Route path="/billing" element={<Billing />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<NotFound />} />
+            </Route>
+          </Routes>
+          <ConnectionStatus />
+        </AuthProvider>
+      </Router>
     </ErrorBoundary>
   );
 };

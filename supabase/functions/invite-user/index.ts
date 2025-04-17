@@ -1,236 +1,183 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// @deno-types="https://deno.land/std@0.177.0/http/server.d.ts"
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+// @deno-types="https://esm.sh/v128/@supabase/supabase-js@2.7.1/dist/module/index.d.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+
+declare global {
+  interface DenoNamespace {
+    env: {
+      get(key: string): string | undefined;
+    };
+  }
+  const Deno: DenoNamespace;
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Max-Age': '86400'
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
+interface InviteRequest {
+  email: string;
+  invitedBy: string;
+}
+
 serve(async (req) => {
-  // Handle preflight requests
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders
+    return new Response('ok', { 
+      headers: {
+        ...corsHeaders,
+        'Access-Control-Allow-Origin': req.headers.get('origin') || '*',
+      }
     });
   }
 
-  // For non-OPTIONS requests, always include CORS headers
-  if (req.method === 'POST') {
-    try {
-      const rawBody = await req.text();
-      let body;
-      try {
-        body = rawBody ? JSON.parse(rawBody) : {};
-        console.log('Parsed request body:', body);
-      } catch (e) {
-        console.error('JSON parse error:', e);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Invalid JSON body',
-          details: e.message
-        }), {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json'
-          },
-          status: 200
-        });
+  try {
+    // Create Supabase client
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // Get auth token from request
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      throw new Error('Invalid authorization header');
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user: authUser }, error: authError } = await supabaseClient.auth.getUser(token);
+    
+    if (authError || !authUser) {
+      throw new Error('Invalid authentication token');
+    }
+
+    // Get request data
+    const { email, invitedBy }: InviteRequest = await req.json();
+    if (!email || !invitedBy) {
+      throw new Error('Missing required fields');
+    }
+
+    // Get inviter's workspace ID
+    const { data: inviterProfile, error: inviterProfileError } = await supabaseClient
+      .from('profiles')
+      .select('workspace_id')
+      .eq('id', invitedBy)
+      .single();
+
+    if (inviterProfileError || !inviterProfile?.workspace_id) {
+      throw new Error('Could not find inviter\'s workspace');
+    }
+
+    // Verify inviter exists and has admin role
+    const { data: inviterRole, error: inviterError } = await supabaseClient
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', invitedBy)
+      .single();
+
+    if (inviterError || !inviterRole || inviterRole.role !== 'admin') {
+      throw new Error('Unauthorized: Inviter must be an admin');
+    }
+
+    // Check if user already exists
+    const { data: existingUser } = await supabaseClient
+      .from('profiles')
+      .select('id, status')
+      .eq('email', email)
+      .single();
+
+    if (existingUser) {
+      if (existingUser.status === 'invited') {
+        throw new Error('User has already been invited');
       }
+      throw new Error('User already exists');
+    }
 
-      const { email, invitedBy } = body;
-      console.log('Received invitation request for email:', email);
-      const role = 'user'; // Default role for invited users
-
-      if (!email) {
-        console.error('No email provided in request');
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Email is required'
-        }), {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json'
-          },
-          status: 200
-        });
+    // Create user and send invite
+    const { data: user, error: createError } = await supabaseClient.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: { 
+        invitedBy,
+        requiresPassword: true,
+        workspace_id: inviterProfile.workspace_id
       }
+    });
 
-      console.log('Processing invitation for:', { email, role, invitedBy });
+    if (createError) {
+      throw createError;
+    }
 
-      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      if (!serviceRoleKey) {
-        console.error('Service role key not configured');
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Service role key is not configured'
-        }), {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json'
-          },
-          status: 200
-        });
-      }
-
-      const supabaseUrl = Deno.env.get('SUPABASE_URL');
-      console.log('Using Supabase URL:', supabaseUrl);
-
-      const supabaseAdmin = createClient(supabaseUrl || '', serviceRoleKey);
-
-      try {
-        // 1. Get the inviter's workspace
-        console.log('1. Getting inviter workspace:', invitedBy);
-        const { data: inviterWorkspace, error: workspaceError } = await supabaseAdmin
-          .from('workspaces')
-          .select('id')
-          .eq('owner_id', invitedBy)
-          .single();
-
-        if (workspaceError || !inviterWorkspace) {
-          console.error('Error getting workspace:', workspaceError);
-          throw new Error('Could not find workspace for inviter');
-        }
-
-        // 2. Check if user exists in auth.users
-        console.log('2. Checking if user exists for email:', email);
-        const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-
-        if (listError) {
-          console.error('Error listing users:', listError);
-          throw listError;
-        }
-
-        const existingUser = users.find(u => u.email === email);
-        let userId;
-
-        // 3. Send email based on whether user is new or existing
-        console.log('3. Sending email to:', email);
-        const redirectTo = `${Deno.env.get('SITE_URL') || 'http://localhost:5173'}/auth/callback`;
-        
-        if (existingUser) {
-          console.log('Sending recovery link to existing user:', email);
-          const { data: emailData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-            redirectTo,
-            data: { 
-              recovery: true,
-              workspace_id: inviterWorkspace.id
-            }
-          });
-          
-          if (inviteError || !emailData) {
-            console.error('Error sending recovery email:', inviteError);
-            throw inviteError;
-          }
-          
-          userId = existingUser.id;
-          
-        } else {
-          console.log('Sending invitation to new user:', email);
-          const { data: emailData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-            redirectTo,
-            data: { 
-              role,
-              workspace_id: inviterWorkspace.id
-            }
-          });
-          
-          if (inviteError || !emailData) {
-            console.error('Error sending invitation:', inviteError);
-            throw inviteError;
-          }
-          
-          userId = emailData.user.id;
-        }
-
-        // 4. Create or update profile with workspace
-        console.log('4. Creating/updating profile for:', { id: userId, email });
-        const profileData = {
-          id: userId,
-          email: email,
-          invited_at: new Date().toISOString(),
-          status: 'invited',
-          workspace_id: inviterWorkspace.id
-        };
-
-        const { error: profileError } = await supabaseAdmin
-          .from('profiles')
-          .upsert([profileData])
-          .select()
-          .single();
-
-        if (profileError) {
-          console.error('Error creating/updating profile:', profileError);
-          throw profileError;
-        }
-
-        // 5. Add user role
-        const { error: roleError } = await supabaseAdmin
-          .from('user_roles')
-          .upsert({
-            user_id: userId,
-            role: 'user'
-          });
-
-        if (roleError) {
-          console.error('Error setting user role:', roleError);
-          throw roleError;
-        }
-
-        return new Response(JSON.stringify({
-          success: true,
-          message: existingUser ? 'User added to workspace and email sent' : 'User created and invited successfully',
-          id: userId,
-          email: email
-        }), {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json'
-          },
-          status: 200
-        });
-
-      } catch (error) {
-        console.error('Operation failed:', error);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Operation failed',
-          details: error
-        }), {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json'
-          },
-          status: 200
-        });
-      }
-    } catch (error) {
-      console.error('Function error:', error);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Function error',
-        details: error
-      }), {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        },
-        status: 200
+    // Create initial profile
+    const { error: profileError } = await supabaseClient
+      .from('profiles')
+      .insert({
+        id: user.user.id,
+        email: email,
+        status: 'invited',
+        invited_by: invitedBy,
+        workspace_id: inviterProfile.workspace_id,
+        password_setup_complete: false,
+        invited_at: new Date().toISOString()
       });
-    }
-  }
 
-  // Return 405 for non-POST/OPTIONS requests
-  return new Response(JSON.stringify({
-    success: false,
-    error: 'Method Not Allowed'
-  }), {
-    status: 200,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json'
+    if (profileError) {
+      throw profileError;
     }
-  });
+
+    // Set user role
+    const { error: roleError } = await supabaseClient
+      .from('user_roles')
+      .insert({
+        user_id: user.user.id,
+        role: 'user'
+      });
+
+    if (roleError) {
+      throw roleError;
+    }
+
+    // Log invite for audit
+    await supabaseClient.from('audit_log').insert({
+      action: 'invite_user',
+      performed_by: invitedBy,
+      target_user: user.user.id,
+      metadata: { 
+        email,
+        invite_type: 'user',
+        workspace_id: inviterProfile.workspace_id
+      }
+    });
+
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        id: user.user.id
+      }),
+      { 
+        headers: { 
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': req.headers.get('origin') || '*',
+        } 
+      }
+    );
+  } catch (error) {
+    console.error('Error in invite-user function:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { 
+        status: 400,
+        headers: { 
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': req.headers.get('origin') || '*',
+        }
+      }
+    );
+  }
 }); 

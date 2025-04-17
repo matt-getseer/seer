@@ -3,6 +3,7 @@ import { Survey } from '../types/survey';
 import { useAuth } from './AuthContext';
 import { logger } from '../lib/logger';
 import { api } from '../services/api';
+import { useLocation } from 'react-router-dom';
 
 interface SurveyContextType {
   surveys: Survey[];
@@ -21,6 +22,7 @@ interface SurveyContextType {
   deleteSurvey: (id: string) => Promise<void>;
   updateSurvey: (id: string, data: { title: string; description?: string }) => Promise<void>;
   retryConnection: () => Promise<void>;
+  refreshSurveys: () => Promise<void>;
 }
 
 const SurveyContext = createContext<SurveyContextType | undefined>(undefined);
@@ -35,14 +37,31 @@ export const useSurveyContext = () => {
 
 export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+  const location = useLocation();
   const [surveys, setSurveys] = useState<Survey[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
+  // Check if we're on an auth-related route
+  const isAuthRoute = useCallback(() => {
+    const authRoutes = ['/sign-in', '/sign-up', '/set-password', '/auth/callback', '/reset-password', '/email-verification'];
+    return authRoutes.some(route => location.pathname.startsWith(route));
+  }, [location.pathname]);
+
+  // Check if we're on a route that needs surveys
+  const needsSurveys = useCallback(() => {
+    const surveyRoutes = ['/surveys'];
+    return surveyRoutes.some(route => location.pathname.startsWith(route));
+  }, [location.pathname]);
+
   const fetchSurveys = useCallback(async () => {
-    if (!user) {
-      logger.info('No user authenticated, skipping survey fetch', { userId: undefined }, { context: 'SurveyContext' });
+    if (!user || isAuthRoute()) {
+      logger.info('Skipping survey fetch', { 
+        userId: user?.id, 
+        path: location.pathname,
+        reason: !user ? 'No user' : 'Auth route'
+      }, { context: 'SurveyContext' });
       return;
     }
 
@@ -64,17 +83,31 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user, isAuthRoute, location.pathname]);
 
+  // Only fetch surveys when we're on a route that needs them
   useEffect(() => {
-    if (user) {
-      logger.info('User authenticated, fetching surveys', { userId: user.id }, { context: 'SurveyContext' });
+    if (user && !isAuthRoute() && needsSurveys()) {
+      logger.info('Route requires surveys, fetching', { 
+        userId: user.id,
+        path: location.pathname
+      }, { context: 'SurveyContext' });
       fetchSurveys();
     } else {
-      logger.info('No user authenticated, clearing surveys', { userId: undefined }, { context: 'SurveyContext' });
+      logger.info('Route does not require surveys, clearing', { 
+        userId: user?.id,
+        path: location.pathname,
+        reason: !user ? 'No user' : isAuthRoute() ? 'Auth route' : 'Route does not need surveys'
+      }, { context: 'SurveyContext' });
       setSurveys([]);
     }
-  }, [user, retryCount]);
+  }, [user, retryCount, isAuthRoute, needsSurveys, location.pathname, fetchSurveys]);
+
+  const refreshSurveys = useCallback(async () => {
+    if (needsSurveys()) {
+      await fetchSurveys();
+    }
+  }, [needsSurveys, fetchSurveys]);
 
   const addSurvey = async (survey: { 
     title: string; 
@@ -171,6 +204,7 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       deleteSurvey,
       updateSurvey,
       retryConnection,
+      refreshSurveys,
     }}>
       {children}
     </SurveyContext.Provider>

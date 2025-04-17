@@ -15,4 +15,16 @@ CREATE INDEX IF NOT EXISTS profiles_username_idx ON profiles(username);
 
 -- Grant necessary permissions
 GRANT ALL ON public.profiles TO authenticated;
-GRANT ALL ON public.profiles TO service_role; 
+GRANT ALL ON public.profiles TO service_role;
+
+-- Allow service role to bypass RLS
+ALTER TABLE public.profiles FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- Create policy to allow service role to bypass RLS
+CREATE POLICY "Service role bypass"
+    ON public.profiles
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true); 
