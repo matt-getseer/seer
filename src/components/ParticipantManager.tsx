@@ -35,34 +35,46 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      // First get all participants
+      const { data: participantsData, error: participantsError } = await supabase
         .from('participants')
-        .select(`
-          *,
-          survey_responses:survey_responses!left (
-            created_at,
-            completed_at
-          )
-        `)
+        .select('*')
         .eq('survey_id', surveyId)
         .order('created_at', { ascending: false });
 
-      if (fetchError) {
-        logger.error('Participant fetch error', fetchError, { context: 'ParticipantManager' });
-        throw fetchError;
+      if (participantsError) {
+        throw participantsError;
       }
-      
-      // Transform the data to ensure we have the latest response status
-      const transformedData = (data || []).map(participant => ({
-        ...participant,
-        survey_responses: Array.isArray(participant.survey_responses) 
-          ? participant.survey_responses.sort((a: SurveyResponseStatus, b: SurveyResponseStatus) => {
-              const aDate = a.completed_at ? new Date(a.completed_at) : new Date(a.created_at);
-              const bDate = b.completed_at ? new Date(b.completed_at) : new Date(b.created_at);
-              return bDate.getTime() - aDate.getTime();
-            })
-          : []
-      }));
+
+      // Then get their latest responses
+      const participantIds = participantsData?.map(p => p.id) || [];
+      const { data: responsesData, error: responsesError } = await supabase
+        .from('survey_responses')
+        .select('*')
+        .in('participant_id', participantIds)
+        .order('created_at', { ascending: false });
+
+      if (responsesError) {
+        throw responsesError;
+      }
+
+      // Map responses to participants
+      const transformedData = participantsData.map(participant => {
+        const participantResponses = responsesData
+          ?.filter(r => r.participant_id === participant.id)
+          .sort((a, b) => {
+            // First prioritize completed responses
+            if (a.completed_at && !b.completed_at) return -1;
+            if (!a.completed_at && b.completed_at) return 1;
+            // Then sort by most recent
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          });
+
+        return {
+          ...participant,
+          survey_responses: participantResponses || []
+        };
+      });
       
       setParticipants(transformedData);
       setError(null);
@@ -90,15 +102,7 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
   useEffect(() => {
     fetchParticipants();
 
-    // Set up real-time subscriptions with debounced fetch
-    let debounceTimer: NodeJS.Timeout;
-    const debouncedFetch = () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        fetchParticipants();
-      }, 1000); // 1 second debounce
-    };
-
+    // Set up real-time subscriptions
     const participantsSubscription = supabase
       .channel('participant_changes')
       .on(
@@ -115,12 +119,13 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
             setParticipants(prev => prev.filter(p => p.id !== payload.old.id));
             return;
           }
-          // For other changes, use debounced fetch
-          debouncedFetch();
+          // For other changes, fetch latest data
+          fetchParticipants();
         }
       )
       .subscribe();
 
+    // Subscribe to survey response changes
     const responsesSubscription = supabase
       .channel('survey_responses_changes')
       .on(
@@ -128,18 +133,26 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
         {
           event: '*',
           schema: 'public',
-          table: 'survey_responses',
-          filter: `survey_id=eq.${surveyId}`
+          table: 'survey_responses'
         },
-        () => {
-          debouncedFetch();
+        async (payload: {
+          new: { participant_id?: string } | null;
+          old: { participant_id?: string } | null;
+        }) => {
+          console.log('Survey response change detected:', payload);
+          
+          // Check if this response belongs to one of our participants
+          const participantId = payload.new?.participant_id || payload.old?.participant_id;
+          if (participantId && participants.some(p => p.id === participantId)) {
+            // Fetch latest data since we have a relevant change
+            fetchParticipants();
+          }
         }
       )
       .subscribe();
 
-    // Cleanup subscriptions and timer on unmount
+    // Cleanup subscriptions on unmount
     return () => {
-      clearTimeout(debounceTimer);
       participantsSubscription.unsubscribe();
       responsesSubscription.unsubscribe();
     };

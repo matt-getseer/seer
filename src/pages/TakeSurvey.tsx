@@ -162,6 +162,39 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
 
           if (rpcError) {
             console.error('Error fetching survey data:', rpcError);
+            // Check if the error is due to survey completion
+            if (rpcError.message?.includes('Survey has already been completed')) {
+              setIsCompleted(true);
+              // Try to fetch the completed survey data for display
+              const { data: completedData } = await supabase
+                .from('survey_responses')
+                .select(`
+                  *,
+                  survey:surveys(
+                    title,
+                    description,
+                    user_id,
+                    workspace_id,
+                    created_at
+                  ),
+                  participant:participants(
+                    name,
+                    email,
+                    participation_token
+                  )
+                `)
+                .eq('participant_id', token)
+                .single();
+
+              if (completedData) {
+                setSurveyData({
+                  survey: completedData.survey,
+                  participant: completedData.participant,
+                  questions: [],
+                  creatorLogo: null
+                });
+              }
+            }
             throw new Error(rpcError.message || 'Failed to fetch survey data');
           }
 
@@ -178,7 +211,16 @@ const TakeSurvey: React.FC<TakeSurveyProps> = ({ isPreview = false }) => {
         }
       } catch (err) {
         console.error('Error in fetchSurveyData:', err);
-        setError(err instanceof Error ? err.message : 'An error occurred while loading the survey');
+        if (err instanceof Error) {
+          if (err.message.includes('Survey has already been completed')) {
+            setIsCompleted(true);
+            setError('You have already completed this survey. Thank you for your participation.');
+          } else {
+            setError(err.message);
+          }
+        } else {
+          setError('An error occurred while loading the survey');
+        }
       } finally {
         setLoading(false);
       }
