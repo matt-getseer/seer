@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef } from 'react';
 import { Survey } from '../types/survey';
 import { useAuth } from './AuthContext';
 import { logger } from '../lib/logger';
@@ -42,6 +42,9 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const lastFetchTime = useRef<number>(0);
+  const FETCH_COOLDOWN = 5000; // 5 seconds cooldown between fetches
+  const backoffTime = useRef<number>(1000); // Start with 1 second backoff
 
   // Check if we're on an auth-related route
   const isAuthRoute = useCallback(() => {
@@ -51,63 +54,98 @@ export const SurveyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Check if we're on a route that needs surveys
   const needsSurveys = useCallback(() => {
-    const surveyRoutes = ['/surveys'];
-    return surveyRoutes.some(route => location.pathname.startsWith(route));
+    // Only fetch on the main surveys page
+    return location.pathname === '/surveys';
   }, [location.pathname]);
 
-  const fetchSurveys = useCallback(async () => {
+  const shouldFetchSurveys = useCallback(() => {
+    const now = Date.now();
+    if (now - lastFetchTime.current < FETCH_COOLDOWN) {
+      logger.info('Skipping fetch due to cooldown', {
+        timeSinceLastFetch: now - lastFetchTime.current,
+        cooldown: FETCH_COOLDOWN,
+        nextFetchIn: FETCH_COOLDOWN - (now - lastFetchTime.current)
+      });
+      return false;
+    }
+    return true;
+  }, []);
+
+  const handleRateLimit = useCallback(async () => {
+    const waitTime = backoffTime.current;
+    logger.warn('Rate limit hit, backing off', { waitTime });
+    
+    // Exponential backoff: double the wait time for next attempt
+    backoffTime.current = Math.min(backoffTime.current * 2, 60000); // Cap at 1 minute
+    
+    // Wait for the backoff period
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+    
+    return true; // Indicate we should retry
+  }, []);
+
+  const resetBackoff = useCallback(() => {
+    backoffTime.current = 1000; // Reset to 1 second
+  }, []);
+
+  const fetchSurveys = useCallback(async (force = false) => {
     if (!user || isAuthRoute()) {
       logger.info('Skipping survey fetch', { 
         userId: user?.id, 
         path: location.pathname,
         reason: !user ? 'No user' : 'Auth route'
-      }, { context: 'SurveyContext' });
+      });
+      return;
+    }
+
+    if (!force && !shouldFetchSurveys()) {
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
-      logger.info('Starting survey fetch', { userId: user.id }, { context: 'SurveyContext' });
+      logger.info('Starting survey fetch', { userId: user.id });
       
       const data = await api.getSurveys();
-      logger.info('Survey fetch response', { 
-        count: data.length 
-      }, { context: 'SurveyContext' });
+      logger.info('Survey fetch response', { count: data.length });
 
       setSurveys(data);
+      lastFetchTime.current = Date.now();
+      resetBackoff(); // Reset backoff on successful fetch
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An error occurred while fetching surveys';
-      logger.error('Error in fetchSurveys', { error: errorMessage }, { context: 'SurveyContext' });
+      
+      // Check if it's a rate limit error (429)
+      if (error instanceof Error && 'status' in error && (error as any).status === 429) {
+        logger.warn('Rate limit exceeded', { error: errorMessage });
+        const shouldRetry = await handleRateLimit();
+        if (shouldRetry) {
+          return fetchSurveys(force); // Retry after backoff
+        }
+      }
+      
+      logger.error('Error in fetchSurveys', { error: errorMessage });
       setError(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [user, isAuthRoute, location.pathname]);
+  }, [user, isAuthRoute, shouldFetchSurveys, handleRateLimit, resetBackoff]);
 
-  // Only fetch surveys when we're on a route that needs them
+  // Only fetch surveys when we're on the main surveys page
   useEffect(() => {
     if (user && !isAuthRoute() && needsSurveys()) {
       logger.info('Route requires surveys, fetching', { 
         userId: user.id,
         path: location.pathname
-      }, { context: 'SurveyContext' });
+      });
       fetchSurveys();
-    } else {
-      logger.info('Route does not require surveys, clearing', { 
-        userId: user?.id,
-        path: location.pathname,
-        reason: !user ? 'No user' : isAuthRoute() ? 'Auth route' : 'Route does not need surveys'
-      }, { context: 'SurveyContext' });
-      setSurveys([]);
     }
-  }, [user, retryCount, isAuthRoute, needsSurveys, location.pathname, fetchSurveys]);
+  }, [user, retryCount, isAuthRoute, needsSurveys, fetchSurveys]);
 
   const refreshSurveys = useCallback(async () => {
-    if (needsSurveys()) {
-      await fetchSurveys();
-    }
-  }, [needsSurveys, fetchSurveys]);
+    await fetchSurveys(true); // Force fetch on manual refresh
+  }, [fetchSurveys]);
 
   const addSurvey = async (survey: { 
     title: string; 

@@ -85,8 +85,24 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
   useEffect(() => {
     fetchParticipants();
 
-    // Set up real-time subscription for survey responses
-    const subscription = supabase
+    // Set up real-time subscriptions
+    const participantsSubscription = supabase
+      .channel('participant_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'participants',
+          filter: `survey_id=eq.${surveyId}`
+        },
+        () => {
+          fetchParticipants();
+        }
+      )
+      .subscribe();
+
+    const responsesSubscription = supabase
       .channel('survey_responses_changes')
       .on(
         'postgres_changes',
@@ -97,15 +113,15 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
           filter: `survey_id=eq.${surveyId}`
         },
         () => {
-          // Refetch participants when survey responses change
           fetchParticipants();
         }
       )
       .subscribe();
 
-    // Cleanup subscription on unmount
+    // Cleanup subscriptions on unmount
     return () => {
-      subscription.unsubscribe();
+      participantsSubscription.unsubscribe();
+      responsesSubscription.unsubscribe();
     };
   }, [fetchParticipants, surveyId]);
 
@@ -123,6 +139,41 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
 
     try {
       setLoading(true);
+      
+      // Debug: Check workspace membership first
+      const { data: workspaceMember, error: workspaceError } = await supabase
+        .from('workspace_members')
+        .select('*')
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .eq('status', 'active');
+
+      console.log('Debug - Workspace membership:', { workspaceMember, workspaceError });
+
+      // Debug: Check survey workspace
+      console.log('Debug - Attempting to fetch survey with ID:', surveyId);
+      
+      const { data: survey, error: surveyError } = await supabase
+        .from('surveys')
+        .select('workspace_id, user_id')
+        .eq('id', surveyId)
+        .single();
+
+      console.log('Debug - Raw survey query result:', {
+        surveyId,
+        survey,
+        surveyError,
+        currentUserId: (await supabase.auth.getUser()).data.user?.id
+      });
+
+      if (surveyError) {
+        console.error('Debug - Survey fetch error details:', {
+          code: surveyError.code,
+          message: surveyError.message,
+          details: surveyError.details,
+          hint: surveyError.hint
+        });
+      }
+
       logger.info('Adding participant', {
         name: newParticipant.name,
         email: newParticipant.email,
@@ -141,6 +192,8 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
         ])
         .select()
         .single();
+
+      console.log('Debug - Insert result:', { data, insertError });
 
       if (insertError) {
         logger.error('Supabase insert error', insertError, { context: 'ParticipantManager' });
@@ -161,6 +214,37 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
   const handleDeleteParticipant = async (id: string) => {
     try {
       setLoading(true);
+      
+      // Debug: Check workspace membership
+      const { data: workspaceMember, error: workspaceError } = await supabase
+        .from('workspace_members')
+        .select('*')
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .eq('status', 'active');
+
+      console.log('Workspace membership check:', { workspaceMember, workspaceError });
+
+      // Debug: Check survey ownership
+      const participant = participants.find(p => p.id === id);
+      if (!participant) {
+        throw new Error('Participant not found');
+      }
+
+      const { data: survey, error: surveyError } = await supabase
+        .from('surveys')
+        .select('workspace_id, user_id')
+        .eq('id', participant.survey_id)
+        .single();
+
+      console.log('Survey check:', { survey, surveyError });
+      
+      if (surveyError) {
+        throw new Error('Failed to verify survey access. The survey may have been deleted or you may not have permission to access it.');
+      }
+
+      if (!survey) {
+        throw new Error('Survey not found');
+      }
       
       // First delete associated survey responses
       const { error: responseDeleteError } = await supabase
@@ -184,6 +268,7 @@ const ParticipantManager: React.FC<ParticipantManagerProps> = ({ surveyId }) => 
         throw deleteError;
       }
 
+      // If we got here, the deletion was successful
       setParticipants(prev => prev.filter(p => p.id !== id));
       logger.info('Participant and associated responses deleted successfully', { participantId: id }, { context: 'ParticipantManager' });
     } catch (err) {

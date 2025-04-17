@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Menu } from '@headlessui/react';
 import { EllipsisVerticalIcon, ShareIcon, ArrowLeftIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
-import { supabase, Survey } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import type { Survey } from '../lib/supabase';
 import { useSurveyContext } from '../contexts/SurveyContext';
 import ConfirmationDialog from '../components/ConfirmationDialog';
 import ParticipantManager from '../components/ParticipantManager';
@@ -72,13 +73,17 @@ const SurveyOverview: React.FC = () => {
     const fetchSurvey = async () => {
       try {
         setLoading(true);
-        const { data, error: fetchError } = await supabase
-          .from('surveys')
-          .select('*')
-          .eq('id', id)
-          .single();
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/surveys/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+          }
+        });
 
-        if (fetchError) throw fetchError;
+        if (!response.ok) {
+          throw new Error('Failed to fetch survey');
+        }
+
+        const data = await response.json();
         setSurvey(data);
       } catch (err) {
         console.error('Error fetching survey:', err);

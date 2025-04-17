@@ -6,6 +6,8 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
     "@headlessui/react": "^1.7.19",
+    "@sentry/react": "^9.13.0",
+    "@sentry/tracing": "^7.120.3",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.39.7",
     "@testing-library/dom": "^9.3.4",

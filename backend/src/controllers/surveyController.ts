@@ -11,8 +11,7 @@ export class SurveyController {
         .select(`
           *,
           participants:participants(count)
-        `)
-        .eq('user_id', req.userId);
+        `);
 
       if (surveysError) throw new AppError(500, 'Error fetching surveys');
 
@@ -35,7 +34,6 @@ export class SurveyController {
         .from('surveys')
         .select('*')
         .eq('id', id)
-        .eq('user_id', req.userId)
         .single();
 
       if (error) throw new AppError(404, 'Survey not found');
@@ -117,7 +115,7 @@ export class SurveyController {
   static async deleteSurvey(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      console.log(`Attempting to delete survey ${id} for user ${req.userId}`);
+      console.log(`Attempting to delete survey ${id}`);
 
       // Delete survey responses first
       const { error: responsesError } = await supabase
@@ -175,8 +173,7 @@ export class SurveyController {
       const { error: surveyError } = await supabase
         .from('surveys')
         .delete()
-        .eq('id', id)
-        .eq('user_id', req.userId);
+        .eq('id', id);
 
       if (surveyError) {
         console.error('Error deleting survey:', surveyError);
