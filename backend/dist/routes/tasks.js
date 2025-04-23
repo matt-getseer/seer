@@ -10,7 +10,7 @@ const router = express_1.default.Router();
 exports.taskRouter = router;
 const prisma = new client_1.PrismaClient();
 // Get all tasks
-router.get('/', async (req, res) => {
+const getAllTasks = async (req, res) => {
     try {
         const tasks = await prisma.task.findMany({
             include: {
@@ -28,9 +28,9 @@ router.get('/', async (req, res) => {
     catch (error) {
         res.status(500).json({ error: 'Error fetching tasks' });
     }
-});
+};
 // Get task by ID
-router.get('/:id', async (req, res) => {
+const getTaskById = async (req, res) => {
     try {
         const { id } = req.params;
         const task = await prisma.task.findUnique({
@@ -46,16 +46,17 @@ router.get('/:id', async (req, res) => {
             }
         });
         if (!task) {
-            return res.status(404).json({ error: 'Task not found' });
+            res.status(404).json({ error: 'Task not found' });
+            return;
         }
         res.json(task);
     }
     catch (error) {
         res.status(500).json({ error: 'Error fetching task' });
     }
-});
+};
 // Create a new task
-router.post('/', async (req, res) => {
+const createTask = async (req, res) => {
     try {
         const { title, description, dueDate, userId } = req.body;
         const task = await prisma.task.create({
@@ -71,9 +72,9 @@ router.post('/', async (req, res) => {
     catch (error) {
         res.status(500).json({ error: 'Error creating task' });
     }
-});
+};
 // Update task
-router.put('/:id', async (req, res) => {
+const updateTask = async (req, res) => {
     try {
         const { id } = req.params;
         const { title, description, completed, dueDate } = req.body;
@@ -91,9 +92,9 @@ router.put('/:id', async (req, res) => {
     catch (error) {
         res.status(500).json({ error: 'Error updating task' });
     }
-});
+};
 // Delete task
-router.delete('/:id', async (req, res) => {
+const deleteTask = async (req, res) => {
     try {
         const { id } = req.params;
         await prisma.task.delete({
@@ -104,4 +105,9 @@ router.delete('/:id', async (req, res) => {
     catch (error) {
         res.status(500).json({ error: 'Error deleting task' });
     }
-});
+};
+router.get('/', getAllTasks);
+router.get('/:id', getTaskById);
+router.post('/', createTask);
+router.put('/:id', updateTask);
+router.delete('/:id', deleteTask);

@@ -36,6 +36,12 @@ const tableData = [
 
 type ChartType = 'line' | 'bar' | 'area'
 
+interface ChartDataPoint {
+  month?: string
+  name?: string
+  value: number
+}
+
 const ChartTypeDropdown = ({ 
   currentType, 
   onTypeChange 
@@ -84,7 +90,7 @@ const Metrics = () => {
   const [revenueChartType, setRevenueChartType] = useState<ChartType>('line')
   const [performanceChartType, setPerformanceChartType] = useState<ChartType>('bar')
 
-  const renderChart = (data: any[], type: ChartType) => {
+  const renderChart = (data: ChartDataPoint[], type: ChartType) => {
     switch (type) {
       case 'line':
         return (

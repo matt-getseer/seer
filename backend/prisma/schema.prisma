@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,23 +8,50 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tasks     Task[]
+  id         Int         @id @default(autoincrement())
+  email      String      @unique
+  name       String?
+  password   String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  employees  Employee[]
+  interviews Interview[]
+  teams      Team[]
 }
 
-model Task {
-  id          Int       @id @default(autoincrement())
-  title       String
-  description String?
-  completed   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  dueDate     DateTime?
-  userId      Int
-  user        User      @relation(fields: [userId], references: [id])
+model Interview {
+  id            Int      @id @default(autoincrement())
+  name          String
+  team          String
+  interviewName String
+  dateTaken     DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id])
+}
+
+model Team {
+  id         Int        @id @default(autoincrement())
+  name       String
+  department String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  userId     Int
+  employees  Employee[]
+  user       User       @relation(fields: [userId], references: [id])
+}
+
+model Employee {
+  id        Int       @id @default(autoincrement())
+  name      String
+  title     String
+  email     String    @unique
+  teamId    Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  userId    Int
+  startDate DateTime?
+  team      Team      @relation(fields: [teamId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
 }

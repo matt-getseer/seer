@@ -6,7 +6,8 @@ import {
   Gear,
   ClockCounterClockwise,
   Bug,
-  Question
+  ChatCircle,
+  UsersThree
 } from '@phosphor-icons/react'
 
 const Sidebar = () => {
@@ -43,7 +44,7 @@ const Sidebar = () => {
           </div>
           
           <NavLink 
-            to="/customer-success"
+            to="/interviews"
             className={({ isActive }) => 
               `flex items-center px-3 py-2 text-sm font-medium rounded-md ${
                 isActive 
@@ -52,8 +53,22 @@ const Sidebar = () => {
               }`
             }
           >
-            <Users className="mr-3 h-5 w-5" />
-            Customer success
+            <ChatCircle className="mr-3 h-5 w-5" />
+            Interviews
+          </NavLink>
+          
+          <NavLink 
+            to="/teams"
+            className={({ isActive }) => 
+              `flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                isActive 
+                  ? 'text-primary-600 bg-primary-50' 
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`
+            }
+          >
+            <UsersThree className="mr-3 h-5 w-5" />
+            Teams
           </NavLink>
           
           <NavLink 

@@ -1,7 +1,18 @@
-import { MagnifyingGlass, Bell, Question } from '@phosphor-icons/react'
+import { MagnifyingGlass, Bell, Question, SignOut } from '@phosphor-icons/react'
 import { FC } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { authService } from '../api/client'
 
 const Navbar: FC = () => {
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    authService.logout()
+    // Dispatch custom event for auth state change
+    window.dispatchEvent(new Event('auth-state-change'))
+    navigate('/login')
+  }
+
   return (
     <nav className="bg-white border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -35,8 +46,15 @@ const Navbar: FC = () => {
                 src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
                 alt="User avatar"
               />
-              <span className="text-sm font-medium text-gray-700">Sophia</span>
+              <span className="text-sm font-medium text-gray-700">Test User</span>
             </div>
+            <button 
+              onClick={handleLogout}
+              className="p-1.5 text-gray-500 hover:text-gray-600 flex items-center"
+              title="Logout"
+            >
+              <SignOut className="h-5 w-5" />
+            </button>
           </div>
         </div>
       </div>

@@ -12,7 +12,7 @@ const router = express_1.default.Router();
 exports.userRouter = router;
 const prisma = new client_1.PrismaClient();
 // Get all users
-router.get('/', async (req, res) => {
+const getAllUsers = async (req, res, next) => {
     try {
         const users = await prisma.user.findMany({
             select: {
@@ -20,18 +20,17 @@ router.get('/', async (req, res) => {
                 email: true,
                 name: true,
                 createdAt: true,
-                updatedAt: true,
-                tasks: true
+                updatedAt: true
             }
         });
         res.json(users);
     }
     catch (error) {
-        res.status(500).json({ error: 'Error fetching users' });
+        next(error);
     }
-});
+};
 // Get user by ID
-router.get('/:id', async (req, res) => {
+const getUserById = async (req, res, next) => {
     try {
         const { id } = req.params;
         const user = await prisma.user.findUnique({
@@ -41,21 +40,21 @@ router.get('/:id', async (req, res) => {
                 email: true,
                 name: true,
                 createdAt: true,
-                updatedAt: true,
-                tasks: true
+                updatedAt: true
             }
         });
         if (!user) {
-            return res.status(404).json({ error: 'User not found' });
+            res.status(404).json({ error: 'User not found' });
+            return;
         }
         res.json(user);
     }
     catch (error) {
-        res.status(500).json({ error: 'Error fetching user' });
+        next(error);
     }
-});
+};
 // Create a new user (register)
-router.post('/register', async (req, res) => {
+const registerUser = async (req, res, next) => {
     try {
         const { email, name, password } = req.body;
         // Check if user already exists
@@ -63,7 +62,8 @@ router.post('/register', async (req, res) => {
             where: { email }
         });
         if (existingUser) {
-            return res.status(400).json({ error: 'User with this email already exists' });
+            res.status(400).json({ error: 'User with this email already exists' });
+            return;
         }
         // Hash password
         const hashedPassword = await bcrypt_1.default.hash(password, 10);
@@ -85,27 +85,34 @@ router.post('/register', async (req, res) => {
         res.status(201).json(user);
     }
     catch (error) {
-        res.status(500).json({ error: 'Error creating user' });
+        next(error);
     }
-});
+};
 // Login
-router.post('/login', async (req, res) => {
+const loginUser = async (req, res, next) => {
     try {
         const { email, password } = req.body;
+        console.log('Login attempt:', { email, password: '******' });
         // Find user by email
         const user = await prisma.user.findUnique({
             where: { email }
         });
         if (!user) {
-            return res.status(401).json({ error: 'Invalid credentials' });
+            console.log('User not found:', email);
+            res.status(401).json({ error: 'Invalid credentials' });
+            return;
         }
+        console.log('User found:', { id: user.id, email: user.email });
         // Compare passwords
         const isPasswordValid = await bcrypt_1.default.compare(password, user.password);
+        console.log('Password comparison result:', isPasswordValid);
         if (!isPasswordValid) {
-            return res.status(401).json({ error: 'Invalid credentials' });
+            res.status(401).json({ error: 'Invalid credentials' });
+            return;
         }
         // Generate JWT token
         const token = jsonwebtoken_1.default.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET || 'fallback-secret-key', { expiresIn: '1h' });
+        console.log('Login successful for:', email);
         res.json({
             id: user.id,
             email: user.email,
@@ -114,6 +121,12 @@ router.post('/login', async (req, res) => {
         });
     }
     catch (error) {
-        res.status(500).json({ error: 'Error during login' });
+        console.error('Login error:', error);
+        next(error);
     }
-});
+};
+// Route handlers
+router.get('/', getAllUsers);
+router.get('/:id', getUserById);
+router.post('/register', registerUser);
+router.post('/login', loginUser);
