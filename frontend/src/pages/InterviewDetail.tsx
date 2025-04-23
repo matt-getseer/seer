@@ -35,16 +35,34 @@ const InterviewDetail = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Save the current interview ID to sessionStorage for refresh handling
+  useEffect(() => {
+    if (id) {
+      sessionStorage.setItem('currentInterviewId', id)
+    }
+  }, [id])
+
   useEffect(() => {
     if (!isTokenValid()) {
+      // Save the current path before redirecting to login
+      localStorage.setItem('lastRoute', window.location.pathname)
       navigate('/login')
+      return
+    }
+
+    // Get the interview ID from params or sessionStorage if refreshed
+    const interviewId = id || sessionStorage.getItem('currentInterviewId')
+    
+    if (!interviewId) {
+      setError('Interview ID not found')
+      setLoading(false)
       return
     }
 
     const fetchInterview = async () => {
       try {
         setLoading(true)
-        const response = await interviewService.getInterviewById(Number(id))
+        const response = await interviewService.getInterviewById(Number(interviewId))
         setInterview(response.data)
         setError(null)
       } catch (err) {
@@ -52,6 +70,8 @@ const InterviewDetail = () => {
         const axiosError = err as AxiosError
         
         if (axiosError.response?.status === 401) {
+          // Save current path before redirecting
+          localStorage.setItem('lastRoute', window.location.pathname)
           setError('Authentication error. Please log in again.')
           navigate('/login')
         } else if (axiosError.response?.status === 404) {

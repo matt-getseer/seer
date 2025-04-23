@@ -56,6 +56,8 @@ const Interviews = () => {
         console.error('No valid authentication token found')
         setError('Please log in to view interviews')
         setLoading(false)
+        // Save current path before redirecting
+        localStorage.setItem('lastRoute', window.location.pathname)
         navigate('/login')
         return
       }
@@ -154,8 +156,25 @@ const Interviews = () => {
   }
 
   const handleViewDetails = (id: number) => {
+    // Save current list state to sessionStorage
+    sessionStorage.setItem('interviewListScrollPosition', window.scrollY.toString())
     navigate(`/interviews/${id}`)
   }
+
+  // Restore scroll position when returning to the list
+  useEffect(() => {
+    const restoreScrollPosition = () => {
+      const savedPosition = sessionStorage.getItem('interviewListScrollPosition')
+      if (savedPosition) {
+        window.scrollTo(0, parseInt(savedPosition))
+      }
+    }
+    
+    // Wait for interviews to load before restoring scroll position
+    if (!loading && interviews.length > 0) {
+      restoreScrollPosition()
+    }
+  }, [loading, interviews])
 
   return (
     <div className="max-w-7xl mx-auto">
