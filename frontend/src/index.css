@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@supports (font-variation-settings: normal) {
+  :root { font-family: 'Inter var', system-ui, -apple-system, sans-serif; }
+}
+
+@layer base {
+  html {
+    font-feature-settings: "cv11";
+  }
+}
