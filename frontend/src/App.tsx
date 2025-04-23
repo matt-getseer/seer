@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useState, useEffect } from 'react'
 import Sidebar from './components/Sidebar'
 import Navbar from './components/Navbar'
+import SearchModal from './components/SearchModal'
 import Home from './pages/Home'
 import Metrics from './pages/Metrics'
 import Settings from './pages/Settings'
@@ -63,6 +64,14 @@ function App() {
       </div>
     </div>
   )
+
+  // Render search modal only when authenticated
+  const renderSearchModal = () => {
+    if (isAuthenticated) {
+      return <SearchModal />;
+    }
+    return null;
+  }
 
   return (
     <Router>
@@ -179,6 +188,9 @@ function App() {
           } 
         />
       </Routes>
+      
+      {/* Add SearchModal to enable CMD+K search throughout the app */}
+      {renderSearchModal()}
     </Router>
   )
 }

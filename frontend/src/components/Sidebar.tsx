@@ -40,7 +40,7 @@ const Sidebar = () => {
         
         <div className="pt-4">
           <div className="px-3 mb-2">
-            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Sections</h3>
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Workspace</h3>
           </div>
           
           <NavLink 
@@ -116,7 +116,7 @@ const Sidebar = () => {
 
         <div className="pt-4">
           <div className="px-3 mb-2">
-            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">My pages</h3>
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Favourites</h3>
           </div>
           
           <NavLink 
