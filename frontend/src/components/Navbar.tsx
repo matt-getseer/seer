@@ -1,10 +1,12 @@
-import { MagnifyingGlass, Bell, Question, SignOut } from '@phosphor-icons/react'
-import { FC } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { authService } from '../api/client'
+import { Bell, Question, SignOut, CaretRight } from '@phosphor-icons/react'
+import { FC, useState, useEffect } from 'react'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { authService, employeeService } from '../api/client'
 
 const Navbar: FC = () => {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
 
   const handleLogout = () => {
     authService.logout()
@@ -13,23 +15,107 @@ const Navbar: FC = () => {
     navigate('/login')
   }
 
+  // Fetch employee data for ID-based routes
+  useEffect(() => {
+    const pathnames = location.pathname.split('/').filter(path => path)
+    
+    // Look for numeric IDs that might be employee IDs
+    pathnames.forEach((segment, index) => {
+      if (!isNaN(Number(segment)) && index > 0 && pathnames[index-1] === 'employees') {
+        const employeeId = segment
+        
+        // Only fetch if we don't already have this employee's name
+        if (!employeeNames[employeeId]) {
+          employeeService.getEmployeeById(Number(employeeId))
+            .then(response => {
+              setEmployeeNames(prev => ({
+                ...prev,
+                [employeeId]: response.data.name
+              }))
+            })
+            .catch(err => {
+              console.error('Error fetching employee:', err)
+            })
+        }
+      }
+    })
+  }, [location.pathname, employeeNames])
+
+  // Generate breadcrumbs based on current path
+  const generateBreadcrumbs = () => {
+    const pathnames = location.pathname.split('/').filter(path => path)
+    
+    // Map of path segments to readable names
+    const pathMap: Record<string, string> = {
+      'employees': 'Employees',
+      'teams': 'Teams',
+      'interviews': 'Interviews',
+      'metrics': 'Metrics',
+      'settings': 'Settings',
+      'quarterly-review': 'Quarterly Review',
+      'end-to-end-onboarding': 'End-to-End Onboarding'
+    }
+    
+    // If we're at root path
+    if (pathnames.length === 0) {
+      return [{ name: 'Home', path: '/' }]
+    }
+    
+    // Build breadcrumb items with accumulated paths
+    return pathnames.map((name, index) => {
+      // For numeric IDs in routes like /employees/123, show employee name if available
+      const isId = !isNaN(Number(name)) && index > 0
+      const prevSegment = pathnames[index - 1]
+      
+      let displayName = pathMap[name] || name
+      
+      // If this is an employee ID and we have the name, use it
+      if (isId && prevSegment === 'employees') {
+        displayName = employeeNames[name] || 'Employee Details'
+      } else if (isId && prevSegment) {
+        // For other types of IDs
+        displayName = `${pathMap[prevSegment] || prevSegment} Details`
+      }
+      
+      // Build the correct path for this breadcrumb
+      const path = `/${pathnames.slice(0, index + 1).join('/')}`
+      
+      return {
+        name: displayName,
+        path
+      }
+    })
+  }
+
+  const breadcrumbs = generateBreadcrumbs()
+
   return (
     <nav className="bg-white border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 justify-between items-center">
-          <div className="flex-1 flex items-center">
-            <div className="w-full max-w-lg">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <MagnifyingGlass className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-md text-sm placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                  placeholder="Search"
-                />
-              </div>
-            </div>
+          <div className="flex-1">
+            <nav className="flex" aria-label="Breadcrumb">
+              <ol className="flex items-center space-x-2">
+                {breadcrumbs.map((breadcrumb, index) => (
+                  <li key={breadcrumb.path} className="flex items-center">
+                    {index > 0 && (
+                      <CaretRight className="mx-1 h-4 w-4 flex-shrink-0 text-gray-400" />
+                    )}
+                    <Link
+                      to={breadcrumb.path}
+                      className={`text-xs font-medium ${
+                        index === breadcrumbs.length - 1
+                          ? 'text-gray-900'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                      style={{ fontSize: '12px' }}
+                    >
+                      {breadcrumb.name}
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            </nav>
           </div>
           
           <div className="flex items-center space-x-4">

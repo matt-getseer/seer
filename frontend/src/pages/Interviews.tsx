@@ -3,7 +3,7 @@ import { interviewService, isTokenValid, authService, employeeService } from '..
 import { format, isValid, parseISO } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { AxiosError } from 'axios'
-import EmployeeProfile from '../components/EmployeeProfile'
+import { Trash, ArrowRight } from '@phosphor-icons/react'
 
 type Interview = {
   id: number
@@ -24,10 +24,9 @@ type Employee = {
 const Interviews = () => {
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null)
-  const [employees, setEmployees] = useState<Record<string, number>>({}) // Map employee names to IDs
+  const [employees, setEmployees] = useState<Record<string, number>>({})
 
   const checkApiHealth = async () => {
     try {
@@ -125,19 +124,19 @@ const Interviews = () => {
     }
   }
 
-  // Find employee by name from our list of employees
+  // Find employee by name and navigate to their profile
   const findEmployeeByName = async (name: string) => {
     // If we already have this employee's ID in our map, use it
     if (employees[name]) {
-      setSelectedEmployeeId(employees[name])
+      navigate(`/employees/${employees[name]}`)
       return
     }
 
     try {
       // We need to search for the employee by name
       // First get all employees from all teams
-      const teams = await employeeService.getAllEmployees()
-      const allEmployees = teams.data as Employee[]
+      const response = await employeeService.getAllEmployees()
+      const allEmployees = response.data as Employee[]
       
       // Find employee with matching name
       const employee = allEmployees.find(emp => emp.name === name)
@@ -145,13 +144,17 @@ const Interviews = () => {
       if (employee) {
         // Add to our map for future lookups
         setEmployees(prev => ({ ...prev, [name]: employee.id }))
-        setSelectedEmployeeId(employee.id)
+        navigate(`/employees/${employee.id}`)
       } else {
         console.error(`Could not find employee with name: ${name}`)
       }
     } catch (err) {
       console.error('Error finding employee:', err)
     }
+  }
+
+  const handleViewDetails = (id: number) => {
+    navigate(`/interviews/${id}`)
   }
 
   return (
@@ -220,8 +223,16 @@ const Interviews = () => {
                     <button
                       onClick={() => handleDelete(interview.id)}
                       className="text-red-600 hover:text-red-900 ml-2"
+                      title="Delete interview"
                     >
-                      Delete
+                      <Trash size={20} weight="bold" />
+                    </button>
+                    <button
+                      className="text-indigo-600 hover:text-indigo-900 ml-3"
+                      title="View details"
+                      onClick={() => handleViewDetails(interview.id)}
+                    >
+                      <ArrowRight size={20} weight="bold" />
                     </button>
                   </td>
                 </tr>
@@ -229,13 +240,6 @@ const Interviews = () => {
             </tbody>
           </table>
         </div>
-      )}
-      
-      {selectedEmployeeId && (
-        <EmployeeProfile 
-          employeeId={selectedEmployeeId}
-          onClose={() => setSelectedEmployeeId(null)}
-        />
       )}
     </div>
   )

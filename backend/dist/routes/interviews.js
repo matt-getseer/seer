@@ -119,7 +119,8 @@ const getInterviewById = async (req, res, next) => {
                         name: true,
                         email: true
                     }
-                }
+                },
+                interviewAnswer: true
             }
         });
         if (!interview) {
@@ -192,6 +193,105 @@ const deleteInterview = async (req, res, next) => {
         next(error);
     }
 };
+// Get interview answers for a specific interview
+const getInterviewAnswers = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        if (!req.user?.userId) {
+            res.status(401).json({ error: 'User not authenticated' });
+            return;
+        }
+        // First verify that the interview belongs to the user
+        const interview = await prisma.interview.findFirst({
+            where: {
+                id: parseInt(id),
+                userId: req.user.userId
+            }
+        });
+        if (!interview) {
+            res.status(404).json({ error: 'Interview not found or unauthorized' });
+            return;
+        }
+        const interviewAnswer = await prisma.interviewAnswer.findUnique({
+            where: {
+                interviewId: parseInt(id)
+            }
+        });
+        if (!interviewAnswer) {
+            res.status(404).json({ error: 'Interview answers not found' });
+            return;
+        }
+        res.json(interviewAnswer);
+    }
+    catch (error) {
+        next(error);
+    }
+};
+// Create or update interview answers
+const saveInterviewAnswers = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { firstAnswer, secondAnswer, technicalScore, cultureScore, communicationScore, overallRating, notes } = req.body;
+        if (!req.user?.userId) {
+            res.status(401).json({ error: 'User not authenticated' });
+            return;
+        }
+        // First verify that the interview belongs to the user
+        const interview = await prisma.interview.findFirst({
+            where: {
+                id: parseInt(id),
+                userId: req.user.userId
+            }
+        });
+        if (!interview) {
+            res.status(404).json({ error: 'Interview not found or unauthorized' });
+            return;
+        }
+        // Check if answers already exist
+        const existingAnswers = await prisma.interviewAnswer.findUnique({
+            where: {
+                interviewId: parseInt(id)
+            }
+        });
+        let interviewAnswer;
+        if (existingAnswers) {
+            // Update existing answers
+            interviewAnswer = await prisma.interviewAnswer.update({
+                where: {
+                    interviewId: parseInt(id)
+                },
+                data: {
+                    firstAnswer,
+                    secondAnswer,
+                    technicalScore,
+                    cultureScore,
+                    communicationScore,
+                    overallRating,
+                    notes
+                }
+            });
+        }
+        else {
+            // Create new answers
+            interviewAnswer = await prisma.interviewAnswer.create({
+                data: {
+                    firstAnswer,
+                    secondAnswer,
+                    technicalScore,
+                    cultureScore,
+                    communicationScore,
+                    overallRating,
+                    notes: notes || '',
+                    interviewId: parseInt(id)
+                }
+            });
+        }
+        res.json(interviewAnswer);
+    }
+    catch (error) {
+        next(error);
+    }
+};
 // Get all interviews for a team
 router.get('/team/:teamId', auth_1.authenticate, async (req, res) => {
     try {
@@ -213,4 +313,7 @@ router.post('/', auth_1.authenticate, createInterview);
 router.get('/:id', auth_1.authenticate, getInterviewById);
 router.put('/:id', auth_1.authenticate, updateInterview);
 router.delete('/:id', auth_1.authenticate, deleteInterview);
+// Interview answer routes
+router.get('/:id/answers', auth_1.authenticate, getInterviewAnswers);
+router.post('/:id/answers', auth_1.authenticate, saveInterviewAnswers);
 exports.default = router;

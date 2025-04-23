@@ -20,15 +20,31 @@ model User {
 }
 
 model Interview {
+  id              Int               @id @default(autoincrement())
+  name            String
+  team            String
+  interviewName   String
+  dateTaken       DateTime
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  userId          Int
+  user            User              @relation(fields: [userId], references: [id])
+  interviewAnswer InterviewAnswer?
+}
+
+model InterviewAnswer {
   id            Int      @id @default(autoincrement())
-  name          String
-  team          String
-  interviewName String
-  dateTaken     DateTime
+  firstAnswer   String   @db.Text
+  secondAnswer  String   @db.Text
+  technicalScore Int     @default(0)
+  cultureScore   Int     @default(0)
+  communicationScore Int  @default(0)
+  overallRating Int      @default(0)
+  notes         String?  @db.Text
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  userId        Int
-  user          User     @relation(fields: [userId], references: [id])
+  interviewId   Int      @unique
+  interview     Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
 }
 
 model Team {

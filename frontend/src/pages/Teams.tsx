@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { teamService, isTokenValid, authService } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import { AxiosError } from 'axios'
-import EmployeeProfile from '../components/EmployeeProfile'
+import { MagnifyingGlass } from '@phosphor-icons/react'
 
 type Employee = {
   id: number
@@ -29,7 +29,6 @@ const Teams = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
 
   const checkApiHealth = async () => {
@@ -102,6 +101,11 @@ const Teams = () => {
     fetchTeams()
   }, [fetchTeams])
 
+  // Navigate to employee profile
+  const handleEmployeeClick = (id: number) => {
+    navigate(`/employees/${id}`)
+  }
+
   // Filter teams based on search term
   const filteredTeams = teams.filter(team => {
     const teamMatches = team.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -130,9 +134,7 @@ const Teams = () => {
             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm pl-3 pr-10 py-2"
           />
           <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-            </svg>
+            <MagnifyingGlass size={20} className="text-gray-400" />
           </div>
         </div>
       </div>
@@ -197,7 +199,7 @@ const Teams = () => {
                         <tr key={employee.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             <button 
-                              onClick={() => setSelectedEmployeeId(employee.id)}
+                              onClick={() => handleEmployeeClick(employee.id)}
                               className="hover:text-indigo-600 hover:underline focus:outline-none"
                             >
                               {employee.name}
@@ -232,13 +234,6 @@ const Teams = () => {
             </div>
           ))}
         </div>
-      )}
-      
-      {selectedEmployeeId && (
-        <EmployeeProfile 
-          employeeId={selectedEmployeeId}
-          onClose={() => setSelectedEmployeeId(null)}
-        />
       )}
     </div>
   )

@@ -72,6 +72,20 @@ const Sidebar = () => {
           </NavLink>
           
           <NavLink 
+            to="/employees"
+            className={({ isActive }) => 
+              `flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                isActive 
+                  ? 'text-primary-600 bg-primary-50' 
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`
+            }
+          >
+            <Users className="mr-3 h-5 w-5" />
+            Employees
+          </NavLink>
+          
+          <NavLink 
             to="/metrics"
             className={({ isActive }) => 
               `flex items-center px-3 py-2 text-sm font-medium rounded-md ${

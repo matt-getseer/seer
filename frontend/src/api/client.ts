@@ -145,6 +145,20 @@ export const interviewService = {
   deleteInterview: async (id: number) => {
     return await apiClient.delete(`/interviews/${id}`);
   },
+  getInterviewAnswers: async (id: number) => {
+    return await apiClient.get(`/interviews/${id}/answers`);
+  },
+  saveInterviewAnswers: async (id: number, answers: {
+    firstAnswer: string;
+    secondAnswer: string;
+    technicalScore: number;
+    cultureScore: number;
+    communicationScore: number;
+    overallRating: number;
+    notes?: string;
+  }) => {
+    return await apiClient.post(`/interviews/${id}/answers`, answers);
+  }
 };
 
 // Employee Service

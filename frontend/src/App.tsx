@@ -8,6 +8,8 @@ import Settings from './pages/Settings'
 import QuarterlyReview from './pages/QuarterlyReview'
 import EndToEndOnboarding from './pages/EndToEndOnboarding'
 import Interviews from './pages/Interviews'
+import InterviewDetail from './pages/InterviewDetail'
+import Employees from './pages/Employees'
 import Teams from './pages/Teams'
 import Login from './pages/Login'
 import { isTokenValid } from './api/client'
@@ -128,6 +130,39 @@ function App() {
             <ProtectedRoute>
               <MainLayout>
                 <Interviews />
+              </MainLayout>
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/interviews/:id" 
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <InterviewDetail />
+              </MainLayout>
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/employees" 
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Employees />
+              </MainLayout>
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/employees/:employeeId" 
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Employees />
               </MainLayout>
             </ProtectedRoute>
           } 
