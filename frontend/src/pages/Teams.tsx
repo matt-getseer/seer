@@ -124,7 +124,7 @@ const Teams = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Organization Chart</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Teams</h1>
         <div className="relative rounded-md shadow-sm w-1/3">
           <input
             type="text"

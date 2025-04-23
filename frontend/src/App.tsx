@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import Sidebar from './components/Sidebar'
 import Navbar from './components/Navbar'
@@ -15,6 +15,29 @@ import Teams from './pages/Teams'
 import Login from './pages/Login'
 import { isTokenValid } from './api/client'
 
+// Route persistence wrapper component
+const RoutePersistence = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Save route on change
+  useEffect(() => {
+    if (location.pathname !== '/login') {
+      localStorage.setItem('lastRoute', location.pathname + location.search);
+    }
+  }, [location]);
+
+  // Restore route on mount
+  useEffect(() => {
+    const lastRoute = localStorage.getItem('lastRoute');
+    if (lastRoute && location.pathname === '/') {
+      navigate(lastRoute);
+    }
+  }, []);
+
+  return <>{children}</>;
+};
+
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [searchModalOpen, setSearchModalOpen] = useState(false)
@@ -23,6 +46,11 @@ function App() {
   const checkAuth = () => {
     const isValid = isTokenValid()
     setIsAuthenticated(isValid)
+    
+    // Clear saved route if not authenticated
+    if (!isValid) {
+      localStorage.removeItem('lastRoute')
+    }
   }
   
   // Check authentication on mount and periodically
@@ -80,122 +108,124 @@ function App() {
 
   return (
     <Router>
-      <Routes>
-        <Route path="/login" element={<Login setIsAuthenticated={setIsAuthenticated} />} />
+      <RoutePersistence>
+        <Routes>
+          <Route path="/login" element={<Login setIsAuthenticated={setIsAuthenticated} />} />
+          
+          <Route 
+            path="/" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Home />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/metrics" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Metrics />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/settings" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Settings />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/quarterly-review" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <QuarterlyReview />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/end-to-end-onboarding" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <EndToEndOnboarding />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/interviews" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Interviews />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/interviews/:id" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <InterviewDetail />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/employees" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Employees />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/employees/:employeeId" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Employees />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/teams" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Teams />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+        </Routes>
         
-        <Route 
-          path="/" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Home />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/metrics" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Metrics />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/settings" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Settings />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/quarterly-review" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <QuarterlyReview />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/end-to-end-onboarding" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <EndToEndOnboarding />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/interviews" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Interviews />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/interviews/:id" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <InterviewDetail />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/employees" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Employees />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/employees/:employeeId" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Employees />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/teams" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Teams />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-      </Routes>
-      
-      {/* Add SearchModal to enable CMD+K search throughout the app */}
-      {renderSearchModal()}
+        {/* Add SearchModal to enable CMD+K search throughout the app */}
+        {renderSearchModal()}
+      </RoutePersistence>
     </Router>
   )
 }

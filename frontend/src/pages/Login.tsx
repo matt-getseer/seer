@@ -38,8 +38,9 @@ const Login = ({ setIsAuthenticated }: LoginProps) => {
       // Dispatch auth state change event to update all components
       window.dispatchEvent(new Event('auth-state-change'))
       
-      // Redirect to home or the page they were trying to access
-      const from = location.state?.from?.pathname || '/'
+      // Redirect to home, saved route, or the page they were trying to access
+      const lastRoute = localStorage.getItem('lastRoute')
+      const from = location.state?.from?.pathname || lastRoute || '/'
       navigate(from)
     } catch (err) {
       console.error('Login failed:', err)
