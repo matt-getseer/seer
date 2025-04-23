@@ -7,10 +7,15 @@ import {
   ClockCounterClockwise,
   Bug,
   ChatCircle,
-  UsersThree
+  UsersThree,
+  MagnifyingGlass
 } from '@phosphor-icons/react'
 
-const Sidebar = () => {
+interface SidebarProps {
+  onSearchClick: () => void;
+}
+
+const Sidebar = ({ onSearchClick }: SidebarProps) => {
   return (
     <aside className="w-sidebar bg-gray-50 border-r border-gray-200">
       <div className="h-16 flex items-center px-4 border-b border-gray-200">
@@ -37,6 +42,14 @@ const Sidebar = () => {
           <House className="mr-3 h-5 w-5" />
           Home
         </NavLink>
+        
+        <button 
+          onClick={onSearchClick}
+          className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-600 hover:bg-gray-100 w-full"
+        >
+          <MagnifyingGlass className="mr-3 h-5 w-5" />
+          Search
+        </button>
         
         <div className="pt-4">
           <div className="px-3 mb-2">

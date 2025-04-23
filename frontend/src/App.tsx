@@ -17,6 +17,7 @@ import { isTokenValid } from './api/client'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [searchModalOpen, setSearchModalOpen] = useState(false)
   
   // Function to check authentication status
   const checkAuth = () => {
@@ -55,7 +56,7 @@ function App() {
   // Content layout with sidebar and navbar
   const MainLayout = ({ children }: { children: React.ReactNode }) => (
     <div className="flex min-h-screen bg-white">
-      <Sidebar />
+      <Sidebar onSearchClick={() => setSearchModalOpen(true)} />
       <div className="flex-1">
         <Navbar />
         <main className="p-6">
@@ -68,7 +69,11 @@ function App() {
   // Render search modal only when authenticated
   const renderSearchModal = () => {
     if (isAuthenticated) {
-      return <SearchModal />;
+      return <SearchModal 
+        isOpen={searchModalOpen}
+        setIsOpen={setSearchModalOpen}
+        onOpen={() => setSearchModalOpen(true)} 
+      />;
     }
     return null;
   }

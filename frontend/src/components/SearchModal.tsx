@@ -48,8 +48,13 @@ type SearchResult = {
   url: string
 }
 
-const SearchModal = () => {
-  const [isOpen, setIsOpen] = useState(false)
+interface SearchModalProps {
+  onOpen?: () => void;
+  isOpen: boolean;
+  setIsOpen: (isOpen: boolean) => void;
+}
+
+const SearchModal = ({ onOpen, isOpen: controlledIsOpen, setIsOpen }: SearchModalProps) => {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -64,16 +69,17 @@ const SearchModal = () => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
         setIsOpen(true)
+        onOpen?.()
       }
       // Close with Escape key
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape' && controlledIsOpen) {
         setIsOpen(false)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen])
+  }, [controlledIsOpen, onOpen, setIsOpen])
 
   // Search functionality
   useEffect(() => {
@@ -176,24 +182,20 @@ const SearchModal = () => {
     navigate(result.url)
   }
 
-  const openModal = () => {
-    setIsOpen(true)
-  }
-
   const closeModal = () => {
     setIsOpen(false)
     setQuery('')
     setResults([])
   }
-  
+
   // Focus input when modal opens
   useEffect(() => {
-    if (isOpen && searchInputRef.current) {
+    if (controlledIsOpen && searchInputRef.current) {
       setTimeout(() => {
         searchInputRef.current?.focus()
       }, 100)
     }
-  }, [isOpen])
+  }, [controlledIsOpen])
 
   // Icon components for result types
   const getTypeIcon = (type: string) => {
@@ -211,17 +213,8 @@ const SearchModal = () => {
 
   return (
     <>
-      {/* Sidebar button for search */}
-      <button
-        onClick={openModal}
-        className="fixed right-4 bottom-4 p-3 rounded-full bg-primary-500 text-white shadow-lg hover:bg-primary-600 transition-colors"
-        title="Search (⌘K)"
-      >
-        <MagnifyingGlass size={24} weight="bold" />
-      </button>
-
       {/* Search Modal */}
-      <Transition appear show={isOpen} as={Fragment}>
+      <Transition appear show={controlledIsOpen} as={Fragment}>
         <Dialog as="div" className="relative z-50" onClose={closeModal}>
           <Transition.Child
             as={Fragment}
@@ -259,12 +252,15 @@ const SearchModal = () => {
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
                       />
-                      <button
-                        onClick={closeModal}
-                        className="absolute right-4 text-gray-400 hover:text-gray-500"
-                      >
-                        <X size={20} />
-                      </button>
+                      <div className="absolute right-4 flex items-center space-x-2">
+                        <span className="text-xs text-gray-400">Press ESC to close</span>
+                        <button
+                          onClick={closeModal}
+                          className="text-gray-400 hover:text-gray-500"
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="max-h-[60vh] overflow-y-auto">
@@ -317,7 +313,7 @@ const SearchModal = () => {
                     <div className="bg-gray-50 px-4 py-3 text-xs text-gray-500">
                       <div className="flex items-center justify-between">
                         <div>
-                          <span className="font-semibold">⌘K</span> to open search
+                          <span className="font-semibold text-sm bg-gray-200 px-1.5 py-0.5 rounded text-gray-700">⌘K</span> to open search
                         </div>
                         <div className="flex space-x-4">
                           <span><span className="font-semibold">↑↓</span> to navigate</span>
