@@ -64,14 +64,6 @@ const radarData = [
 const COLORS = ['#8349F0', '#A57CF8', '#BFA4FC', '#D9D4FF']
 const SENTIMENT_COLORS = ['#4CAF50', '#9E9E9E', '#F44336']
 
-// Key metrics data
-const tableData = [
-  { metric: 'Average Performance Score', value: '3.8/5', change: '+0.3', status: 'positive' },
-  { metric: 'Employee Engagement', value: '83%', change: '+5%', status: 'positive' },
-  { metric: 'Review Completion Rate', value: '92%', change: '+7%', status: 'positive' },
-  { metric: 'AI-Identified Growth Areas', value: '37', change: '-8', status: 'positive' },
-]
-
 type ChartType = 'line' | 'bar' | 'area'
 
 interface ChartDataPoint {
