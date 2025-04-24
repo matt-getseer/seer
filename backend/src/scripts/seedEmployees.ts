@@ -110,6 +110,13 @@ async function seedEmployees() {
     const employees = [];
     const existingEmails = new Set();
     
+    // List of countries for random assignment
+    const countries = [
+      'United States', 'Canada', 'United Kingdom', 'Germany', 'France', 
+      'Spain', 'Italy', 'Japan', 'Australia', 'Brazil', 'India', 
+      'China', 'Mexico', 'Netherlands', 'Sweden', 'Singapore'
+    ];
+    
     for (let i = 0; i < 100; i++) {
       // Select a random team
       const team = teams[Math.floor(Math.random() * teams.length)];
@@ -128,28 +135,53 @@ async function seedEmployees() {
       // Create an employee record with a random start date in the past 5 years
       const startDate = faker.date.past({ years: 5 });
       
+      // Select a random country
+      const country = countries[Math.floor(Math.random() * countries.length)];
+      
       employees.push({
         name: faker.person.fullName(),
         title,
         email,
         teamId: team.id,
         userId: user.id,
-        startDate
+        startDate,
+        country
       });
     }
 
-    // Insert the employee records in batches
-    console.log('Inserting employee records...');
+    // Update existing employees with country data
+    console.log('Getting existing employees to update with country data...');
+    const existingEmployees = await prisma.employee.findMany({
+      where: { userId: user.id }
+    });
     
-    // We'll use createMany but need to handle in batches if the database doesn't support it
-    const BATCH_SIZE = 25;
-    for (let i = 0; i < employees.length; i += BATCH_SIZE) {
-      const batch = employees.slice(i, i + BATCH_SIZE);
-      await prisma.employee.createMany({
-        data: batch,
-        skipDuplicates: true
-      });
-      console.log(`Inserted batch ${i/BATCH_SIZE + 1} of ${Math.ceil(employees.length/BATCH_SIZE)}`);
+    // If we have existing employees, update them with country data
+    if (existingEmployees.length > 0) {
+      console.log(`Found ${existingEmployees.length} existing employees to update...`);
+      
+      for (const employee of existingEmployees) {
+        const country = countries[Math.floor(Math.random() * countries.length)];
+        await prisma.employee.update({
+          where: { id: employee.id },
+          data: { country }
+        });
+      }
+      
+      console.log('Existing employees updated with country data');
+    } else {
+      // Insert the employee records in batches if no existing employees
+      console.log('No existing employees found. Inserting employee records...');
+      
+      // We'll use createMany but need to handle in batches if the database doesn't support it
+      const BATCH_SIZE = 25;
+      for (let i = 0; i < employees.length; i += BATCH_SIZE) {
+        const batch = employees.slice(i, i + BATCH_SIZE);
+        await prisma.employee.createMany({
+          data: batch,
+          skipDuplicates: true
+        });
+        console.log(`Inserted batch ${i/BATCH_SIZE + 1} of ${Math.ceil(employees.length/BATCH_SIZE)}`);
+      }
     }
 
     console.log('Employee seeding completed successfully!');

@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AxiosError } from 'axios'
 import { MagnifyingGlass } from '@phosphor-icons/react'
 import EmployeeProfile from '../components/EmployeeProfile'
+import Flag from 'react-world-flags'
 
 type Employee = {
   id: number
@@ -11,6 +12,7 @@ type Employee = {
   title: string
   email: string
   startDate: string | null
+  country?: string | null
   teamId: number
   userId: number
   createdAt: string
@@ -20,6 +22,34 @@ type Employee = {
     department: string
   }
 }
+
+// Helper function to convert country name to ISO code
+const getCountryCode = (countryName: string | null | undefined): string => {
+  if (!countryName) return '';
+  
+  const countryMap: Record<string, string> = {
+    'United States': 'US',
+    'USA': 'US',
+    'United Kingdom': 'GB',
+    'UK': 'GB',
+    'Canada': 'CA',
+    'Germany': 'DE',
+    'France': 'FR',
+    'Spain': 'ES',
+    'Italy': 'IT',
+    'Japan': 'JP',
+    'Australia': 'AU',
+    'Brazil': 'BR',
+    'India': 'IN',
+    'China': 'CN',
+    'Mexico': 'MX',
+    'Netherlands': 'NL',
+    'Sweden': 'SE',
+    'Singapore': 'SG'
+  };
+  
+  return countryMap[countryName] || '';
+};
 
 const Employees = () => {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -93,6 +123,7 @@ const Employees = () => {
       employee.name.toLowerCase().includes(searchLower) ||
       employee.title.toLowerCase().includes(searchLower) ||
       employee.email.toLowerCase().includes(searchLower) ||
+      (employee.country && employee.country.toLowerCase().includes(searchLower)) ||
       (employee.team?.name && employee.team.name.toLowerCase().includes(searchLower)) ||
       (employee.team?.department && employee.team.department.toLowerCase().includes(searchLower))
     )
@@ -118,7 +149,7 @@ const Employees = () => {
 
   // Otherwise, render the employees list
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Employees</h1>
         <div className="relative rounded-md shadow-sm w-1/3">
@@ -155,60 +186,77 @@ const Employees = () => {
         </div>
       ) : (
         <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Title
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Team
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Email
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Start Date
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredEmployees.map((employee) => (
-                <tr key={employee.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    <button 
-                      onClick={() => handleEmployeeClick(employee.id)}
-                      className="text-gray-900 hover:text-indigo-600 hover:underline focus:outline-none"
-                    >
-                      {employee.name}
-                    </button>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {employee.title}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {employee.team ? (
-                      <div>
-                        <div>{employee.team.name}</div>
-                        <div className="text-xs text-gray-400">{employee.team.department}</div>
-                      </div>
-                    ) : (
-                      'N/A'
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {employee.email}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(employee.startDate)}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 table-fixed">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+                    Name
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+                    Title
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+                    Team
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+                    Email
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+                    Country
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+                    Start Date
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredEmployees.map((employee) => (
+                  <tr key={employee.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <button 
+                        onClick={() => handleEmployeeClick(employee.id)}
+                        className="text-gray-900 hover:text-indigo-600 hover:underline focus:outline-none"
+                      >
+                        {employee.name}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {employee.title}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {employee.team ? (
+                        <div>
+                          <div>{employee.team.name}</div>
+                          <div className="text-xs text-gray-400">{employee.team.department}</div>
+                        </div>
+                      ) : (
+                        'N/A'
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div className="truncate max-w-xs">{employee.email}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {employee.country ? (
+                        <div className="flex items-center space-x-2">
+                          <div className="flex-shrink-0 h-10 w-10 overflow-hidden rounded-full border border-gray-200">
+                            <Flag code={getCountryCode(employee.country)} className="h-full w-full object-cover" />
+                          </div>
+                          <span className="truncate">{employee.country}</span>
+                        </div>
+                      ) : (
+                        'N/A'
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(employee.startDate)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

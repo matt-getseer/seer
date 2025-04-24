@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { employeeService } from '../api/client';
+import Flag from 'react-world-flags';
 
 type Employee = {
   id: number;
@@ -7,6 +8,7 @@ type Employee = {
   title: string;
   email: string;
   startDate: string;
+  country?: string;
   interviewCount?: number;
   team?: {
     id: number;
@@ -19,6 +21,34 @@ interface EmployeeProfileProps {
   employeeId: number | null;
   onClose: () => void;
 }
+
+// Helper function to convert country name to ISO code
+const getCountryCode = (countryName: string | null | undefined): string => {
+  if (!countryName) return '';
+  
+  const countryMap: Record<string, string> = {
+    'United States': 'US',
+    'USA': 'US',
+    'United Kingdom': 'GB',
+    'UK': 'GB',
+    'Canada': 'CA',
+    'Germany': 'DE',
+    'France': 'FR',
+    'Spain': 'ES',
+    'Italy': 'IT',
+    'Japan': 'JP',
+    'Australia': 'AU',
+    'Brazil': 'BR',
+    'India': 'IN',
+    'China': 'CN',
+    'Mexico': 'MX',
+    'Netherlands': 'NL',
+    'Sweden': 'SE',
+    'Singapore': 'SG'
+  };
+  
+  return countryMap[countryName] || '';
+};
 
 const EmployeeProfile = ({ employeeId, onClose }: EmployeeProfileProps) => {
   const [employee, setEmployee] = useState<Employee | null>(null);
@@ -111,6 +141,19 @@ const EmployeeProfile = ({ employeeId, onClose }: EmployeeProfileProps) => {
                       })}
                     </dd>
                   </div>
+                  {employee.country && (
+                    <div className="py-4 grid grid-cols-3">
+                      <dt className="text-sm font-medium text-gray-500">Country</dt>
+                      <dd className="text-sm text-gray-900 col-span-2">
+                        <div className="flex items-center">
+                          <div className="h-10 w-10 overflow-hidden rounded-full border border-gray-200 mr-3">
+                            <Flag code={getCountryCode(employee.country)} className="h-full w-full object-cover" />
+                          </div>
+                          <span>{employee.country}</span>
+                        </div>
+                      </dd>
+                    </div>
+                  )}
                   <div className="py-4 grid grid-cols-3">
                     <dt className="text-sm font-medium text-gray-500">Interviews</dt>
                     <dd className="text-sm text-gray-900 col-span-2">
