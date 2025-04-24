@@ -1,10 +1,10 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import Sidebar from './components/Sidebar'
 import Navbar from './components/Navbar'
 import SearchModal from './components/SearchModal'
 import Home from './pages/Home'
-import Metrics from './pages/Metrics'
+import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 import QuarterlyReview from './pages/QuarterlyReview'
 import EndToEndOnboarding from './pages/EndToEndOnboarding'
@@ -14,6 +14,14 @@ import Employees from './pages/Employees'
 import Teams from './pages/Teams'
 import Login from './pages/Login'
 import { isTokenValid } from './api/client'
+
+// Lazy load report pages
+const TeamPerformance = lazy(() => import('./pages/reports/TeamPerformance'))
+const CoreCompetency = lazy(() => import('./pages/reports/CoreCompetency'))
+const Engagement = lazy(() => import('./pages/reports/Engagement'))
+const Sentiment = lazy(() => import('./pages/reports/Sentiment'))
+const TopPerformer = lazy(() => import('./pages/reports/TopPerformer'))
+const EmployeesAtRisk = lazy(() => import('./pages/reports/EmployeesAtRisk'))
 
 // Route persistence wrapper component
 const RoutePersistence = ({ children }: { children: React.ReactNode }) => {
@@ -124,11 +132,89 @@ function App() {
           />
           
           <Route 
-            path="/metrics" 
+            path="/reports" 
             element={
               <ProtectedRoute>
                 <MainLayout>
-                  <Metrics />
+                  <Reports />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/team-performance" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <TeamPerformance />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/core-competency" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <CoreCompetency />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/engagement" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <Engagement />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/sentiment" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <Sentiment />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/top-performer" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <TopPerformer />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/employees-at-risk" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <EmployeesAtRisk />
+                  </Suspense>
                 </MainLayout>
               </ProtectedRoute>
             } 

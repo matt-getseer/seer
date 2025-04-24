@@ -50,7 +50,7 @@ const Navbar: FC = () => {
       'employees': 'Employees',
       'teams': 'Teams',
       'interviews': 'Interviews',
-      'metrics': 'Metrics',
+      'reports': 'Reports',
       'settings': 'Settings',
       'quarterly-review': 'Quarterly Review',
       'end-to-end-onboarding': 'End-to-End Onboarding'

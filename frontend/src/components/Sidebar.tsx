@@ -15,6 +15,39 @@ interface SidebarProps {
   onSearchClick: () => void;
 }
 
+export const reportCategories = [
+  { 
+    name: 'Team Performance', 
+    url: '/reports/team-performance',
+    slug: 'team-performance'
+  },
+  { 
+    name: 'Engagement', 
+    url: '/reports/engagement',
+    slug: 'engagement'
+  },
+  { 
+    name: 'Sentiment', 
+    url: '/reports/sentiment',
+    slug: 'sentiment'
+  },
+  { 
+    name: 'Core Competency', 
+    url: '/reports/core-competency',
+    slug: 'core-competency'
+  },
+  { 
+    name: 'Top Performers', 
+    url: '/reports/top-performers',
+    slug: 'top-performers'
+  },
+  { 
+    name: 'Employees at Risk', 
+    url: '/reports/employees-at-risk',
+    slug: 'employees-at-risk'
+  }
+]
+
 const Sidebar = ({ onSearchClick }: SidebarProps) => {
   return (
     <aside className="w-sidebar bg-gray-50 border-r border-gray-200">
@@ -99,7 +132,7 @@ const Sidebar = ({ onSearchClick }: SidebarProps) => {
           </NavLink>
           
           <NavLink 
-            to="/metrics"
+            to="/reports"
             className={({ isActive }) => 
               `flex items-center px-3 py-2 text-sm font-medium rounded-md ${
                 isActive 
@@ -109,7 +142,7 @@ const Sidebar = ({ onSearchClick }: SidebarProps) => {
             }
           >
             <ChartLine className="mr-3 h-5 w-5" />
-            Metrics
+            Reports
           </NavLink>
           
           <NavLink 
