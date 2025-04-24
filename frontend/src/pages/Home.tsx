@@ -102,7 +102,6 @@ const CircleProgressRing = ({
   const circumference = radius * 2 * Math.PI;
   const progress = value / maxValue;
   const strokeDashoffset = circumference - progress * circumference;
-  const percentage = Math.round((value / maxValue) * 100);
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
