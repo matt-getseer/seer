@@ -93,7 +93,7 @@ function App() {
   const MainLayout = ({ children }: { children: React.ReactNode }) => (
     <div className="flex min-h-screen bg-white">
       <Sidebar onSearchClick={() => setSearchModalOpen(true)} />
-      <div className="flex-1">
+      <div className="flex-1 ml-sidebar">
         <Navbar />
         <main className="p-6">
           {children}

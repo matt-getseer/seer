@@ -50,7 +50,7 @@ export const reportCategories = [
 
 const Sidebar = ({ onSearchClick }: SidebarProps) => {
   return (
-    <aside className="w-sidebar bg-gray-50 border-r border-gray-200">
+    <aside className="w-sidebar bg-gray-50 border-r border-gray-200 fixed h-screen flex flex-col">
       <div className="h-16 flex items-center px-4 border-b border-gray-200">
         <Link to="/" className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
@@ -60,7 +60,7 @@ const Sidebar = ({ onSearchClick }: SidebarProps) => {
         </Link>
       </div>
 
-      <nav className="p-4 space-y-1">
+      <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
         <NavLink 
           to="/" 
           end
