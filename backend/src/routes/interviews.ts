@@ -264,12 +264,7 @@ const saveInterviewAnswers = async (req: AuthenticatedRequest, res: Response, ne
     const { id } = req.params;
     const { 
       firstAnswer, 
-      secondAnswer, 
-      technicalScore, 
-      cultureScore, 
-      communicationScore, 
-      overallRating, 
-      notes 
+      secondAnswer
     } = req.body;
 
     if (!req.user?.userId) {
@@ -307,12 +302,7 @@ const saveInterviewAnswers = async (req: AuthenticatedRequest, res: Response, ne
         },
         data: {
           firstAnswer,
-          secondAnswer,
-          technicalScore,
-          cultureScore,
-          communicationScore,
-          overallRating,
-          notes
+          secondAnswer
         }
       });
     } else {
@@ -321,11 +311,6 @@ const saveInterviewAnswers = async (req: AuthenticatedRequest, res: Response, ne
         data: {
           firstAnswer,
           secondAnswer,
-          technicalScore,
-          cultureScore,
-          communicationScore,
-          overallRating,
-          notes: notes || '',
           interviewId: parseInt(id)
         }
       });

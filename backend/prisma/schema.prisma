@@ -36,11 +36,6 @@ model InterviewAnswer {
   id            Int      @id @default(autoincrement())
   firstAnswer   String   @db.Text
   secondAnswer  String   @db.Text
-  technicalScore Int     @default(0)
-  cultureScore   Int     @default(0)
-  communicationScore Int  @default(0)
-  overallRating Int      @default(0)
-  notes         String?  @db.Text
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   interviewId   Int      @unique

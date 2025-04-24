@@ -151,11 +151,6 @@ export const interviewService = {
   saveInterviewAnswers: async (id: number, answers: {
     firstAnswer: string;
     secondAnswer: string;
-    technicalScore: number;
-    cultureScore: number;
-    communicationScore: number;
-    overallRating: number;
-    notes?: string;
   }) => {
     return await apiClient.post(`/interviews/${id}/answers`, answers);
   }

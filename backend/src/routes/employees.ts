@@ -6,12 +6,42 @@ import { authenticate } from '../middleware/auth';
 interface TypedPrismaClient extends PrismaClient {
   employee: any;
   team: any;
+  interview: any;
 }
 
 interface AuthenticatedRequest extends Request {
   user?: {
     userId: number;
   };
+}
+
+// Define types for our models
+interface Employee {
+  id: number;
+  name: string;
+  title: string;
+  email: string;
+  teamId: number;
+  userId: number;
+  startDate: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  team?: {
+    id: number;
+    name: string;
+    department: string;
+  };
+}
+
+interface Interview {
+  id: number;
+  name: string;
+  team: string;
+  interviewName: string;
+  dateTaken: Date;
+  userId: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const router = express.Router();
@@ -168,7 +198,25 @@ const getEmployeeById = async (req: AuthenticatedRequest, res: Response, next: N
       return;
     }
 
-    res.json(employee);
+    // Get all interviews for this user
+    const interviews = await prisma.interview.findMany({
+      where: {
+        userId: req.user.userId
+      }
+    });
+    
+    // Count interviews for this employee by name match
+    const interviewCount = interviews.filter(
+      (interview: Interview) => interview.name.toLowerCase() === employee.name.toLowerCase()
+    ).length;
+    
+    // Add interview count to employee data
+    const employeeWithInterviewCount = {
+      ...employee,
+      interviewCount
+    };
+
+    res.json(employeeWithInterviewCount);
   } catch (error) {
     next(error);
   }
@@ -197,7 +245,28 @@ const getAllEmployees = async (req: AuthenticatedRequest, res: Response, next: N
       }
     });
 
-    res.json(employees);
+    // Get all interviews for this user
+    const interviews = await prisma.interview.findMany({
+      where: {
+        userId: req.user.userId
+      }
+    });
+    
+    // Add interview counts for each employee
+    const employeesWithInterviewCounts = employees.map((employee: Employee) => {
+      // Count interviews for this employee by name match
+      const interviewCount = interviews.filter(
+        (interview: Interview) => interview.name.toLowerCase() === employee.name.toLowerCase()
+      ).length;
+      
+      // Add interview count to employee data
+      return {
+        ...employee,
+        interviewCount
+      };
+    });
+
+    res.json(employeesWithInterviewCounts);
   } catch (error) {
     next(error);
   }
