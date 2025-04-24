@@ -463,7 +463,7 @@ const Home = () => {
                 <YAxis stroke="#6B7280" />
                 <Tooltip />
                 <Bar dataKey="count" name="Count">
-                  {sentimentData.map((entry, index) => (
+                  {sentimentData.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={SENTIMENT_COLORS[index % SENTIMENT_COLORS.length]} />
                   ))}
                 </Bar>
