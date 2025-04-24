@@ -437,7 +437,7 @@ const Home = () => {
                   dataKey="value"
                   label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
                 >
-                  {engagementData.map((entry, index) => (
+                  {engagementData.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
