@@ -13,12 +13,16 @@ const apiClient = axios.create({
 // Check if token is valid
 export const isTokenValid = () => {
   const token = localStorage.getItem('token');
-  if (!token) return false;
+  if (!token) {
+    console.log('No token found');
+    return false;
+  }
   
   try {
     const decoded = jwtDecode(token);
     // Check if token is expired
     if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+      console.log('Token expired');
       localStorage.removeItem('token'); // Remove expired token
       return false;
     }
@@ -187,6 +191,22 @@ export const employeeService = {
   },
   deleteEmployee: async (id: number) => {
     return await apiClient.delete(`/employees/${id}`);
+  }
+};
+
+// Notification Service
+export const notificationService = {
+  getAllNotifications: async () => {
+    return await apiClient.get('/notifications');
+  },
+  getUnreadNotifications: async () => {
+    return await apiClient.get('/notifications/unread');
+  },
+  markAsRead: async (id: number) => {
+    return await apiClient.put(`/notifications/${id}/read`);
+  },
+  markAllAsRead: async () => {
+    return await apiClient.put('/notifications/read-all');
   }
 };
 

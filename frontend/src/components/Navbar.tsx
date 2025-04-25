@@ -2,11 +2,14 @@ import { Bell, Question, SignOut, CaretRight } from '@phosphor-icons/react'
 import { FC, useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { authService, employeeService } from '../api/client'
+import NotificationCenter from './NotificationCenter'
 
 const Navbar: FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
+  const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false)
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
 
   const handleLogout = () => {
     authService.logout()
@@ -87,64 +90,91 @@ const Navbar: FC = () => {
     })
   }
 
+  // Handle closing the notification center
+  const handleCloseNotificationCenter = () => {
+    setIsNotificationCenterOpen(false)
+  }
+
+  // Handle notification count updates
+  const handleUnreadCountChange = (count: number) => {
+    setUnreadNotificationCount(count)
+  }
+
   const breadcrumbs = generateBreadcrumbs()
 
   return (
-    <nav className="bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 justify-between items-center">
-          <div className="flex-1">
-            <nav className="flex" aria-label="Breadcrumb">
-              <ol className="flex items-center space-x-2">
-                {breadcrumbs.map((breadcrumb, index) => (
-                  <li key={breadcrumb.path} className="flex items-center">
-                    {index > 0 && (
-                      <CaretRight className="mx-1 h-4 w-4 flex-shrink-0 text-gray-400" />
-                    )}
-                    <Link
-                      to={breadcrumb.path}
-                      className={`text-xs font-medium ${
-                        index === breadcrumbs.length - 1
-                          ? 'text-gray-900'
-                          : 'text-gray-500 hover:text-gray-700'
-                      }`}
-                      style={{ fontSize: '12px' }}
-                    >
-                      {breadcrumb.name}
-                    </Link>
-                  </li>
-                ))}
-              </ol>
-            </nav>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            <button className="p-1.5 text-gray-500 hover:text-gray-600">
-              <Question className="h-5 w-5" />
-            </button>
-            <button className="p-1.5 text-gray-500 hover:text-gray-600 relative">
-              <Bell className="h-5 w-5" />
-              <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 transform translate-x-1/2 -translate-y-1/2"></span>
-            </button>
-            <div className="flex items-center space-x-3">
-              <img
-                className="h-8 w-8 rounded-full"
-                src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
-                alt="User avatar"
-              />
-              <span className="text-sm font-medium text-gray-700">Test User</span>
+    <>
+      <nav className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 justify-between items-center">
+            <div className="flex-1">
+              <nav className="flex" aria-label="Breadcrumb">
+                <ol className="flex items-center space-x-2">
+                  {breadcrumbs.map((breadcrumb, index) => (
+                    <li key={breadcrumb.path} className="flex items-center">
+                      {index > 0 && (
+                        <CaretRight className="mx-1 h-4 w-4 flex-shrink-0 text-gray-400" />
+                      )}
+                      <Link
+                        to={breadcrumb.path}
+                        className={`text-xs font-medium ${
+                          index === breadcrumbs.length - 1
+                            ? 'text-gray-900'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                        style={{ fontSize: '12px' }}
+                      >
+                        {breadcrumb.name}
+                      </Link>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
             </div>
-            <button 
-              onClick={handleLogout}
-              className="p-1.5 text-gray-500 hover:text-gray-600 flex items-center"
-              title="Logout"
-            >
-              <SignOut className="h-5 w-5" />
-            </button>
+            
+            <div className="flex items-center space-x-4">
+              <button className="p-1.5 text-gray-500 hover:text-gray-600">
+                <Question className="h-5 w-5" />
+              </button>
+              <button 
+                className="p-1.5 text-gray-500 hover:text-gray-600 relative"
+                onClick={() => setIsNotificationCenterOpen(true)}
+                aria-label={`Open notifications (${unreadNotificationCount} unread)`}
+              >
+                <Bell className="h-5 w-5" />
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute top-0 right-0 flex items-center justify-center">
+                    {unreadNotificationCount > 9 ? (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-xs text-white">
+                        9+
+                      </span>
+                    ) : (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-xs text-white">
+                        {unreadNotificationCount}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </button>
+              <button 
+                onClick={handleLogout}
+                className="p-1.5 text-gray-500 hover:text-gray-600 flex items-center"
+                title="Logout"
+              >
+                <SignOut className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+
+      {/* Notification Center */}
+      <NotificationCenter 
+        isOpen={isNotificationCenterOpen} 
+        onClose={handleCloseNotificationCenter}
+        onUnreadCountChange={handleUnreadCountChange}
+      />
+    </>
   )
 }
 

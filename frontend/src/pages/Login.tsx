@@ -38,10 +38,23 @@ const Login = ({ setIsAuthenticated }: LoginProps) => {
       // Dispatch auth state change event to update all components
       window.dispatchEvent(new Event('auth-state-change'))
       
-      // Redirect to home, saved route, or the page they were trying to access
+      // Get redirect paths with priority:
+      // 1. Path stored from direct URL access attempt (redirectAfterLogin)
+      // 2. Path passed via location state (from protected route redirect)
+      // 3. Last route visited before logout (lastRoute)
+      // 4. Default to home ('/')
+      const directAccessPath = localStorage.getItem('redirectAfterLogin') 
+      const stateRedirect = location.state?.from?.pathname
       const lastRoute = localStorage.getItem('lastRoute')
-      const from = location.state?.from?.pathname || lastRoute || '/'
-      navigate(from)
+      
+      const redirectTo = directAccessPath || stateRedirect || lastRoute || '/'
+      
+      // Clear the redirectAfterLogin since we're using it now
+      if (directAccessPath) {
+        localStorage.removeItem('redirectAfterLogin')
+      }
+      
+      navigate(redirectTo)
     } catch (err) {
       console.error('Login failed:', err)
       const axiosError = err as AxiosError

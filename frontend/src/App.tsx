@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { HashRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, lazy, Suspense } from 'react'
 import Sidebar from './components/Sidebar'
 import Navbar from './components/Navbar'
@@ -6,8 +6,6 @@ import SearchModal from './components/SearchModal'
 import Home from './pages/Home'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
-import QuarterlyReview from './pages/QuarterlyReview'
-import EndToEndOnboarding from './pages/EndToEndOnboarding'
 import Interviews from './pages/Interviews'
 import InterviewDetail from './pages/InterviewDetail'
 import Employees from './pages/Employees'
@@ -35,13 +33,14 @@ const RoutePersistence = ({ children }: { children: React.ReactNode }) => {
     }
   }, [location]);
 
-  // Restore route on mount
+  // Restore route on mount - only redirect if at root and logged in
   useEffect(() => {
     const lastRoute = localStorage.getItem('lastRoute');
-    if (lastRoute && location.pathname === '/') {
+    // Only redirect from root to lastRoute if logged in and at root path
+    if (lastRoute && location.pathname === '/' && isTokenValid()) {
       navigate(lastRoute);
     }
-  }, []);
+  }, [navigate, location.pathname]);
 
   return <>{children}</>;
 };
@@ -49,11 +48,15 @@ const RoutePersistence = ({ children }: { children: React.ReactNode }) => {
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [searchModalOpen, setSearchModalOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   
   // Function to check authentication status
   const checkAuth = () => {
     const isValid = isTokenValid()
-    setIsAuthenticated(isValid)
+    
+    if (isValid !== isAuthenticated) {
+      setIsAuthenticated(isValid)
+    }
     
     // Clear saved route if not authenticated
     if (!isValid) {
@@ -63,10 +66,21 @@ function App() {
   
   // Check authentication on mount and periodically
   useEffect(() => {
+    // Initial auth check
     checkAuth()
+    
+    // Add auth check when the component is mounted
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkAuth()
+      }
+    }
     
     // Listen for storage events (when token is added/removed)
     window.addEventListener('storage', checkAuth)
+    
+    // Check when tab becomes visible again
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     
     // Custom event for auth state changes within the same window
     window.addEventListener('auth-state-change', checkAuth)
@@ -77,23 +91,43 @@ function App() {
     return () => {
       window.removeEventListener('storage', checkAuth)
       window.removeEventListener('auth-state-change', checkAuth)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       clearInterval(intervalId)
     }
-  }, [])
+  }, [isAuthenticated])
+  
+  // Load sidebar state from localStorage
+  useEffect(() => {
+    const savedState = localStorage.getItem('sidebarCollapsed');
+    if (savedState !== null) {
+      setSidebarCollapsed(savedState === 'true');
+    }
+  }, []);
 
   // Protected route component
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+    const location = useLocation();
+    
     if (!isAuthenticated) {
-      return <Navigate to="/login" />
+      // Save the attempted URL for redirect after login
+      if (location.pathname !== '/') {
+        localStorage.setItem('redirectAfterLogin', location.pathname + location.search);
+      }
+      return <Navigate to="/login" state={{ from: location }} replace />
     }
+    
     return <>{children}</>
   }
 
   // Content layout with sidebar and navbar
   const MainLayout = ({ children }: { children: React.ReactNode }) => (
     <div className="flex min-h-screen bg-white">
-      <Sidebar onSearchClick={() => setSearchModalOpen(true)} />
-      <div className="flex-1 ml-sidebar">
+      <Sidebar 
+        onSearchClick={() => setSearchModalOpen(true)} 
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={setSidebarCollapsed}
+      />
+      <div className={`flex-1 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'pl-16' : 'pl-sidebar'}`}>
         <Navbar />
         <main className="p-6">
           {children}
@@ -232,28 +266,6 @@ function App() {
           />
           
           <Route 
-            path="/quarterly-review" 
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <QuarterlyReview />
-                </MainLayout>
-              </ProtectedRoute>
-            } 
-          />
-          
-          <Route 
-            path="/end-to-end-onboarding" 
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <EndToEndOnboarding />
-                </MainLayout>
-              </ProtectedRoute>
-            } 
-          />
-          
-          <Route 
             path="/interviews" 
             element={
               <ProtectedRoute>
@@ -305,6 +317,18 @@ function App() {
                   <Teams />
                 </MainLayout>
               </ProtectedRoute>
+            } 
+          />
+          
+          {/* Add a catch-all route for direct URL access */}
+          <Route 
+            path="*" 
+            element={
+              isAuthenticated ? (
+                <Navigate to="/" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
             } 
           />
         </Routes>
