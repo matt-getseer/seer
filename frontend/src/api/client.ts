@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';
+import { useAuth } from '@clerk/clerk-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -10,35 +10,61 @@ const apiClient = axios.create({
   },
 });
 
-// Check if token is valid
+// Create a function to get Clerk token
+export const getClerkToken = async () => {
+  // This needs to be used within a React component with Clerk's context
+  const { getToken } = useAuth();
+  return await getToken();
+};
+
+// Add isTokenValid function to check if user has a valid token
 export const isTokenValid = () => {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    console.log('No token found');
+  // With Clerk, we can assume the user is authenticated if they've reached this point
+  // since Clerk handles authentication protection
+  return true;
+};
+
+// Dynamic token getter for use outside React components
+let tokenGetter: (() => Promise<string | null>) | null = null;
+
+export const setTokenGetter = (getter: any) => {
+  tokenGetter = async () => {
+    try {
+      return await getter();
+    } catch (error) {
+      console.error('Error getting token:', error);
+      return null;
+    }
+  };
+};
+
+// Check if authenticated with Clerk
+export const isAuthenticated = async () => {
+  if (!tokenGetter) {
+    console.error('Token getter not set. Call setTokenGetter first.');
     return false;
   }
   
   try {
-    const decoded = jwtDecode(token);
-    // Check if token is expired
-    if (decoded.exp && decoded.exp * 1000 < Date.now()) {
-      console.log('Token expired');
-      localStorage.removeItem('token'); // Remove expired token
-      return false;
-    }
-    return true;
+    const token = await tokenGetter();
+    return !!token;
   } catch (error) {
-    console.error('Invalid token:', error);
-    localStorage.removeItem('token'); // Remove invalid token
+    console.error('Error checking authentication status:', error);
     return false;
   }
 };
 
-// Add token to requests if available
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Add token to requests
+apiClient.interceptors.request.use(async (config) => {
+  if (tokenGetter) {
+    try {
+      const token = await tokenGetter();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.error('Error getting token for request:', error);
+    }
   }
   return config;
 });
@@ -50,14 +76,10 @@ apiClient.interceptors.response.use(
     // Handle 401 Unauthorized errors
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
       console.error('Authentication error:', error.response.data);
-      localStorage.removeItem('token');
       
-      // Dispatch auth state change event
-      window.dispatchEvent(new Event('auth-state-change'));
-      
-      // If not already on login page, redirect to login
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      // If not already on sign-in page, redirect to sign-in
+      if (window.location.pathname !== '/sign-in') {
+        window.location.href = '/sign-in';
       }
     }
     return Promise.reject(error);
@@ -66,16 +88,9 @@ apiClient.interceptors.response.use(
 
 // API Services
 export const authService = {
-  login: async (email: string, password: string) => {
-    const response = await apiClient.post('/users/login', { email, password });
-    localStorage.setItem('token', response.data.token);
-    return response.data;
-  },
-  register: async (email: string, name: string, password: string) => {
-    return await apiClient.post('/users/register', { email, name, password });
-  },
   logout: () => {
-    localStorage.removeItem('token');
+    // No local token to remove with Clerk
+    // Clerk handles logout via its components/hooks
   },
   checkHealth: async () => {
     try {

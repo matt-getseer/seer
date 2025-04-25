@@ -1,14 +1,19 @@
 import express, { Request, Response } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
-import { authenticate } from '../middleware/auth';
+import { authenticate, extractUserInfo } from '../middleware/auth';
 
 // Define AuthenticatedRequest interface
 interface AuthenticatedRequest extends Request {
   user?: {
-    userId: number;
-    email: string;
+    clerkId?: string;
+    userId?: number;
+    email?: string;
     iat?: number;
     exp?: number;
+  };
+  auth?: {
+    userId: string;
+    sessionId: string;
   };
 }
 
@@ -52,7 +57,8 @@ const debugHandler = async (req: Request, res: Response): Promise<void> => {
 const getAllTeams = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     console.log('GET /teams - Headers:', req.headers);
-    console.log('GET /teams - Auth user:', req.user);
+    console.log('GET /teams - Auth:', req.auth);
+    console.log('GET /teams - User:', req.user);
     
     if (!req.user?.userId) {
       console.log('No userId found in the request');
@@ -263,11 +269,11 @@ const deleteTeam = async (req: AuthenticatedRequest, res: Response): Promise<voi
   }
 };
 
-// Route handlers
+// Register routes
 router.get('/debug', debugHandler);
-router.get('/', authenticate, getAllTeams);
-router.get('/:id', authenticate, getTeamById);
-router.put('/:id', authenticate, updateTeam);
-router.delete('/:id', authenticate, deleteTeam);
+router.get('/', authenticate, extractUserInfo, getAllTeams);
+router.get('/:id', authenticate, extractUserInfo, getTeamById);
+router.put('/:id', authenticate, extractUserInfo, updateTeam);
+router.delete('/:id', authenticate, extractUserInfo, deleteTeam);
 
 export default router; 

@@ -1,21 +1,21 @@
-import { Bell, Question, SignOut, CaretRight } from '@phosphor-icons/react'
+import { Bell, Question, CaretRight } from '@phosphor-icons/react'
 import { FC, useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { authService, employeeService } from '../api/client'
+import { UserButton, useClerk } from '@clerk/clerk-react'
+import { employeeService } from '../api/client'
 import NotificationCenter from './NotificationCenter'
 
 const Navbar: FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { signOut } = useClerk()
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false)
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
 
-  const handleLogout = () => {
-    authService.logout()
-    // Dispatch custom event for auth state change
-    window.dispatchEvent(new Event('auth-state-change'))
-    navigate('/login')
+  const handleLogout = async () => {
+    await signOut()
+    navigate('/sign-in')
   }
 
   // Fetch employee data for ID-based routes
@@ -156,13 +156,7 @@ const Navbar: FC = () => {
                   </span>
                 )}
               </button>
-              <button 
-                onClick={handleLogout}
-                className="p-1.5 text-gray-500 hover:text-gray-600 flex items-center"
-                title="Logout"
-              >
-                <SignOut className="h-5 w-5" />
-              </button>
+              <UserButton afterSignOutUrl="/sign-in" />
             </div>
           </div>
         </div>

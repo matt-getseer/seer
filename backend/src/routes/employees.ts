@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticate } from '../middleware/auth';
+import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
 
 // Typed prisma client
 interface TypedPrismaClient extends PrismaClient {
@@ -273,11 +273,11 @@ const getAllEmployees = async (req: AuthenticatedRequest, res: Response, next: N
 };
 
 // Route handlers
-router.get('/', authenticate, getAllEmployees);
-router.get('/team/:teamId', authenticate, getTeamEmployees);
-router.get('/:id', authenticate, getEmployeeById);
-router.post('/', authenticate, createEmployee);
-router.put('/:id', authenticate, updateEmployee);
-router.delete('/:id', authenticate, deleteEmployee);
+router.get('/', authenticate, extractUserInfo, getAllEmployees);
+router.get('/team/:teamId', authenticate, extractUserInfo, getTeamEmployees);
+router.get('/:id', authenticate, extractUserInfo, getEmployeeById);
+router.post('/', authenticate, extractUserInfo, createEmployee);
+router.put('/:id', authenticate, extractUserInfo, updateEmployee);
+router.delete('/:id', authenticate, extractUserInfo, deleteEmployee);
 
 export default router; 

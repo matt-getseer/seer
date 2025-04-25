@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticate } from '../middleware/auth';
+import { authenticate, extractUserInfo } from '../middleware/auth';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -323,7 +323,7 @@ const saveInterviewAnswers = async (req: AuthenticatedRequest, res: Response, ne
 };
 
 // Get all interviews for a team
-router.get('/team/:teamId', authenticate, async (req, res) => {
+router.get('/team/:teamId', authenticate, extractUserInfo, async (req, res) => {
   try {
     const { teamId } = req.params;
     const interviews = await prisma.interview.findMany({
@@ -338,14 +338,14 @@ router.get('/team/:teamId', authenticate, async (req, res) => {
 
 // Route handlers
 router.get('/debug', debugHandler);
-router.get('/', authenticate, getAllInterviews);
-router.post('/', authenticate, createInterview);
-router.get('/:id', authenticate, getInterviewById);
-router.put('/:id', authenticate, updateInterview);
-router.delete('/:id', authenticate, deleteInterview);
+router.get('/', authenticate, extractUserInfo, getAllInterviews);
+router.post('/', authenticate, extractUserInfo, createInterview);
+router.get('/:id', authenticate, extractUserInfo, getInterviewById);
+router.put('/:id', authenticate, extractUserInfo, updateInterview);
+router.delete('/:id', authenticate, extractUserInfo, deleteInterview);
 
 // Interview answer routes
-router.get('/:id/answers', authenticate, getInterviewAnswers);
-router.post('/:id/answers', authenticate, saveInterviewAnswers);
+router.get('/:id/answers', authenticate, extractUserInfo, getInterviewAnswers);
+router.post('/:id/answers', authenticate, extractUserInfo, saveInterviewAnswers);
 
 export default router; 

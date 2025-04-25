@@ -1,5 +1,6 @@
 import { HashRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, lazy, Suspense } from 'react'
+import { useAuth, useUser } from '@clerk/clerk-react'
 import Sidebar from './components/Sidebar'
 import Navbar from './components/Navbar'
 import SearchModal from './components/SearchModal'
@@ -10,8 +11,9 @@ import Interviews from './pages/Interviews'
 import InterviewDetail from './pages/InterviewDetail'
 import Employees from './pages/Employees'
 import Teams from './pages/Teams'
-import Login from './pages/Login'
-import { isTokenValid } from './api/client'
+import SignIn from './pages/SignIn'
+import SignUp from './pages/SignUp'
+import { setTokenGetter } from './api/client'
 
 // Lazy load report pages
 const TeamPerformance = lazy(() => import('./pages/reports/TeamPerformance'))
@@ -25,10 +27,11 @@ const EmployeesAtRisk = lazy(() => import('./pages/reports/EmployeesAtRisk'))
 const RoutePersistence = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
 
   // Save route on change
   useEffect(() => {
-    if (location.pathname !== '/login') {
+    if (location.pathname !== '/sign-in' && location.pathname !== '/sign-up') {
       localStorage.setItem('lastRoute', location.pathname + location.search);
     }
   }, [location]);
@@ -37,64 +40,34 @@ const RoutePersistence = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const lastRoute = localStorage.getItem('lastRoute');
     // Only redirect from root to lastRoute if logged in and at root path
-    if (lastRoute && location.pathname === '/' && isTokenValid()) {
+    if (lastRoute && location.pathname === '/' && isSignedIn) {
       navigate(lastRoute);
     }
-  }, [navigate, location.pathname]);
+  }, [navigate, location.pathname, isSignedIn]);
 
   return <>{children}</>;
 };
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [searchModalOpen, setSearchModalOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const { isLoaded, isSignedIn, getToken } = useAuth()
+  const { user } = useUser()
   
-  // Function to check authentication status
-  const checkAuth = () => {
-    const isValid = isTokenValid()
-    
-    if (isValid !== isAuthenticated) {
-      setIsAuthenticated(isValid)
-    }
-    
-    // Clear saved route if not authenticated
-    if (!isValid) {
-      localStorage.removeItem('lastRoute')
-    }
-  }
-  
-  // Check authentication on mount and periodically
+  // Setup token getter for API calls
   useEffect(() => {
-    // Initial auth check
-    checkAuth()
-    
-    // Add auth check when the component is mounted
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        checkAuth()
-      }
+    if (isLoaded) {
+      // This properly sets up the token getter as an async function
+      setTokenGetter(async () => {
+        try {
+          return await getToken();
+        } catch (error) {
+          console.error('Error in token getter:', error);
+          return null;
+        }
+      });
     }
-    
-    // Listen for storage events (when token is added/removed)
-    window.addEventListener('storage', checkAuth)
-    
-    // Check when tab becomes visible again
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    
-    // Custom event for auth state changes within the same window
-    window.addEventListener('auth-state-change', checkAuth)
-    
-    // Check token validity every minute to handle expirations
-    const intervalId = setInterval(checkAuth, 60000)
-    
-    return () => {
-      window.removeEventListener('storage', checkAuth)
-      window.removeEventListener('auth-state-change', checkAuth)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      clearInterval(intervalId)
-    }
-  }, [isAuthenticated])
+  }, [isLoaded, getToken]);
   
   // Load sidebar state from localStorage
   useEffect(() => {
@@ -108,12 +81,19 @@ function App() {
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     const location = useLocation();
     
-    if (!isAuthenticated) {
-      // Save the attempted URL for redirect after login
+    if (!isLoaded) {
+      // Auth is still loading
+      return <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>;
+    }
+    
+    if (!isSignedIn) {
+      // Save the attempted URL for redirect after sign in
       if (location.pathname !== '/') {
         localStorage.setItem('redirectAfterLogin', location.pathname + location.search);
       }
-      return <Navigate to="/login" state={{ from: location }} replace />
+      return <Navigate to="/sign-in" state={{ from: location }} replace />
     }
     
     return <>{children}</>
@@ -138,7 +118,7 @@ function App() {
 
   // Render search modal only when authenticated
   const renderSearchModal = () => {
-    if (isAuthenticated) {
+    if (isSignedIn) {
       return <SearchModal 
         isOpen={searchModalOpen}
         setIsOpen={setSearchModalOpen}
@@ -148,11 +128,18 @@ function App() {
     return null;
   }
 
+  if (!isLoaded) {
+    return <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+    </div>;
+  }
+
   return (
     <Router>
       <RoutePersistence>
         <Routes>
-          <Route path="/login" element={<Login setIsAuthenticated={setIsAuthenticated} />} />
+          <Route path="/sign-in/*" element={<SignIn />} />
+          <Route path="/sign-up/*" element={<SignUp />} />
           
           <Route 
             path="/" 
@@ -324,10 +311,10 @@ function App() {
           <Route 
             path="*" 
             element={
-              isAuthenticated ? (
+              isSignedIn ? (
                 <Navigate to="/" replace />
               ) : (
-                <Navigate to="/login" replace />
+                <Navigate to="/sign-in" replace />
               )
             } 
           />
