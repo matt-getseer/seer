@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { interviewService, isTokenValid, authService, employeeService } from '../api/client'
+import { interviewService, employeeService } from '../api/client'
 import { format, isValid, parseISO } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { AxiosError } from 'axios'
@@ -21,6 +21,30 @@ type Employee = {
   name: string
 }
 
+const fetchInterviews = async (
+  setLoading: (loading: boolean) => void,
+  setError: (error: string | null) => void,
+  setInterviews: (interviews: Interview[]) => void
+) => {
+  try {
+    setLoading(true)
+    const response = await interviewService.getAllInterviews()
+    setInterviews(response.data)
+    setError(null)
+  } catch (err) {
+    console.error('Failed to fetch interviews:', err)
+    const axiosError = err as AxiosError
+    
+    if (axiosError.response?.status === 404) {
+      setError('No interviews found or interview endpoint unavailable.')
+    } else {
+      setError('Failed to load interviews. Please try again later.')
+    }
+  } finally {
+    setLoading(false)
+  }
+}
+
 const Interviews = () => {
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [loading, setLoading] = useState(true)
@@ -28,106 +52,14 @@ const Interviews = () => {
   const navigate = useNavigate()
   const [employees, setEmployees] = useState<Record<string, number>>({})
 
-  const checkApiHealth = async () => {
-    try {
-      await authService.checkHealth();
-      console.log('API is healthy');
-      return true;
-    } catch (error) {
-      console.error('API health check failed:', error);
-      setError('Cannot connect to the server. Please try again later.');
-      return false;
-    }
-  };
-
-  const fetchInterviews = useCallback(async () => {
-    try {
-      setLoading(true)
-      
-      // Check API health first
-      const isApiHealthy = await checkApiHealth();
-      if (!isApiHealthy) {
-        setLoading(false);
-        return;
-      }
-      
-      // Check if user is logged in with valid token
-      if (!isTokenValid()) {
-        console.error('No valid authentication token found')
-        setError('Please log in to view interviews')
-        setLoading(false)
-        // Save current path before redirecting
-        localStorage.setItem('lastRoute', window.location.pathname)
-        navigate('/login')
-        return
-      }
-      
-      const response = await interviewService.getAllInterviews()
-      console.log('API Response:', response.data)
-      setInterviews(response.data)
-      setError('')
-    } catch (err) {
-      console.error('Failed to fetch interviews:', err)
-      const axiosError = err as AxiosError
-      console.error('Error details:', {
-        status: axiosError.response?.status,
-        statusText: axiosError.response?.statusText,
-        data: axiosError.response?.data,
-        headers: axiosError.response?.headers,
-        config: {
-          url: axiosError.config?.url,
-          method: axiosError.config?.method,
-          baseURL: axiosError.config?.baseURL,
-          headers: axiosError.config?.headers
-        }
-      })
-      
-      if (axiosError.response?.status === 401) {
-        setError('Authentication error. Please log in again.')
-        // Redirect to login
-        localStorage.removeItem('token')
-        navigate('/login')
-      } else if (axiosError.response?.status === 404) {
-        setError('No interviews found or interview endpoint unavailable.')
-      } else {
-        setError('Failed to load interviews. Please try again later.')
-      }
-    } finally {
-      setLoading(false)
-    }
+  // Create stable navigation functions
+  const handleViewDetails = useCallback((id: number) => {
+    // Save current list state to sessionStorage
+    sessionStorage.setItem('interviewListScrollPosition', window.scrollY.toString())
+    navigate(`/interviews/${id}`)
   }, [navigate])
 
-  useEffect(() => {
-    fetchInterviews()
-  }, [fetchInterviews])
-
-  const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this interview?')) {
-      try {
-        await interviewService.deleteInterview(id)
-        fetchInterviews()
-      } catch (err) {
-        console.error('Failed to delete interview:', err)
-        setError('Failed to delete interview. Please try again.')
-      }
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = parseISO(dateString)
-      if (!isValid(date)) {
-        return 'Invalid date'
-      }
-      return format(date, 'PPP')
-    } catch (err) {
-      console.error('Error formatting date:', err)
-      return 'Invalid date'
-    }
-  }
-
-  // Find employee by name and navigate to their profile
-  const findEmployeeByName = async (name: string) => {
+  const navigateToEmployee = useCallback(async (name: string) => {
     // If we already have this employee's ID in our map, use it
     if (employees[name]) {
       navigate(`/employees/${employees[name]}`)
@@ -136,7 +68,6 @@ const Interviews = () => {
 
     try {
       // We need to search for the employee by name
-      // First get all employees from all teams
       const response = await employeeService.getAllEmployees()
       const allEmployees = response.data as Employee[]
       
@@ -153,13 +84,23 @@ const Interviews = () => {
     } catch (err) {
       console.error('Error finding employee:', err)
     }
-  }
+  }, [navigate, employees])
 
-  const handleViewDetails = (id: number) => {
-    // Save current list state to sessionStorage
-    sessionStorage.setItem('interviewListScrollPosition', window.scrollY.toString())
-    navigate(`/interviews/${id}`)
-  }
+  useEffect(() => {
+    fetchInterviews(setLoading, setError, setInterviews)
+  }, []) // Remove navigate dependency
+
+  const handleDelete = useCallback(async (id: number) => {
+    if (window.confirm('Are you sure you want to delete this interview?')) {
+      try {
+        await interviewService.deleteInterview(id)
+        fetchInterviews(setLoading, setError, setInterviews)
+      } catch (err) {
+        console.error('Failed to delete interview:', err)
+        setError('Failed to delete interview. Please try again.')
+      }
+    }
+  }, [])
 
   // Restore scroll position when returning to the list
   useEffect(() => {
@@ -175,6 +116,19 @@ const Interviews = () => {
       restoreScrollPosition()
     }
   }, [loading, interviews])
+
+  const formatDate = useCallback((dateString: string) => {
+    try {
+      const date = parseISO(dateString)
+      if (!isValid(date)) {
+        return 'Invalid date'
+      }
+      return format(date, 'PPP')
+    } catch (err) {
+      console.error('Error formatting date:', err)
+      return 'Invalid date'
+    }
+  }, [])
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -223,7 +177,7 @@ const Interviews = () => {
                 <tr key={interview.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <button 
-                      onClick={() => findEmployeeByName(interview.name)}
+                      onClick={() => navigateToEmployee(interview.name)}
                       className="text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline focus:outline-none"
                     >
                       {interview.name}

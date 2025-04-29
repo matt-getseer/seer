@@ -3,6 +3,59 @@ import { useAuth } from '@clerk/clerk-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
+// Create a simple cache for API responses
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+  expiresIn: number; // milliseconds
+}
+
+class ApiCache {
+  private cache: Record<string, CacheEntry> = {};
+  private defaultExpiration = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+  get(key: string): any | null {
+    const entry = this.cache[key];
+    
+    // If no entry or expired, return null
+    if (!entry || Date.now() - entry.timestamp > entry.expiresIn) {
+      if (entry) {
+        // Clean up expired entry
+        delete this.cache[key];
+      }
+      return null;
+    }
+    
+    return entry.data;
+  }
+
+  set(key: string, data: any, expiresIn: number = this.defaultExpiration): void {
+    this.cache[key] = {
+      data,
+      timestamp: Date.now(),
+      expiresIn
+    };
+  }
+
+  invalidate(key: string): void {
+    delete this.cache[key];
+  }
+
+  invalidateByPrefix(prefix: string): void {
+    Object.keys(this.cache).forEach(key => {
+      if (key.startsWith(prefix)) {
+        delete this.cache[key];
+      }
+    });
+  }
+  
+  clear(): void {
+    this.cache = {};
+  }
+}
+
+const apiCache = new ApiCache();
+
 const apiClient = axios.create({
   baseURL: API_URL,
   headers: {
@@ -17,92 +70,176 @@ export const getClerkToken = async () => {
   return await getToken();
 };
 
-// Add isTokenValid function to check if user has a valid token
-export const isTokenValid = () => {
-  // With Clerk, we can assume the user is authenticated if they've reached this point
-  // since Clerk handles authentication protection
-  return true;
-};
-
 // Dynamic token getter for use outside React components
 let tokenGetter: (() => Promise<string | null>) | null = null;
+let tokenPromise: Promise<string | null> | null = null;
+let tokenRefreshTimeout: NodeJS.Timeout | null = null;
 
 export const setTokenGetter = (getter: any) => {
-  tokenGetter = async () => {
+  tokenGetter = getter;
+  
+  // Clear existing timeout if any
+  if (tokenRefreshTimeout) {
+    clearTimeout(tokenRefreshTimeout);
+    tokenRefreshTimeout = null;
+  }
+  
+  // Reset the token promise
+  tokenPromise = null;
+};
+
+// Get token with caching to prevent multiple simultaneous requests
+const getToken = async (): Promise<string | null> => {
+  if (!tokenGetter) {
+    console.error('Token getter not initialized');
+    return null;
+  }
+
+  // If a token request is already in progress, return the existing promise
+  if (tokenPromise) {
+    return tokenPromise;
+  }
+
+  // Create a new promise to get the token
+  tokenPromise = (async () => {
     try {
-      return await getter();
+      const token = await tokenGetter();
+      
+      // Set a timeout to refresh the token promise after 50 minutes
+      // This ensures we don't keep using the same promise indefinitely
+      if (tokenRefreshTimeout) {
+        clearTimeout(tokenRefreshTimeout);
+      }
+      
+      tokenRefreshTimeout = setTimeout(() => {
+        tokenPromise = null;
+      }, 50 * 60 * 1000); // 50 minutes in milliseconds
+      
+      return token;
     } catch (error) {
       console.error('Error getting token:', error);
       return null;
     }
-  };
-};
+  })();
 
-// Check if authenticated with Clerk
-export const isAuthenticated = async () => {
-  if (!tokenGetter) {
-    console.error('Token getter not set. Call setTokenGetter first.');
-    return false;
-  }
-  
-  try {
-    const token = await tokenGetter();
-    return !!token;
-  } catch (error) {
-    console.error('Error checking authentication status:', error);
-    return false;
-  }
+  return tokenPromise;
 };
 
 // Add token to requests
 apiClient.interceptors.request.use(async (config) => {
-  if (tokenGetter) {
-    try {
-      const token = await tokenGetter();
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch (error) {
-      console.error('Error getting token for request:', error);
+  // For GET requests, check cache first
+  if (config.method?.toLowerCase() === 'get' && !config.params?.skipCache) {
+    const cacheKey = `${config.url}${JSON.stringify(config.params || {})}`;
+    const cachedData = apiCache.get(cacheKey);
+    
+    if (cachedData) {
+      // Return early with cached data
+      return {
+        ...config,
+        adapter: () => {
+          return Promise.resolve({
+            data: cachedData,
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            config,
+            cached: true
+          });
+        }
+      };
     }
   }
+
+  try {
+    const token = await getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      // If no token available, redirect to sign-in
+      window.location.href = '/sign-in';
+      return Promise.reject('No authentication token available');
+    }
+  } catch (error) {
+    console.error('Error getting token for request:', error);
+    window.location.href = '/sign-in';
+    return Promise.reject(error);
+  }
+  
   return config;
 });
 
-// Handle response errors (especially auth errors)
+// Enhanced response handling interceptor with caching
 apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // Handle 401 Unauthorized errors
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      console.error('Authentication error:', error.response.data);
+  (response) => {
+    // Only cache GET requests
+    if (response.config.method?.toLowerCase() === 'get' && !response.config.params?.skipCache) {
+      const cacheKey = `${response.config.url}${JSON.stringify(response.config.params || {})}`;
       
-      // If not already on sign-in page, redirect to sign-in
-      if (window.location.pathname !== '/sign-in') {
-        window.location.href = '/sign-in';
+      // Determine cache TTL based on the resource type
+      let cacheTTL = 5 * 60 * 1000; // Default 5 minutes
+      
+      const url = response.config.url || '';
+      
+      // Cache different resources for different durations
+      if (url.includes('/employees')) {
+        cacheTTL = 10 * 60 * 1000; // 10 minutes for employees
+      } else if (url.includes('/teams')) {
+        cacheTTL = 15 * 60 * 1000; // 15 minutes for teams
+      } else if (url.includes('/interviews')) {
+        cacheTTL = 5 * 60 * 1000; // 5 minutes for interviews
+      } else if (url.includes('/notifications')) {
+        cacheTTL = 2 * 60 * 1000; // 2 minutes for notifications (more real-time)
+      }
+      
+      // Store response in cache
+      apiCache.set(cacheKey, response.data, cacheTTL);
+    }
+    
+    return response;
+  },
+  (error) => {
+    if (error.response) {
+      const { status, data } = error.response;
+      
+      // Handle authentication errors
+      if (status === 401 || status === 403) {
+        console.error('Authentication error:', data);
+        
+        // Save the current path for redirect after login
+        if (window.location.pathname !== '/sign-in') {
+          localStorage.setItem('redirectAfterLogin', window.location.pathname + window.location.search);
+          window.location.href = '/sign-in';
+        }
+      }
+      
+      // Handle server errors
+      if (status >= 500) {
+        console.error('Server error:', data);
+      }
+      
+      // Handle network errors
+      if (!status) {
+        console.error('Network error:', error.message);
       }
     }
+    
     return Promise.reject(error);
   }
 );
+
+// Function to invalidate cache for specific endpoints
+export const invalidateCache = (endpoint: string) => {
+  apiCache.invalidateByPrefix(endpoint);
+};
 
 // API Services
 export const authService = {
   logout: () => {
     // No local token to remove with Clerk
     // Clerk handles logout via its components/hooks
-  },
-  checkHealth: async () => {
-    try {
-      // Remove /api from the URL since health endpoint is at the root
-      const baseUrl = API_URL.replace('/api', '');
-      const response = await axios.get(`${baseUrl}/health`);
-      console.log('Health check response:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('Health check failed:', error);
-      throw error;
-    }
+    
+    // But we can clear the cache
+    apiCache.clear();
   }
 };
 
@@ -114,13 +251,19 @@ export const taskService = {
     return await apiClient.get(`/tasks/${id}`);
   },
   createTask: async (task: { title: string; description?: string; dueDate?: string; userId: number }) => {
-    return await apiClient.post('/tasks', task);
+    const response = await apiClient.post('/tasks', task);
+    invalidateCache('/tasks');
+    return response;
   },
   updateTask: async (id: number, task: { title?: string; description?: string; completed?: boolean; dueDate?: string }) => {
-    return await apiClient.put(`/tasks/${id}`, task);
+    const response = await apiClient.put(`/tasks/${id}`, task);
+    invalidateCache('/tasks');
+    return response;
   },
   deleteTask: async (id: number) => {
-    return await apiClient.delete(`/tasks/${id}`);
+    const response = await apiClient.delete(`/tasks/${id}`);
+    invalidateCache('/tasks');
+    return response;
   },
 };
 
@@ -137,10 +280,15 @@ export const teamService = {
     name?: string; 
     department?: string;
   }) => {
-    return await apiClient.put(`/teams/${id}`, team);
+    const response = await apiClient.put(`/teams/${id}`, team);
+    invalidateCache('/teams');
+    return response;
   },
   deleteTeam: async (id: number) => {
-    return await apiClient.delete(`/teams/${id}`);
+    const response = await apiClient.delete(`/teams/${id}`);
+    invalidateCache('/teams');
+    invalidateCache('/employees'); // Employees may reference teams
+    return response;
   },
 };
 
@@ -159,10 +307,14 @@ export const interviewService = {
     interviewName?: string; 
     dateTaken?: string;
   }) => {
-    return await apiClient.put(`/interviews/${id}`, interview);
+    const response = await apiClient.put(`/interviews/${id}`, interview);
+    invalidateCache('/interviews');
+    return response;
   },
   deleteInterview: async (id: number) => {
-    return await apiClient.delete(`/interviews/${id}`);
+    const response = await apiClient.delete(`/interviews/${id}`);
+    invalidateCache('/interviews');
+    return response;
   },
   getInterviewAnswers: async (id: number) => {
     return await apiClient.get(`/interviews/${id}/answers`);
@@ -171,7 +323,9 @@ export const interviewService = {
     firstAnswer: string;
     secondAnswer: string;
   }) => {
-    return await apiClient.post(`/interviews/${id}/answers`, answers);
+    const response = await apiClient.post(`/interviews/${id}/answers`, answers);
+    invalidateCache(`/interviews/${id}/answers`);
+    return response;
   }
 };
 
@@ -193,7 +347,9 @@ export const employeeService = {
     teamId: number;
     startDate: string;
   }) => {
-    return await apiClient.post('/employees', employee);
+    const response = await apiClient.post('/employees', employee);
+    invalidateCache('/employees');
+    return response;
   },
   updateEmployee: async (id: number, employee: {
     name?: string;
@@ -202,26 +358,16 @@ export const employeeService = {
     teamId?: number;
     startDate?: string;
   }) => {
-    return await apiClient.put(`/employees/${id}`, employee);
+    const response = await apiClient.put(`/employees/${id}`, employee);
+    invalidateCache('/employees');
+    invalidateCache(`/employees/${id}`);
+    return response;
   },
   deleteEmployee: async (id: number) => {
-    return await apiClient.delete(`/employees/${id}`);
-  }
-};
-
-// Notification Service
-export const notificationService = {
-  getAllNotifications: async () => {
-    return await apiClient.get('/notifications');
-  },
-  getUnreadNotifications: async () => {
-    return await apiClient.get('/notifications/unread');
-  },
-  markAsRead: async (id: number) => {
-    return await apiClient.put(`/notifications/${id}/read`);
-  },
-  markAllAsRead: async () => {
-    return await apiClient.put('/notifications/read-all');
+    const response = await apiClient.delete(`/employees/${id}`);
+    invalidateCache('/employees');
+    invalidateCache(`/employees/${id}`);
+    return response;
   }
 };
 

@@ -1,32 +1,42 @@
 import { SignIn as ClerkSignIn } from '@clerk/clerk-react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 
 const SignIn = () => {
-  const navigate = useNavigate()
+  const location = useLocation()
+
+  // Log when we arrive at sign-in page to help debugging
+  useEffect(() => {
+    console.log('Login page loaded with search params:', location.search)
+  }, [location])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8 p-10 bg-white rounded-xl shadow-md">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
-          </h2>
-        </div>
-        
-        <ClerkSignIn 
-          path="/sign-in"
-          signUpUrl="/sign-up"
-          redirectUrl="/"
-          appearance={{
-            elements: {
-              rootBox: "w-full mx-auto",
-              card: "shadow-none border-0 p-0",
-              formButtonPrimary: "bg-indigo-600 hover:bg-indigo-700 text-sm font-medium py-2",
-              footerActionLink: "text-indigo-600 hover:text-indigo-500"
-            }
-          }}
-        />
-      </div>
+      <ClerkSignIn 
+        signUpUrl="/sign-up"
+        redirectUrl="/"
+        afterSignInUrl="/"
+        appearance={{
+          layout: {
+            socialButtonsVariant: "iconButton",
+            socialButtonsPlacement: "bottom",
+            logoPlacement: "inside",
+          },
+          elements: {
+            rootBox: "mx-auto w-full max-w-md",
+            card: "shadow-xl border rounded-lg",
+            formButtonPrimary: "bg-indigo-600 hover:bg-indigo-700 text-sm font-medium py-2",
+            footerActionLink: "text-indigo-600 hover:text-indigo-500",
+            formFieldInput: "rounded-md border-gray-300",
+            dividerLine: "bg-gray-200",
+            dividerText: "text-gray-500",
+            formFieldLabel: "text-gray-700",
+            headerTitle: "text-2xl font-bold",
+            headerSubtitle: "text-gray-600",
+            socialButtonsIconButton: "border border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+          }
+        }}
+      />
     </div>
   )
 }

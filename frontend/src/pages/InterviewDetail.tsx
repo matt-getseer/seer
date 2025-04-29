@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
+import { interviewService } from '../api/client'
 import { useParams, useNavigate } from 'react-router-dom'
-import { interviewService, isTokenValid } from '../api/client'
 import { format, isValid, parseISO } from 'date-fns'
 import { AxiosError } from 'axios'
 
@@ -84,13 +84,6 @@ const InterviewDetail = () => {
   }, [id])
 
   useEffect(() => {
-    if (!isTokenValid()) {
-      // Save the current path before redirecting to login
-      localStorage.setItem('lastRoute', window.location.pathname)
-      navigate('/login')
-      return
-    }
-
     // Get the interview ID from params or sessionStorage if refreshed
     const interviewId = id || sessionStorage.getItem('currentInterviewId')
     
@@ -110,12 +103,7 @@ const InterviewDetail = () => {
         console.error('Failed to fetch interview:', err)
         const axiosError = err as AxiosError
         
-        if (axiosError.response?.status === 401) {
-          // Save current path before redirecting
-          localStorage.setItem('lastRoute', window.location.pathname)
-          setError('Authentication error. Please log in again.')
-          navigate('/login')
-        } else if (axiosError.response?.status === 404) {
+        if (axiosError.response?.status === 404) {
           setError('Interview not found.')
         } else {
           setError('Failed to load interview details.')
@@ -126,7 +114,7 @@ const InterviewDetail = () => {
     }
 
     fetchInterview()
-  }, [id, navigate])
+  }, [id])
 
   const formatDate = (dateString: string) => {
     try {

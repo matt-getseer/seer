@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { teamService, isTokenValid, authService } from '../api/client'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { teamService } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import { AxiosError } from 'axios'
 import { MagnifyingGlass } from '@phosphor-icons/react'
@@ -31,63 +31,17 @@ const Teams = () => {
   const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState('')
 
-  const checkApiHealth = async () => {
-    try {
-      await authService.checkHealth();
-      console.log('API is healthy');
-      return true;
-    } catch (error) {
-      console.error('API health check failed:', error);
-      setError('Cannot connect to the server. Please try again later.');
-      return false;
-    }
-  };
-
   const fetchTeams = useCallback(async () => {
+    if (!loading) return; // Prevent multiple simultaneous fetches
     try {
-      setLoading(true)
-      
-      // Check API health first
-      const isApiHealthy = await checkApiHealth();
-      if (!isApiHealthy) {
-        setLoading(false);
-        return;
-      }
-      
-      // Check if user is logged in with valid token
-      if (!isTokenValid()) {
-        console.error('No valid authentication token found')
-        setError('Please log in to view teams')
-        setLoading(false)
-        navigate('/login')
-        return
-      }
-      
       const response = await teamService.getAllTeams()
-      console.log('API Response:', response.data)
       setTeams(response.data)
-      setError('')
+      setError(null)
     } catch (err) {
       console.error('Failed to fetch teams:', err)
       const axiosError = err as AxiosError
-      console.error('Error details:', {
-        status: axiosError.response?.status,
-        statusText: axiosError.response?.statusText,
-        data: axiosError.response?.data,
-        headers: axiosError.response?.headers,
-        config: {
-          url: axiosError.config?.url,
-          method: axiosError.config?.method,
-          baseURL: axiosError.config?.baseURL,
-          headers: axiosError.config?.headers
-        }
-      })
       
-      if (axiosError.response?.status === 401) {
-        setError('Authentication error. Please log in again.')
-        localStorage.removeItem('token')
-        navigate('/login')
-      } else if (axiosError.response?.status === 404) {
+      if (axiosError.response?.status === 404) {
         setError('No teams found or teams endpoint unavailable.')
       } else {
         setError('Failed to load teams. Please try again later.')
@@ -95,31 +49,61 @@ const Teams = () => {
     } finally {
       setLoading(false)
     }
-  }, [navigate])
+  }, [loading]) // Only depend on loading state
 
   useEffect(() => {
-    fetchTeams()
-  }, [fetchTeams])
+    let mounted = true;
+    
+    const load = async () => {
+      setLoading(true);
+      try {
+        const response = await teamService.getAllTeams();
+        if (mounted) {
+          setTeams(response.data);
+          setError(null);
+        }
+      } catch (err) {
+        console.error('Failed to fetch teams:', err);
+        if (mounted) {
+          const axiosError = err as AxiosError;
+          if (axiosError.response?.status === 404) {
+            setError('No teams found or teams endpoint unavailable.');
+          } else {
+            setError('Failed to load teams. Please try again later.');
+          }
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
 
-  // Navigate to employee profile
-  const handleEmployeeClick = (id: number) => {
+    load();
+
+    return () => {
+      mounted = false;
+    };
+  }, []); // Empty deps array since we handle cleanup
+
+  const handleEmployeeClick = useCallback((id: number) => {
     navigate(`/employees/${id}`)
-  }
+  }, [navigate])
 
-  // Filter teams based on search term
-  const filteredTeams = teams.filter(team => {
-    const teamMatches = team.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                        team.department.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    // Search employees
-    const employeeMatches = team.employees.some(employee => 
-      employee.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      employee.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.email.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    
-    return teamMatches || employeeMatches
-  })
+  const filteredTeams = useMemo(() => {
+    return teams.filter(team => {
+      const teamMatches = team.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          team.department.toLowerCase().includes(searchTerm.toLowerCase())
+      
+      const employeeMatches = team.employees.some(employee => 
+        employee.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        employee.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        employee.email.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      
+      return teamMatches || employeeMatches
+    })
+  }, [teams, searchTerm])
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

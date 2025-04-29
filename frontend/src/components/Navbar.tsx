@@ -1,25 +1,50 @@
-import { Bell, Question, CaretRight } from '@phosphor-icons/react'
-import { FC, useState, useEffect } from 'react'
+import { Question, CaretRight } from '@phosphor-icons/react'
+import { FC, useState, useEffect, useCallback, useMemo, memo } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { UserButton, useClerk } from '@clerk/clerk-react'
+import { UserButton, useClerk, OrganizationSwitcher } from '@clerk/clerk-react'
 import { employeeService } from '../api/client'
-import NotificationCenter from './NotificationCenter'
 
-const Navbar: FC = () => {
+// Cache for employee name lookups
+const employeeNameCache: Record<string, string> = {};
+
+// Memoized breadcrumb item component
+const BreadcrumbItem = memo(({ breadcrumb, isLast, index }: { 
+  breadcrumb: { name: string; path: string; }; 
+  isLast: boolean;
+  index: number;
+}) => (
+  <li key={breadcrumb.path} className="flex items-center">
+    {index > 0 && (
+      <CaretRight className="mx-1 h-4 w-4 flex-shrink-0 text-gray-400" />
+    )}
+    <Link
+      to={breadcrumb.path}
+      className={`text-xs font-medium ${
+        isLast
+          ? 'text-gray-900'
+          : 'text-gray-500 hover:text-gray-700'
+      }`}
+      style={{ fontSize: '12px' }}
+    >
+      {breadcrumb.name}
+    </Link>
+  </li>
+));
+
+const Navbar: FC = memo(() => {
   const navigate = useNavigate()
   const location = useLocation()
   const { signOut } = useClerk()
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
-  const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false)
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await signOut()
-    navigate('/sign-in')
-  }
+    navigate('/login')
+  }, [signOut, navigate])
 
-  // Fetch employee data for ID-based routes
+  // Fetch employee data for ID-based routes with caching
   useEffect(() => {
+    let isMounted = true;
     const pathnames = location.pathname.split('/').filter(path => path)
     
     // Look for numeric IDs that might be employee IDs
@@ -27,25 +52,53 @@ const Navbar: FC = () => {
       if (!isNaN(Number(segment)) && index > 0 && pathnames[index-1] === 'employees') {
         const employeeId = segment
         
+        // Check cache first, then state, then fetch
+        if (employeeNameCache[employeeId]) {
+          if (!employeeNames[employeeId]) {
+            setEmployeeNames(prev => ({
+              ...prev,
+              [employeeId]: employeeNameCache[employeeId]
+            }));
+          }
+          return;
+        }
+        
         // Only fetch if we don't already have this employee's name
         if (!employeeNames[employeeId]) {
-          employeeService.getEmployeeById(Number(employeeId))
-            .then(response => {
-              setEmployeeNames(prev => ({
-                ...prev,
-                [employeeId]: response.data.name
-              }))
-            })
-            .catch(err => {
-              console.error('Error fetching employee:', err)
-            })
+          // Add debouncing to prevent rapid API calls
+          const timer = setTimeout(() => {
+            employeeService.getEmployeeById(Number(employeeId))
+              .then(response => {
+                const employeeName = response.data.name;
+                // Update cache
+                employeeNameCache[employeeId] = employeeName;
+                
+                if (isMounted) {
+                  setEmployeeNames(prev => ({
+                    ...prev,
+                    [employeeId]: employeeName
+                  }));
+                }
+              })
+              .catch(err => {
+                console.error('Error fetching employee:', err)
+              })
+          }, 300)
+          
+          return () => {
+            clearTimeout(timer);
+          }
         }
       }
     })
+    
+    return () => {
+      isMounted = false;
+    };
   }, [location.pathname, employeeNames])
 
   // Generate breadcrumbs based on current path
-  const generateBreadcrumbs = () => {
+  const breadcrumbs = useMemo(() => {
     const pathnames = location.pathname.split('/').filter(path => path)
     
     // Map of path segments to readable names
@@ -88,19 +141,7 @@ const Navbar: FC = () => {
         path
       }
     })
-  }
-
-  // Handle closing the notification center
-  const handleCloseNotificationCenter = () => {
-    setIsNotificationCenterOpen(false)
-  }
-
-  // Handle notification count updates
-  const handleUnreadCountChange = (count: number) => {
-    setUnreadNotificationCount(count)
-  }
-
-  const breadcrumbs = generateBreadcrumbs()
+  }, [location.pathname, employeeNames])
 
   return (
     <>
@@ -111,22 +152,12 @@ const Navbar: FC = () => {
               <nav className="flex" aria-label="Breadcrumb">
                 <ol className="flex items-center space-x-2">
                   {breadcrumbs.map((breadcrumb, index) => (
-                    <li key={breadcrumb.path} className="flex items-center">
-                      {index > 0 && (
-                        <CaretRight className="mx-1 h-4 w-4 flex-shrink-0 text-gray-400" />
-                      )}
-                      <Link
-                        to={breadcrumb.path}
-                        className={`text-xs font-medium ${
-                          index === breadcrumbs.length - 1
-                            ? 'text-gray-900'
-                            : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                        style={{ fontSize: '12px' }}
-                      >
-                        {breadcrumb.name}
-                      </Link>
-                    </li>
+                    <BreadcrumbItem 
+                      key={breadcrumb.path}
+                      breadcrumb={breadcrumb}
+                      isLast={index === breadcrumbs.length - 1}
+                      index={index}
+                    />
                   ))}
                 </ol>
               </nav>
@@ -136,40 +167,32 @@ const Navbar: FC = () => {
               <button className="p-1.5 text-gray-500 hover:text-gray-600">
                 <Question className="h-5 w-5" />
               </button>
-              <button 
-                className="p-1.5 text-gray-500 hover:text-gray-600 relative"
-                onClick={() => setIsNotificationCenterOpen(true)}
-                aria-label={`Open notifications (${unreadNotificationCount} unread)`}
-              >
-                <Bell className="h-5 w-5" />
-                {unreadNotificationCount > 0 && (
-                  <span className="absolute top-0 right-0 flex items-center justify-center">
-                    {unreadNotificationCount > 9 ? (
-                      <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-xs text-white">
-                        9+
-                      </span>
-                    ) : (
-                      <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-xs text-white">
-                        {unreadNotificationCount}
-                      </span>
-                    )}
-                  </span>
-                )}
-              </button>
-              <UserButton afterSignOutUrl="/sign-in" />
+              <OrganizationSwitcher 
+                hidePersonal
+                afterCreateOrganizationUrl="/#/organizations/:id"
+                afterLeaveOrganizationUrl="/#/"
+                afterSelectOrganizationUrl="/#/organizations/:id"
+                appearance={{
+                  elements: {
+                    rootBox: "flex items-center",
+                    organizationSwitcherTrigger: "flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100"
+                  }
+                }}
+              />
+              <UserButton 
+                afterSignOutUrl="/#/login"
+                appearance={{
+                  elements: {
+                    avatarBox: "w-8 h-8"
+                  }
+                }}
+              />
             </div>
           </div>
         </div>
       </nav>
-
-      {/* Notification Center */}
-      <NotificationCenter 
-        isOpen={isNotificationCenterOpen} 
-        onClose={handleCloseNotificationCenter}
-        onUnreadCountChange={handleUnreadCountChange}
-      />
     </>
   )
-}
+})
 
 export default Navbar 
