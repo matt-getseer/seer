@@ -29,17 +29,6 @@ interface Team {
   [key: string]: any; // To allow adding interviewCount
 }
 
-interface Interview {
-  id: number;
-  name: string;
-  team: string;
-  interviewName: string;
-  dateTaken: Date;
-  userId: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 const router = express.Router();
 const prisma = new PrismaClient();
 
@@ -110,38 +99,8 @@ const getAllTeams = async (req: AuthenticatedRequest, res: Response): Promise<vo
       }
     });
     
-    // Get all interviews for this user
-    const interviews = await typedPrismaClient.interview.findMany({
-      where: {
-        userId: req.user.userId
-      }
-    });
-    
-    // Add interview counts for each employee
-    const teamsWithEmployeeInterviewCounts = teams.map((team: Team) => {
-      // Process employees to add interview counts
-      const employeesWithInterviewCounts = team.employees.map((employee: any) => {
-        // Count interviews for this employee by name match
-        const interviewCount = interviews.filter((interview: Interview) => 
-          interview.name.toLowerCase() === employee.name.toLowerCase()
-        ).length;
-        
-        // Add interview count to employee data
-        return {
-          ...employee,
-          interviewCount
-        };
-      });
-      
-      // Return team with updated employees array
-      return {
-        ...team,
-        employees: employeesWithInterviewCounts
-      };
-    });
-    
     console.log(`Found ${teams.length} teams for user ${req.user.userId}`);
-    res.json(teamsWithEmployeeInterviewCounts);
+    res.json(teams);
   } catch (error) {
     console.error('Error in getAllTeams:', error);
     if (error instanceof Error) {

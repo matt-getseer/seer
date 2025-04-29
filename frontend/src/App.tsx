@@ -7,8 +7,6 @@ import SearchModal from './components/SearchModal'
 import Home from './pages/Home'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
-import Interviews from './pages/Interviews'
-import InterviewDetail from './pages/InterviewDetail'
 import Employees from './pages/Employees'
 import Teams from './pages/Teams'
 import SignIn from './pages/SignIn'
@@ -26,45 +24,6 @@ const Engagement = lazy(() => import('./pages/reports/Engagement'))
 const Sentiment = lazy(() => import('./pages/reports/Sentiment'))
 const TopPerformer = lazy(() => import('./pages/reports/TopPerformer'))
 const EmployeesAtRisk = lazy(() => import('./pages/reports/EmployeesAtRisk'))
-
-// Route persistence wrapper component
-const RoutePersistence = memo(({ children }: { children: React.ReactNode }) => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { isSignedIn } = useAuth();
-
-  // Save route on change, but only for meaningful navigation
-  useEffect(() => {
-    const isAuthPage = location.pathname === '/sign-in' || location.pathname === '/sign-up';
-    const isRoot = location.pathname === '/';
-    
-    if (!isAuthPage && !isRoot) {
-      const currentRoute = location.pathname + location.search;
-      const lastRoute = localStorage.getItem('lastRoute');
-      
-      // Only update localStorage if the route has actually changed
-      if (lastRoute !== currentRoute) {
-        localStorage.setItem('lastRoute', currentRoute);
-      }
-    }
-  }, [location.pathname, location.search]);
-
-  // Restore route on mount - only redirect if at root and logged in
-  useEffect(() => {
-    const lastRoute = localStorage.getItem('lastRoute');
-    // Prevent redirects to auth pages
-    if (lastRoute && 
-        location.pathname === '/' && 
-        isSignedIn && 
-        lastRoute !== '/' && 
-        !lastRoute.includes('/sign-in') && 
-        !lastRoute.includes('/sign-up')) {
-      navigate(lastRoute, { replace: true });
-    }
-  }, [navigate, location.pathname, isSignedIn]);
-
-  return <>{children}</>;
-});
 
 // Navigation setup component
 const NavigationSetup = memo(({ children }: { children: React.ReactNode }) => {
@@ -218,305 +177,273 @@ function App() {
   return (
     <Router>
       <NavigationSetup>
-        <RoutePersistence>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/sign-in" element={
-              isSignedIn 
-                ? <Navigate to="/" replace /> 
-                : <ClearRedirects><SignIn /></ClearRedirects>
-            } />
-            <Route path="/sign-up" element={
-              isSignedIn 
-                ? <Navigate to="/" replace /> 
-                : <ClearRedirects><SignUp /></ClearRedirects>
-            } />
-            
-            {/* Organization Routes */}
-            <Route 
-              path="/organizations/new" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <CreateOrganization />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/organizations/:orgId" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <OrganizationProfile />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/organizations/:orgId/settings" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <OrganizationSettings />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/organizations/:orgId/members" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <OrganizationMembers />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* Protected Routes */}
-            <Route 
-              path="/" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Home />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/employees" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Employees />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/employees/:id" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Employees />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/teams" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Teams />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/interviews" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Interviews />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/interviews/:id" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <InterviewDetail />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/reports" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Reports />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/reports/team-performance" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Suspense fallback={<div>Loading...</div>}>
-                      <TeamPerformance />
-                    </Suspense>
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/reports/core-competency" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Suspense fallback={<div>Loading...</div>}>
-                      <CoreCompetency />
-                    </Suspense>
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/reports/engagement" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Suspense fallback={<div>Loading...</div>}>
-                      <Engagement />
-                    </Suspense>
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/reports/sentiment" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Suspense fallback={<div>Loading...</div>}>
-                      <Sentiment />
-                    </Suspense>
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/reports/top-performer" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Suspense fallback={<div>Loading...</div>}>
-                      <TopPerformer />
-                    </Suspense>
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/reports/employees-at-risk" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Suspense fallback={<div>Loading...</div>}>
-                      <EmployeesAtRisk />
-                    </Suspense>
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/settings" 
-              element={
-                <ProtectedRoute>
-                  <MainLayout
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={handleSetSidebarCollapsed}
-                    setSearchModalOpen={handleSetSearchModalOpen}
-                  >
-                    <Settings />
-                  </MainLayout>
-                </ProtectedRoute>
-              } 
-            />
-          </Routes>
-        </RoutePersistence>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/sign-in" element={
+            isSignedIn 
+              ? <Navigate to="/" replace /> 
+              : <ClearRedirects><SignIn /></ClearRedirects>
+          } />
+          <Route path="/sign-up" element={
+            isSignedIn 
+              ? <Navigate to="/" replace /> 
+              : <ClearRedirects><SignUp /></ClearRedirects>
+          } />
+          
+          {/* Organization Routes */}
+          <Route 
+            path="/organizations/new" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <CreateOrganization />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/organizations/:orgId" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <OrganizationProfile />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/organizations/:orgId/settings" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <OrganizationSettings />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/organizations/:orgId/members" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <OrganizationMembers />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* Protected Routes */}
+          <Route 
+            path="/" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Home />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/employees" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Employees />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/employees/:id" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Employees />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/teams" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Teams />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Reports />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/team-performance" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <TeamPerformance />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/core-competency" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <CoreCompetency />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/engagement" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <Engagement />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/sentiment" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <Sentiment />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/top-performer" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <TopPerformer />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reports/employees-at-risk" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Suspense fallback={<div>Loading...</div>}>
+                    <EmployeesAtRisk />
+                  </Suspense>
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/settings" 
+            element={
+              <ProtectedRoute>
+                <MainLayout
+                  sidebarCollapsed={sidebarCollapsed}
+                  setSidebarCollapsed={handleSetSidebarCollapsed}
+                  setSearchModalOpen={handleSetSearchModalOpen}
+                >
+                  <Settings />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+        </Routes>
         {renderSearchModal()}
       </NavigationSetup>
     </Router>

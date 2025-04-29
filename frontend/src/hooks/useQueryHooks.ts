@@ -1,19 +1,28 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { employeeService, teamService, interviewService } from '../api/client';
+import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
+import { employeeService, teamService } from '../api/client';
 import { AxiosError } from 'axios';
 
 /**
  * React Query-based hooks for API data fetching with optimized caching and state management
  */
 
+// Define a generic type for the options to make it cleaner
+type QueryHookOptions<TData = unknown, TError = unknown> = Omit<
+  UseQueryOptions<TData, TError>,
+  'queryKey' | 'queryFn'
+>;
+
 // Employee hooks
-export function useEmployees() {
-  return useQuery({
+export function useEmployees<TData = any, TError = unknown>(
+  options?: QueryHookOptions<TData, TError>
+) {
+  return useQuery<TData, TError>({
     queryKey: ['employees'],
     queryFn: async () => {
       const response = await employeeService.getAllEmployees();
       return response.data;
-    }
+    },
+    ...options, // Spread the options here
   });
 }
 
@@ -108,13 +117,16 @@ export function useDeleteEmployee() {
 }
 
 // Team hooks
-export function useTeams() {
-  return useQuery({
+export function useTeams<TData = any, TError = unknown>(
+  options?: QueryHookOptions<TData, TError>
+) {
+  return useQuery<TData, TError>({
     queryKey: ['teams'],
     queryFn: async () => {
       const response = await teamService.getAllTeams();
       return response.data;
-    }
+    },
+    ...options, // Spread the options here
   });
 }
 
@@ -167,59 +179,3 @@ export function useDeleteTeam() {
     }
   });
 }
-
-// Interview hooks
-export function useInterviews() {
-  return useQuery({
-    queryKey: ['interviews'],
-    queryFn: async () => {
-      const response = await interviewService.getAllInterviews();
-      return response.data;
-    }
-  });
-}
-
-export function useInterview(id: number | null) {
-  return useQuery({
-    queryKey: ['interview', id],
-    queryFn: async () => {
-      if (!id) return null;
-      const response = await interviewService.getInterviewById(id);
-      return response.data;
-    },
-    enabled: !!id, // Only run query if id is provided
-  });
-}
-
-export function useInterviewAnswers(id: number | null) {
-  return useQuery({
-    queryKey: ['interview', id, 'answers'],
-    queryFn: async () => {
-      if (!id) return null;
-      const response = await interviewService.getInterviewAnswers(id);
-      return response.data;
-    },
-    enabled: !!id, // Only run query if id is provided
-  });
-}
-
-export function useSaveInterviewAnswers() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async ({ id, answers }: {
-      id: number;
-      answers: {
-        firstAnswer: string;
-        secondAnswer: string;
-      }
-    }) => {
-      const response = await interviewService.saveInterviewAnswers(id, answers);
-      return response.data;
-    },
-    onSuccess: (_, variables) => {
-      // Invalidate relevant queries to trigger refetching
-      queryClient.invalidateQueries({ queryKey: ['interview', variables.id, 'answers'] });
-    }
-  });
-} 

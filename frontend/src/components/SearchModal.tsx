@@ -2,8 +2,8 @@ import { useState, useEffect, Fragment, useRef, useCallback, useMemo, memo } fro
 import { Dialog, Transition } from '@headlessui/react'
 import { MagnifyingGlass, X } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
-import { useEmployees, useTeams, useInterviews } from '../hooks/useQueryHooks'
-import useDebounce from '../hooks/useDebounce'
+import { useEmployees, useTeams } from '../hooks/useQueryHooks'
+import useDebounce from '@/hooks/useDebounce'
 
 // Define types for the data models
 type Employee = {
@@ -30,23 +30,12 @@ type Team = {
   userId: number
 }
 
-type Interview = {
-  id: number
-  name: string
-  team: string
-  interviewName: string
-  dateTaken: string
-  createdAt: string
-  updatedAt: string
-  userId: number
-}
-
 // Define types for search results
 type SearchResult = {
   id: string | number
   title: string
   subtitle?: string
-  type: 'employee' | 'team' | 'interview'
+  type: 'employee' | 'team'
   url: string
 }
 
@@ -60,7 +49,6 @@ interface SearchModalProps {
 const searchDataCache = {
   employees: null as Employee[] | null,
   teams: null as Team[] | null,
-  interviews: null as Interview[] | null,
   lastFetched: 0,
   // Cache expires after 5 minutes
   isCacheValid: () => (Date.now() - searchDataCache.lastFetched) < 5 * 60 * 1000
@@ -70,7 +58,6 @@ const searchDataCache = {
 const TypeIcons = {
   employee: memo(() => <div className="p-1.5 bg-blue-100 rounded text-blue-700"><MagnifyingGlass weight="bold" size={16} /></div>),
   team: memo(() => <div className="p-1.5 bg-green-100 rounded text-green-700"><MagnifyingGlass weight="bold" size={16} /></div>),
-  interview: memo(() => <div className="p-1.5 bg-indigo-100 rounded text-indigo-700"><MagnifyingGlass weight="bold" size={16} /></div>),
   default: memo(() => <div className="p-1.5 bg-gray-100 rounded text-gray-700"><MagnifyingGlass weight="bold" size={16} /></div>)
 };
 
@@ -152,13 +139,12 @@ const SearchModal: React.FC<SearchModalProps> = memo(({ onOpen, isOpen: controll
   // Use our custom hook for debouncing search query
   const debouncedQuery = useDebounce(query, 800) // Increased to 800ms for better performance
   
-  // Use React Query hooks for data fetching
-  const { data: employees = [], isLoading: isLoadingEmployees } = useEmployees();
-  const { data: teams = [], isLoading: isLoadingTeams } = useTeams();
-  const { data: interviews = [], isLoading: isLoadingInterviews } = useInterviews();
+  // Use React Query hooks for data fetching - only enable when modal is open
+  const { data: employees = [], isLoading: isLoadingEmployees } = useEmployees({ enabled: controlledIsOpen });
+  const { data: teams = [], isLoading: isLoadingTeams } = useTeams({ enabled: controlledIsOpen });
   
   // Check if any data is still loading
-  const isLoading = isLoadingEmployees || isLoadingTeams || isLoadingInterviews;
+  const isLoading = isLoadingEmployees || isLoadingTeams;
 
   // Open modal with CMD+K shortcut - memoized event handler
   useEffect(() => {
@@ -212,33 +198,17 @@ const SearchModal: React.FC<SearchModalProps> = memo(({ onOpen, isOpen: controll
         title: team.name,
         subtitle: team.department,
         type: 'team' as const,
-        url: `/teams`
-      }));
-    
-    // Search interviews
-    const interviewResults = interviews
-      .filter((interview: Interview) => 
-        interview.name.toLowerCase().includes(lowerQuery) ||
-        interview.interviewName.toLowerCase().includes(lowerQuery) ||
-        interview.team.toLowerCase().includes(lowerQuery)
-      )
-      .map((interview: Interview) => ({
-        id: interview.id,
-        title: interview.interviewName,
-        subtitle: `${interview.name} - ${interview.team}`,
-        type: 'interview' as const,
-        url: `/interviews/${interview.id}`
+        url: `/teams/${team.id}`
       }));
     
     // Combine results
-    searchResults = [
-      ...employeeResults,
-      ...teamResults,
-      ...interviewResults
-    ];
+    searchResults = [...employeeResults, ...teamResults];
     
+    // Sort results (optional, e.g., by type or title)
+    searchResults.sort((a, b) => a.title.localeCompare(b.title));
+
     return searchResults;
-  }, [debouncedQuery, employees, teams, interviews]);
+  }, [debouncedQuery, employees, teams]);
 
   // Reset active index when results change
   useEffect(() => {

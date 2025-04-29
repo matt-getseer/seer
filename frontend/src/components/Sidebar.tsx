@@ -137,14 +137,6 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
           )}
           
           <NavLinkItem 
-            to="/interviews"
-            title="Interviews"
-            isCollapsed={isCollapsed}
-            icon={ChatCircle}
-            label="Interviews"
-          />
-
-          <NavLinkItem 
             to="/employees"
             title="Employees"
             isCollapsed={isCollapsed}

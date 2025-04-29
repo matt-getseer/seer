@@ -275,231 +275,232 @@ const Home = () => {
     
       {/* Company Health Score Header */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg mb-8 overflow-hidden">
-        <div className="p-8">
-          <div className="flex justify-end items-center mb-4">
-            <div className="bg-white bg-opacity-20 rounded-md px-3 py-1 flex items-center">
-              <ArrowUp className="mr-1 text-green-300" size={16} weight="bold" />
-              <span className="text-green-300 font-medium text-sm">+{healthScoreData.change} points</span>
-            </div>
-          </div>
-          
-          <div className="flex flex-col md:flex-row items-center gap-6">
-            <div className="flex-1 flex justify-center">
-              <CircleProgressRing 
-                value={healthScoreData.score} 
-                maxValue={healthScoreData.maxScore} 
-                size={200}
-                strokeWidth={12}
-              />
-            </div>
-            
-            <div className="flex-1">
-              <div className="grid grid-cols-2 gap-4">
-                {healthScoreData.components.map((component, index) => (
-                  <div key={index} className="bg-white bg-opacity-10 rounded-lg p-3">
-                    <p className="text-white opacity-80 text-sm">{component.name}</p>
-                    <div className="flex items-center">
-                      <div className="h-2 flex-1 bg-white bg-opacity-20 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-white" 
-                          style={{width: `${component.value}%`}}
-                        ></div>
-                      </div>
-                      <span className="text-white text-sm ml-2">{component.value}/100</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+         <div className="p-8">
+           <div className="flex justify-end items-center mb-4">
+             <div className="bg-white bg-opacity-20 rounded-md px-3 py-1 flex items-center">
+               <ArrowUp className="mr-1 text-green-300" size={16} weight="bold" />
+               <span className="text-green-300 font-medium text-sm">+{healthScoreData.change} points</span>
+             </div>
+           </div>
+           
+           <div className="flex flex-col md:flex-row items-center gap-6">
+             <div className="flex-1 flex justify-center">
+               <CircleProgressRing 
+                 value={healthScoreData.score} 
+                 maxValue={healthScoreData.maxScore} 
+                 size={200}
+                 strokeWidth={12}
+               />
+             </div>
+             
+             <div className="flex-1">
+               <div className="grid grid-cols-2 gap-4">
+                 {healthScoreData.components.map((component, index) => (
+                   <div key={index} className="bg-white bg-opacity-10 rounded-lg p-3">
+                     <p className="text-white opacity-80 text-sm">{component.name}</p>
+                     <div className="flex items-center">
+                       <div className="h-2 flex-1 bg-white bg-opacity-20 rounded-full overflow-hidden">
+                         <div 
+                           className="h-full bg-white" 
+                           style={{width: `${component.value}%`}}
+                         ></div>
+                       </div>
+                       <span className="text-white text-sm ml-2">{component.value}/100</span>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             </div>
+           </div>
+         </div>
       </div>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white rounded-lg border border-gray-300 p-6 flex items-center">
-          <div className="rounded-full bg-purple-100 p-3 mr-4">
-            <ChartLine size={24} weight="duotone" className="text-purple-700" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Performance Score</p>
-            <p className="text-2xl font-bold text-gray-900">76/100</p>
-            <p className="text-sm text-green-600">+6 from previous</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-300 p-6 flex items-center">
-          <div className="rounded-full bg-green-100 p-3 mr-4">
-            <Users size={24} weight="duotone" className="text-green-700" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Engagement Rate</p>
-            <p className="text-2xl font-bold text-gray-900">83%</p>
-            <p className="text-sm text-green-600">+5% from previous</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-300 p-6 flex items-center">
-          <div className="rounded-full bg-blue-100 p-3 mr-4">
-            <ChartPie size={24} weight="duotone" className="text-blue-700" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Review Completion</p>
-            <p className="text-2xl font-bold text-gray-900">92%</p>
-            <p className="text-sm text-green-600">+7% from previous</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-300 p-6 flex items-center">
-          <div className="rounded-full bg-amber-100 p-3 mr-4">
-            <Lightbulb size={24} weight="duotone" className="text-amber-700" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Growth Areas</p>
-            <p className="text-2xl font-bold text-gray-900">37</p>
-            <p className="text-sm text-green-600">-8 from previous</p>
-          </div>
-        </div>
+         <div className="bg-white rounded-lg border border-gray-300 p-6 flex items-center">
+           <div className="rounded-full bg-purple-100 p-3 mr-4">
+             <ChartLine size={24} weight="duotone" className="text-purple-700" />
+           </div>
+           <div>
+             <p className="text-sm font-medium text-gray-500">Performance Score</p>
+             <p className="text-2xl font-bold text-gray-900">76/100</p>
+             <p className="text-sm text-green-600">+6 from previous</p>
+           </div>
+         </div>
+         <div className="bg-white rounded-lg border border-gray-300 p-6 flex items-center">
+           <div className="rounded-full bg-green-100 p-3 mr-4">
+             <Users size={24} weight="duotone" className="text-green-700" />
+           </div>
+           <div>
+             <p className="text-sm font-medium text-gray-500">Engagement Rate</p>
+             <p className="text-2xl font-bold text-gray-900">83%</p>
+             <p className="text-sm text-green-600">+5% from previous</p>
+           </div>
+         </div>
+         <div className="bg-white rounded-lg border border-gray-300 p-6 flex items-center">
+           <div className="rounded-full bg-blue-100 p-3 mr-4">
+             <ChartPie size={24} weight="duotone" className="text-blue-700" />
+           </div>
+           <div>
+             <p className="text-sm font-medium text-gray-500">Review Completion</p>
+             <p className="text-2xl font-bold text-gray-900">92%</p>
+             <p className="text-sm text-green-600">+7% from previous</p>
+           </div>
+         </div>
+         <div className="bg-white rounded-lg border border-gray-300 p-6 flex items-center">
+           <div className="rounded-full bg-amber-100 p-3 mr-4">
+             <Lightbulb size={24} weight="duotone" className="text-amber-700" />
+           </div>
+           <div>
+             <p className="text-sm font-medium text-gray-500">Growth Areas</p>
+             <p className="text-2xl font-bold text-gray-900">37</p>
+             <p className="text-sm text-green-600">-8 from previous</p>
+           </div>
+         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* Performance Trend Chart */}
         <div className="bg-white rounded-lg overflow-hidden border border-gray-300 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <Lightning size={20} weight="duotone" className="text-indigo-600 mr-2" />
-              <h3 className="text-lg font-medium text-gray-900">Performance & Engagement Trend</h3>
-            </div>
-            <ChartTypeDropdown currentType={performanceChartType} onTypeChange={setPerformanceChartType} />
-          </div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              {renderPerformanceChart(performanceTrendData, performanceChartType)}
-            </ResponsiveContainer>
-          </div>
+           <div className="flex items-center justify-between mb-4">
+             <div className="flex items-center">
+               <Lightning size={20} weight="duotone" className="text-indigo-600 mr-2" />
+               <h3 className="text-lg font-medium text-gray-900">Performance & Engagement Trend</h3>
+             </div>
+             <ChartTypeDropdown currentType={performanceChartType} onTypeChange={setPerformanceChartType} />
+           </div>
+           <div className="h-80">
+             <ResponsiveContainer width="100%" height="100%">
+               {renderPerformanceChart(performanceTrendData, performanceChartType)}
+             </ResponsiveContainer>
+           </div>
         </div>
 
         {/* Team Performance Radar */}
         <div className="bg-white rounded-lg overflow-hidden border border-gray-300 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <Users size={20} weight="duotone" className="text-indigo-600 mr-2" />
-              <h3 className="text-lg font-medium text-gray-900">Team Performance Analysis</h3>
-            </div>
-          </div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
-                <PolarGrid />
-                <PolarAngleAxis dataKey="subject" />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                <Radar name="Current Quarter" dataKey="A" stroke="#8349F0" fill="#8349F0" fillOpacity={0.5} />
-                <Radar name="Previous Quarter" dataKey="B" stroke="#A57CF8" fill="#A57CF8" fillOpacity={0.3} />
-                <Tooltip />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
+           <div className="flex items-center justify-between mb-4">
+             <div className="flex items-center">
+               <Users size={20} weight="duotone" className="text-indigo-600 mr-2" />
+               <h3 className="text-lg font-medium text-gray-900">Team Performance Analysis</h3>
+             </div>
+           </div>
+           <div className="h-80">
+             <ResponsiveContainer width="100%" height="100%">
+               <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+                 <PolarGrid />
+                 <PolarAngleAxis dataKey="subject" />
+                 <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                 <Radar name="Current Quarter" dataKey="A" stroke="#8349F0" fill="#8349F0" fillOpacity={0.5} />
+                 <Radar name="Previous Quarter" dataKey="B" stroke="#A57CF8" fill="#A57CF8" fillOpacity={0.3} />
+                 <Tooltip />
+               </RadarChart>
+             </ResponsiveContainer>
+           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* Competency Analysis */}
         <div className="bg-white rounded-lg overflow-hidden border border-gray-300 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <Brain size={20} weight="duotone" className="text-indigo-600 mr-2" />
-              <h3 className="text-lg font-medium text-gray-900">Core Competency Analysis</h3>
-            </div>
-            <ChartTypeDropdown currentType={competencyChartType} onTypeChange={setCompetencyChartType} />
-          </div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              {renderCompetencyChart(competencyData, competencyChartType)}
-            </ResponsiveContainer>
-          </div>
+           <div className="flex items-center justify-between mb-4">
+             <div className="flex items-center">
+               <Brain size={20} weight="duotone" className="text-indigo-600 mr-2" />
+               <h3 className="text-lg font-medium text-gray-900">Core Competency Analysis</h3>
+             </div>
+             <ChartTypeDropdown currentType={competencyChartType} onTypeChange={setCompetencyChartType} />
+           </div>
+           <div className="h-80">
+             <ResponsiveContainer width="100%" height="100%">
+               {renderCompetencyChart(competencyData, competencyChartType)}
+             </ResponsiveContainer>
+           </div>
         </div>
 
         {/* AI-Analyzed Engagement */}
         <div className="bg-white rounded-lg overflow-hidden border border-gray-300 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <ChartPie size={20} weight="duotone" className="text-indigo-600 mr-2" />
-              <h3 className="text-lg font-medium text-gray-900">AI-Analyzed Engagement</h3>
-            </div>
-          </div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={engagementData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  fill="#8349F0"
-                  dataKey="value"
-                  label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
-                  {engagementData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+           <div className="flex items-center justify-between mb-4">
+             <div className="flex items-center">
+               <ChartPie size={20} weight="duotone" className="text-indigo-600 mr-2" />
+               <h3 className="text-lg font-medium text-gray-900">AI-Analyzed Engagement</h3>
+             </div>
+           </div>
+           <div className="h-80">
+             <ResponsiveContainer width="100%" height="100%">
+               <PieChart>
+                 <Pie
+                   data={engagementData}
+                   cx="50%"
+                   cy="50%"
+                   innerRadius={60}
+                   outerRadius={100}
+                   fill="#8349F0"
+                   dataKey="value"
+                   label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                 >
+                   {engagementData.map((_, index) => (
+                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                   ))}
+                 </Pie>
+                 <Tooltip />
+               </PieChart>
+             </ResponsiveContainer>
+           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* AI Sentiment Analysis */}
         <div className="bg-white rounded-lg overflow-hidden border border-gray-300 p-6">
-          <div className="flex items-center mb-4">
-            <Lightning size={20} weight="duotone" className="text-indigo-600 mr-2" />
-            <h3 className="text-lg font-medium text-gray-900">AI Voice Sentiment Analysis</h3>
-          </div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={sentimentData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="category" stroke="#6B7280" />
-                <YAxis stroke="#6B7280" />
-                <Tooltip />
-                <Bar dataKey="count" name="Count">
-                  {sentimentData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={SENTIMENT_COLORS[index % SENTIMENT_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+           <div className="flex items-center mb-4">
+             <Lightning size={20} weight="duotone" className="text-indigo-600 mr-2" />
+             <h3 className="text-lg font-medium text-gray-900">AI Voice Sentiment Analysis</h3>
+           </div>
+           <div className="h-80">
+             <ResponsiveContainer width="100%" height="100%">
+               <BarChart data={sentimentData}>
+                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                 <XAxis dataKey="category" stroke="#6B7280" />
+                 <YAxis stroke="#6B7280" />
+                 <Tooltip />
+                 <Bar dataKey="count" name="Count">
+                   {sentimentData.map((_, index) => (
+                     <Cell key={`cell-${index}`} fill={SENTIMENT_COLORS[index % SENTIMENT_COLORS.length]} />
+                   ))}
+                 </Bar>
+               </BarChart>
+             </ResponsiveContainer>
+           </div>
         </div>
 
         {/* AI-Generated Insights */}
         <div className="bg-white rounded-lg overflow-hidden border border-gray-300">
-          <div className="bg-gray-50 px-6 py-3 flex items-center">
-            <Brain size={20} weight="duotone" className="text-indigo-600 mr-2" />
-            <h3 className="text-lg font-medium text-gray-900">AI-Generated Performance Insights</h3>
-          </div>
-          <div className="divide-y divide-gray-300">
-            {[
-              { insight: 'Communication skills consistently rated highest across teams', impact: 'Positive', time: '2 hours ago' },
-              { insight: 'Technical skill gaps identified in Engineering Team', impact: 'Needs Attention', time: '5 hours ago' },
-              { insight: 'Leadership development showing improvement in Management', impact: 'Positive', time: '1 day ago' },
-              { insight: 'Employee sentiment trending upward after recent initiatives', impact: 'Positive', time: '1 day ago' },
-            ].map((item, index) => (
-              <div key={index} className="px-6 py-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{item.insight}</p>
-                    <p className={`text-sm ${item.impact === 'Positive' ? 'text-green-600' : 'text-amber-600'}`}>{item.impact}</p>
-                  </div>
-                  <span className="text-sm text-gray-500">{item.time}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+           <div className="bg-gray-50 px-6 py-3 flex items-center">
+             <Brain size={20} weight="duotone" className="text-indigo-600 mr-2" />
+             <h3 className="text-lg font-medium text-gray-900">AI-Generated Performance Insights</h3>
+           </div>
+           <div className="divide-y divide-gray-300">
+             {[
+               { insight: 'Communication skills consistently rated highest across teams', impact: 'Positive', time: '2 hours ago' },
+               { insight: 'Technical skill gaps identified in Engineering Team', impact: 'Needs Attention', time: '5 hours ago' },
+               { insight: 'Leadership development showing improvement in Management', impact: 'Positive', time: '1 day ago' },
+               { insight: 'Employee sentiment trending upward after recent initiatives', impact: 'Positive', time: '1 day ago' },
+             ].map((item, index) => (
+               <div key={index} className="px-6 py-4">
+                 <div className="flex items-center justify-between">
+                   <div>
+                     <p className="text-sm font-medium text-gray-900">{item.insight}</p>
+                     <p className={`text-sm ${item.impact === 'Positive' ? 'text-green-600' : 'text-amber-600'}`}>{item.impact}</p>
+                   </div>
+                   <span className="text-sm text-gray-500">{item.time}</span>
+                 </div>
+               </div>
+             ))}
+           </div>
         </div>
       </div>
+
     </div>
-  )
+  );
 }
 
 export default Home 

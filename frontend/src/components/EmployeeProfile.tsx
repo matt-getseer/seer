@@ -1,11 +1,12 @@
 import { useState, useEffect, memo, useCallback } from 'react';
-import { employeeService, interviewService } from '../api/client';
+import { employeeService } from '../api/client';
 import Flag from 'react-world-flags';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import { useEmployee } from '../hooks/useQueryHooks';
 import { ArrowLeft, EnvelopeSimple, Phone, Calendar, MapPin, Building } from '@phosphor-icons/react';
+import { AxiosResponse } from 'axios';
 
 type Employee = {
   id: number;
@@ -21,17 +22,6 @@ type Employee = {
     department: string;
   };
   healthScore?: number; // Overall score from 0-100
-};
-
-type Interview = {
-  id: number;
-  name: string;
-  team: string;
-  interviewName: string;
-  dateTaken: string;
-  createdAt: string;
-  updatedAt: string;
-  userId: number;
 };
 
 // Mock data for historical performance - would come from API in real implementation
@@ -151,152 +141,277 @@ const ProfileErrorState = memo(({ message, onRetry }: { message: string; onRetry
 ));
 
 // Employee profile content component to reduce re-renders
-const EmployeeProfileContent = memo(({ employee, onClose }: { 
+const EmployeeProfileContent = memo(({ employee, onClose }: {
   employee: any;
   onClose: () => void;
-}) => (
-  <div className="space-y-6">
-    {/* Header with back button */}
-    <div className="flex items-center">
-      <button
-        onClick={onClose}
-        className="mr-4 p-2 rounded-full hover:bg-gray-100 transition-colors"
-        aria-label="Go back"
-      >
-        <ArrowLeft size={20} />
-      </button>
-      <h1 className="text-2xl font-semibold text-gray-900">Employee Profile</h1>
-    </div>
-    
-    {/* Profile header */}
-    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-      <div className="px-4 py-5 sm:px-6 flex justify-between items-start">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">{employee.name}</h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">{employee.title}</p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            Active
-          </span>
-          {employee.team && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              {employee.team.name}
+}) => {
+  const navigate = useNavigate();
+
+  return (
+    <div className="space-y-6">
+      {/* Header with back button */}
+      <div className="flex items-center">
+        <button
+          onClick={onClose}
+          className="mr-4 p-2 rounded-full hover:bg-gray-100 transition-colors"
+          aria-label="Go back"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <h1 className="text-2xl font-semibold text-gray-900">Employee Profile</h1>
+      </div>
+      
+      {/* Profile header */}
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div className="px-4 py-5 sm:px-6 flex justify-between items-start">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">{employee.name}</h2>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500">{employee.title}</p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              Active
             </span>
-          )}
+            {employee.team && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {employee.team.name}
+              </span>
+            )}
+          </div>
+        </div>
+        
+        {/* Profile details */}
+        <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+            <div className="sm:col-span-1">
+              <dt className="text-sm font-medium text-gray-500 flex items-center">
+                <EnvelopeSimple className="mr-2 text-gray-400" size={18} />
+                Email
+              </dt>
+              <dd className="mt-1 text-sm text-gray-900">{employee.email}</dd>
+            </div>
+            
+            <div className="sm:col-span-1">
+              <dt className="text-sm font-medium text-gray-500 flex items-center">
+                <Phone className="mr-2 text-gray-400" size={18} />
+                Phone
+              </dt>
+              <dd className="mt-1 text-sm text-gray-900">{employee.phone || 'Not provided'}</dd>
+            </div>
+            
+            <div className="sm:col-span-1">
+              <dt className="text-sm font-medium text-gray-500 flex items-center">
+                <Calendar className="mr-2 text-gray-400" size={18} />
+                Start Date
+              </dt>
+              <dd className="mt-1 text-sm text-gray-900">
+                {employee.startDate 
+                  ? new Date(employee.startDate).toLocaleDateString('en-US', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric'
+                    })
+                  : 'Not provided'}
+              </dd>
+            </div>
+            
+            <div className="sm:col-span-1">
+              <dt className="text-sm font-medium text-gray-500 flex items-center">
+                <Building className="mr-2 text-gray-400" size={18} />
+                Department
+              </dt>
+              <dd className="mt-1 text-sm text-gray-900">
+                {employee.team ? employee.team.department : 'Not assigned'}
+              </dd>
+            </div>
+            
+            <div className="sm:col-span-1">
+              <dt className="text-sm font-medium text-gray-500 flex items-center">
+                {employee.country && getCountryCode(employee.country) ? (
+                   <Flag code={getCountryCode(employee.country)} className="mr-2" height="14" />
+                ) : (
+                   <MapPin className="mr-2 text-gray-400" size={18} /> 
+                )}
+                Country
+              </dt>
+              <dd className="mt-1 text-sm text-gray-900">{employee.country || 'Not provided'}</dd>
+            </div>
+            
+            <div className="sm:col-span-1">
+              <dt className="text-sm font-medium text-gray-500 flex items-center">
+                <MapPin className="mr-2 text-gray-400" size={18} />
+                Location
+              </dt>
+              <dd className="mt-1 text-sm text-gray-900">{employee.location || 'Not provided'}</dd>
+            </div>
+          </dl>
         </div>
       </div>
       
-      {/* Profile details */}
-      <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
-        <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-          <div className="sm:col-span-1">
-            <dt className="text-sm font-medium text-gray-500 flex items-center">
-              <EnvelopeSimple className="mr-2 text-gray-400" size={18} />
-              Email
-            </dt>
-            <dd className="mt-1 text-sm text-gray-900">{employee.email}</dd>
+      {/* --- ADDED SECTIONS START --- */}
+
+      {/* Historical Performance Chart */}
+      <div className="bg-white shadow sm:rounded-lg">
+        <div className="px-4 py-5 sm:px-6">
+          <h3 className="text-lg font-medium text-gray-900">Historical Performance</h3>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">Overall Health Score Trend</p>
+        </div>
+        <div className="border-t border-gray-200 px-4 py-5 sm:px-6 h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={mockAnalysisHistory} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" fontSize={12} />
+              <YAxis domain={[60, 100]} fontSize={12}/>
+              <Tooltip />
+              <Area type="monotone" dataKey="healthScore" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} name="Health Score" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Current Skills Radar Chart */}
+      <div className="bg-white shadow sm:rounded-lg">
+        <div className="px-4 py-5 sm:px-6">
+          <h3 className="text-lg font-medium text-gray-900">Current Skill Assessment</h3>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">Based on recent feedback</p>
+        </div>
+        <div className="border-t border-gray-200 px-4 py-5 sm:px-6 h-80 flex justify-center items-center">
+          <ResponsiveContainer width="100%" height="100%">
+             <RadarChart cx="50%" cy="50%" outerRadius="80%" data={mockCurrentSkillsData}>
+              <PolarGrid />
+              <PolarAngleAxis dataKey="skill" fontSize={12} />
+              {/* <PolarRadiusAxis angle={30} domain={[0, 100]} /> */}
+              <Radar name={employee.name} dataKey="value" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
+              <Tooltip />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Strengths, Support Areas, Recommendations */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Strengths */}
+        <div className="bg-white shadow sm:rounded-lg">
+          <div className="px-4 py-5 sm:px-6">
+            <h3 className="text-lg font-medium text-gray-900">Strengths</h3>
           </div>
-          
-          <div className="sm:col-span-1">
-            <dt className="text-sm font-medium text-gray-500 flex items-center">
-              <Phone className="mr-2 text-gray-400" size={18} />
-              Phone
-            </dt>
-            <dd className="mt-1 text-sm text-gray-900">{employee.phone || 'Not provided'}</dd>
+          <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
+            <ul className="space-y-2">
+              {mockStrengths.map((strength, index) => (
+                <li key={index} className="text-sm text-gray-700 flex items-start">
+                  <span className="text-green-500 mr-2 mt-1">&#10003;</span> {/* Checkmark */}
+                  {strength}
+                </li>
+              ))}
+            </ul>
           </div>
-          
-          <div className="sm:col-span-1">
-            <dt className="text-sm font-medium text-gray-500 flex items-center">
-              <Calendar className="mr-2 text-gray-400" size={18} />
-              Start Date
-            </dt>
-            <dd className="mt-1 text-sm text-gray-900">
-              {employee.startDate 
-                ? new Date(employee.startDate).toLocaleDateString('en-US', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric'
-                  })
-                : 'Not provided'}
-            </dd>
+        </div>
+
+        {/* Areas for Support */}
+        <div className="bg-white shadow sm:rounded-lg">
+          <div className="px-4 py-5 sm:px-6">
+            <h3 className="text-lg font-medium text-gray-900">Areas for Support</h3>
           </div>
-          
-          <div className="sm:col-span-1">
-            <dt className="text-sm font-medium text-gray-500 flex items-center">
-              <Building className="mr-2 text-gray-400" size={18} />
-              Department
-            </dt>
-            <dd className="mt-1 text-sm text-gray-900">
-              {employee.team ? employee.team.department : 'Not assigned'}
-            </dd>
+          <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
+            <ul className="space-y-2">
+              {mockSupportAreas.map((area, index) => (
+                <li key={index} className="text-sm text-gray-700 flex items-start">
+                  <span className="text-yellow-500 mr-2 mt-1">&#8226;</span> {/* Bullet */}
+                  {area}
+                </li>
+              ))}
+            </ul>
           </div>
-          
-          <div className="sm:col-span-1">
-            <dt className="text-sm font-medium text-gray-500 flex items-center">
-              <Flag className="mr-2 text-gray-400" size={18} />
-              Country
-            </dt>
-            <dd className="mt-1 text-sm text-gray-900">{employee.country || 'Not provided'}</dd>
+        </div>
+
+        {/* Recommendations */}
+        <div className="bg-white shadow sm:rounded-lg">
+          <div className="px-4 py-5 sm:px-6">
+            <h3 className="text-lg font-medium text-gray-900">Recommendations</h3>
           </div>
-          
-          <div className="sm:col-span-1">
-            <dt className="text-sm font-medium text-gray-500 flex items-center">
-              <MapPin className="mr-2 text-gray-400" size={18} />
-              Location
-            </dt>
-            <dd className="mt-1 text-sm text-gray-900">{employee.location || 'Not provided'}</dd>
+          <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
+            <ul className="space-y-2">
+              {mockRecommendations.map((rec, index) => (
+                <li key={index} className="text-sm text-gray-700 flex items-start">
+                   <span className="text-blue-500 mr-2 mt-1">&#10148;</span> {/* Arrow */}
+                  {rec}
+                </li>
+              ))}
+            </ul>
           </div>
-        </dl>
+        </div>
+      </div>
+
+      {/* --- ADDED SECTIONS END --- */}
+
+      {/* Recent Activity */}
+      <div className="bg-white shadow sm:rounded-lg">
+        <div className="px-4 py-5 sm:px-6">
+          <h3 className="text-lg font-medium text-gray-900">Recent Activity</h3>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+            Latest interviews and feedback
+          </p>
+        </div>
+        <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
+          {/* Interviews Section */}
+          {/* Removing the interviews section entirely */}
+          {/* {interviewsLoading ? (
+            <div className="text-sm text-gray-500">Loading interviews...</div>
+          ) : interviewsError ? (
+            <div className="text-sm text-red-600">Error loading interviews.</div>
+          ) : interviews && interviews.length > 0 ? (
+            <div className="mt-8">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Interviews</h3>
+              <ul className="space-y-3">
+                {interviews.map((interview) => (
+                  <li key={interview.id} className="bg-gray-50 p-3 rounded-md shadow-sm hover:bg-gray-100 transition-colors">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{interview.interviewName}</p>
+                        <p className="text-xs text-gray-500">Taken on: {format(new Date(interview.dateTaken), 'PPP')}</p>
+                      </div>
+                      <button 
+                        onClick={() => navigate(`/interviews/${interview.id}`)}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 mt-4">No interviews recorded for this employee.</p>
+          )} */}
+        </div>
       </div>
     </div>
-    
-    {/* Additional sections can be added here */}
-    <div className="bg-white shadow sm:rounded-lg">
-      <div className="px-4 py-5 sm:px-6">
-        <h3 className="text-lg font-medium text-gray-900">Recent Activity</h3>
-        <p className="mt-1 max-w-2xl text-sm text-gray-500">
-          Latest interviews and feedback
-        </p>
-      </div>
-      <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
-        {/* This would be populated with real data in a full implementation */}
-        <div className="text-sm text-gray-500">No recent activity to display</div>
-      </div>
-    </div>
-  </div>
-));
+  );
+});
 
 const EmployeeProfile = ({ employeeId, onClose }: EmployeeProfileProps) => {
-  // Use React Query to fetch employee data
-  const { 
-    data: employee, 
-    isLoading, 
-    error, 
-    refetch 
-  } = useEmployee(employeeId);
+  const { data: employee, isLoading: isLoadingEmployee, error: employeeError, refetch: refetchEmployee } = useEmployee(employeeId);
 
-  // Handle retry when error occurs
-  const handleRetry = useCallback(() => {
-    refetch();
-  }, [refetch]);
-
-  // Show loading state
-  if (isLoading) {
+  if (isLoadingEmployee) {
     return <ProfileLoadingState />;
   }
 
-  // Show error state
-  if (error || !employee) {
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : 'Could not load employee data. Please try again.';
-    
-    return <ProfileErrorState message={errorMessage} onRetry={handleRetry} />;
+  if (employeeError || !employee) {
+    return (
+      <ProfileErrorState 
+        message={employeeError?.message || 'Employee not found.'}
+        onRetry={refetchEmployee}
+      />
+    );
   }
 
-  // Show profile
-  return <EmployeeProfileContent employee={employee} onClose={onClose} />;
+  return (
+    <EmployeeProfileContent 
+      employee={employee}
+      onClose={onClose}
+    />
+  );
 };
 
-export default memo(EmployeeProfile);
+export default EmployeeProfile;

@@ -33,17 +33,6 @@ interface Employee {
   };
 }
 
-interface Interview {
-  id: number;
-  name: string;
-  team: string;
-  interviewName: string;
-  dateTaken: Date;
-  userId: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 const router = express.Router();
 const prisma = new PrismaClient() as TypedPrismaClient;
 
@@ -198,25 +187,22 @@ const getEmployeeById = async (req: AuthenticatedRequest, res: Response, next: N
       return;
     }
 
-    // Get all interviews for this user
-    const interviews = await prisma.interview.findMany({
-      where: {
-        userId: req.user.userId
-      }
-    });
-    
-    // Count interviews for this employee by name match
-    const interviewCount = interviews.filter(
-      (interview: Interview) => interview.name.toLowerCase() === employee.name.toLowerCase()
-    ).length;
-    
-    // Add interview count to employee data
-    const employeeWithInterviewCount = {
-      ...employee,
-      interviewCount
-    };
+    // Fetch related interviews count
+    // const interviewCount = await prisma.interview.count({
+    //   where: {
+    //     employeeId: parseInt(id),
+    //     // We might need to confirm if interviews are directly linked via employeeId
+    //     // or if we need to link through user ID and potentially employee name?
+    //     // Assuming direct link for now:
+    //     // userId: req.user.userId 
+    //   }
+    // });
 
-    res.json(employeeWithInterviewCount);
+    // Include the interview count in the response
+    res.json({ 
+      ...employee,
+      // interviewCount: interviewCount
+     });
   } catch (error) {
     next(error);
   }
@@ -245,28 +231,7 @@ const getAllEmployees = async (req: AuthenticatedRequest, res: Response, next: N
       }
     });
 
-    // Get all interviews for this user
-    const interviews = await prisma.interview.findMany({
-      where: {
-        userId: req.user.userId
-      }
-    });
-    
-    // Add interview counts for each employee
-    const employeesWithInterviewCounts = employees.map((employee: Employee) => {
-      // Count interviews for this employee by name match
-      const interviewCount = interviews.filter(
-        (interview: Interview) => interview.name.toLowerCase() === employee.name.toLowerCase()
-      ).length;
-      
-      // Add interview count to employee data
-      return {
-        ...employee,
-        interviewCount
-      };
-    });
-
-    res.json(employeesWithInterviewCounts);
+    res.json(employees);
   } catch (error) {
     next(error);
   }

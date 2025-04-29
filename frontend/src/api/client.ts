@@ -156,12 +156,12 @@ apiClient.interceptors.request.use(async (config) => {
       config.headers.Authorization = `Bearer ${token}`;
     } else {
       // If no token available, redirect to sign-in
-      window.location.href = '/login';
+      window.location.href = '/sign-in';
       return Promise.reject('No authentication token available');
     }
   } catch (error) {
     console.error('Error getting token for request:', error);
-    window.location.href = '/login';
+    window.location.href = '/sign-in';
     return Promise.reject(error);
   }
   
@@ -185,8 +185,6 @@ apiClient.interceptors.response.use(
         cacheTTL = 10 * 60 * 1000; // 10 minutes for employees
       } else if (url.includes('/teams')) {
         cacheTTL = 15 * 60 * 1000; // 15 minutes for teams
-      } else if (url.includes('/interviews')) {
-        cacheTTL = 5 * 60 * 1000; // 5 minutes for interviews
       } else if (url.includes('/notifications')) {
         cacheTTL = 2 * 60 * 1000; // 2 minutes for notifications (more real-time)
       }
@@ -206,9 +204,9 @@ apiClient.interceptors.response.use(
         console.error('Authentication error:', data);
         
         // Save the current path for redirect after login
-        if (window.location.pathname !== '/login') {
+        if (window.location.pathname !== '/sign-in') {
           localStorage.setItem('redirectAfterLogin', window.location.pathname + window.location.search);
-          window.location.href = '/login';
+          window.location.href = '/sign-in';
         }
       }
       
@@ -270,7 +268,6 @@ export const taskService = {
 // Teams Service
 export const teamService = {
   getAllTeams: async () => {
-    console.log('Fetching teams from:', `${API_URL}/teams`);
     return await apiClient.get('/teams');
   },
   getTeamById: async (id: number) => {
@@ -290,43 +287,6 @@ export const teamService = {
     invalidateCache('/employees'); // Employees may reference teams
     return response;
   },
-};
-
-// Interviews Service
-export const interviewService = {
-  getAllInterviews: async () => {
-    console.log('Fetching interviews from:', `${API_URL}/interviews`);
-    return await apiClient.get('/interviews');
-  },
-  getInterviewById: async (id: number) => {
-    return await apiClient.get(`/interviews/${id}`);
-  },
-  updateInterview: async (id: number, interview: { 
-    name?: string; 
-    team?: string; 
-    interviewName?: string; 
-    dateTaken?: string;
-  }) => {
-    const response = await apiClient.put(`/interviews/${id}`, interview);
-    invalidateCache('/interviews');
-    return response;
-  },
-  deleteInterview: async (id: number) => {
-    const response = await apiClient.delete(`/interviews/${id}`);
-    invalidateCache('/interviews');
-    return response;
-  },
-  getInterviewAnswers: async (id: number) => {
-    return await apiClient.get(`/interviews/${id}/answers`);
-  },
-  saveInterviewAnswers: async (id: number, answers: {
-    firstAnswer: string;
-    secondAnswer: string;
-  }) => {
-    const response = await apiClient.post(`/interviews/${id}/answers`, answers);
-    invalidateCache(`/interviews/${id}/answers`);
-    return response;
-  }
 };
 
 // Employee Service
@@ -371,4 +331,4 @@ export const employeeService = {
   }
 };
 
-export default apiClient; 
+export default apiClient;

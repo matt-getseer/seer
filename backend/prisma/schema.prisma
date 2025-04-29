@@ -16,31 +16,7 @@ model User {
   updatedAt  DateTime    @updatedAt
   clerkId    String?     @unique
   employees  Employee[]
-  interviews Interview[]
   teams      Team[]
-}
-
-model Interview {
-  id              Int               @id @default(autoincrement())
-  name            String
-  team            String
-  interviewName   String
-  dateTaken       DateTime
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  userId          Int
-  user            User              @relation(fields: [userId], references: [id])
-  interviewAnswer InterviewAnswer?
-}
-
-model InterviewAnswer {
-  id            Int      @id @default(autoincrement())
-  firstAnswer   String   @db.Text
-  secondAnswer  String   @db.Text
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  interviewId   Int      @unique
-  interview     Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
 }
 
 model Team {

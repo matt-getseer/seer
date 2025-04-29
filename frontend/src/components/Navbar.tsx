@@ -39,7 +39,7 @@ const Navbar: FC = memo(() => {
 
   const handleLogout = useCallback(async () => {
     await signOut()
-    navigate('/login')
+    navigate('/sign-in')
   }, [signOut, navigate])
 
   // Fetch employee data for ID-based routes with caching
@@ -180,7 +180,7 @@ const Navbar: FC = memo(() => {
                 }}
               />
               <UserButton 
-                afterSignOutUrl="/#/login"
+                afterSignOutUrl="/sign-in"
                 appearance={{
                   elements: {
                     avatarBox: "w-8 h-8"

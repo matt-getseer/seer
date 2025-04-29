@@ -7,21 +7,24 @@ import { PrismaClient } from '@prisma/client';
 import helmet from 'helmet';
 import * as clerk from '@clerk/clerk-sdk-node';
 // Don't import clerk yet, we'll do it after setting the environment variable
+// FIX: Import the necessary Clerk middleware
+import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node';
 
 import { userRouter } from './routes/users';
-import interviewRouter from './routes/interviews';
-import teamRouter from './routes/teams';
 import employeeRouter from './routes/employees';
+import teamRouter from './routes/teams';
+// import notificationRouter from './routes/notifications'; // Remove this import
 
 // Load environment variables
 console.log('Loading environment variables...');
 dotenv.config();
 
-// FIX: Hardcode the database URL since it's being malformed in the .env file
-// This is a temporary solution for development only
-const DB_URL = "prisma+postgres://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlfa2V5IjoiYzYxZjJmYjAtNmU1NS00ZjIzLWI4YmQtOTQ5YzgyZDU0OGZhIiwidGVuYW50X2lkIjoiZWFlYzFkOGU1ZWU4MTRkMGNhZjUwZmUxNDQ2MDY5MDc1NTUxYTg1ZTMwMzFmMzVhOWZiZmFlZGMwZjJjNzY5NyIsImludGVybmFsX3NlY3JldCI6IjkwMzVhZjYwLTNhMTItNDE5Mi1hZGQ3LTUwZGY5ODIzOGVjMyJ9.cFB8UVGf8FBmAUrZ9Czu70YlHQPqKl6uGlK0ZGM31cw";
-process.env.DATABASE_URL = DB_URL;
-console.log('DATABASE_URL has been set programmatically');
+// Add check for DATABASE_URL similar to CLERK_SECRET_KEY
+if (!process.env.DATABASE_URL) {
+  console.error('CRITICAL ERROR: DATABASE_URL environment variable is not set!');
+  console.error('Please set this variable in your .env file.');
+  process.exit(1); // Exit if DB URL is missing
+}
 
 // Check if Clerk secret key is available in environment
 if (!process.env.CLERK_SECRET_KEY) {
@@ -58,11 +61,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// ADD Clerk Authentication Middleware HERE
+// This will protect all subsequent routes
+app.use(ClerkExpressRequireAuth());
+
 // Routes
 app.use('/api/users', userRouter);
-app.use('/api/interviews', interviewRouter);
-app.use('/api/teams', teamRouter);
 app.use('/api/employees', employeeRouter);
+app.use('/api/teams', teamRouter);
+// app.use('/api/notifications', notificationRouter); // Remove this line
 
 // Health check route
 app.get('/health', (req, res) => {
