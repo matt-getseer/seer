@@ -5,7 +5,7 @@ const SignUp = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <ClerkSignUp 
         signInUrl="/sign-in"
-        redirectUrl="/"
+        afterSignUpUrl="/organizations/new"
         appearance={{
           layout: {
             socialButtonsVariant: "iconButton",

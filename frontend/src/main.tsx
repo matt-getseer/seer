@@ -32,7 +32,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         signInUrl="/sign-in"
         signUpUrl="/sign-up"
         afterSignInUrl="/"
-        afterSignUpUrl="/"
         signInFallbackRedirectUrl="/"
         signUpFallbackRedirectUrl="/"
       >

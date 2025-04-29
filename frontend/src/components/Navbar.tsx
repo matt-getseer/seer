@@ -169,9 +169,9 @@ const Navbar: FC = memo(() => {
               </button>
               <OrganizationSwitcher 
                 hidePersonal
-                afterCreateOrganizationUrl="/#/organizations/:id"
-                afterLeaveOrganizationUrl="/#/"
-                afterSelectOrganizationUrl="/#/organizations/:id"
+                afterLeaveOrganizationUrl="/"
+                afterSelectOrganizationUrl="/organizations/:id"
+                organizationProfileUrl="/user"
                 appearance={{
                   elements: {
                     rootBox: "flex items-center",

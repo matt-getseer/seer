@@ -31,16 +31,17 @@ export async function findOrCreateUser(clerkUserId: string) {
       return user;
     }
 
-    // User doesn't exist, fetch info from Clerk
+    // User doesn't exist by Clerk ID, fetch info from Clerk
     const userInfo = await getClerkUserInfo(clerkUserId);
 
-    // Try to find user by email (for migrated users)
+    // Try to find user by email (for potentially migrated users without clerkId yet)
     user = await prisma.user.findUnique({
       where: { email: userInfo.email }
     });
 
     // If user exists by email, update with clerkId and return
     if (user) {
+      console.log(`Found user by email ${userInfo.email}, updating with Clerk ID ${clerkUserId}`);
       user = await prisma.user.update({
         where: { id: user.id },
         data: { clerkId: clerkUserId }
@@ -48,8 +49,9 @@ export async function findOrCreateUser(clerkUserId: string) {
       return user;
     }
 
-    // User doesn't exist at all, create new user
-    user = await prisma.user.create({
+    // User doesn't exist at all, create new user in local DB
+    console.log(`Creating new user in local DB for Clerk ID ${clerkUserId}`);
+    const newUser = await prisma.user.create({
       data: {
         email: userInfo.email,
         name: userInfo.name,
@@ -58,10 +60,12 @@ export async function findOrCreateUser(clerkUserId: string) {
         password: 'clerk-auth-user' // Not used with Clerk auth
       }
     });
+    console.log(`Successfully created local user ID ${newUser.id} for Clerk ID ${clerkUserId}`);
 
-    return user;
+    return newUser; // Return the newly created user
+
   } catch (error) {
-    console.error('Error finding or creating user:', error);
+    console.error('Error in findOrCreateUser:', error);
     throw new Error('Failed to find or create user');
   }
 } 
