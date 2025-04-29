@@ -13,6 +13,8 @@ import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node';
 import { userRouter } from './routes/users';
 import employeeRouter from './routes/employees';
 import teamRouter from './routes/teams';
+import meetingsRouter from './routes/meetings';
+import webhooksRouter from './routes/webhooks';
 // import notificationRouter from './routes/notifications'; // Remove this import
 
 // Load environment variables
@@ -45,6 +47,9 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
+// --- Add Webhook routes BEFORE authentication --- 
+app.use('/api/webhooks', webhooksRouter);
+
 // Debug routes - Add these before other routes
 app.get('/api-test', (req, res) => {
   res.status(200).json({ message: 'API is accessible' });
@@ -54,7 +59,7 @@ app.get('/api/test', (req, res) => {
   res.status(200).json({ message: 'API with /api prefix is accessible' });
 });
 
-// Log all incoming requests
+// Log all incoming requests (after webhook route)
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
   console.log('Headers:', req.headers);
@@ -69,6 +74,7 @@ app.use(ClerkExpressRequireAuth());
 app.use('/api/users', userRouter);
 app.use('/api/employees', employeeRouter);
 app.use('/api/teams', teamRouter);
+app.use('/api/meetings', meetingsRouter);
 // app.use('/api/notifications', notificationRouter); // Remove this line
 
 // Health check route

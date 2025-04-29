@@ -17,6 +17,7 @@ model User {
   clerkId    String?     @unique
   employees  Employee[]
   teams      Team[]
+  meetings   Meeting[]    @relation("ManagerMeetings")
 }
 
 model Team {
@@ -42,4 +43,54 @@ model Employee {
   startDate DateTime?
   team      Team      @relation(fields: [teamId], references: [id])
   user      User      @relation(fields: [userId], references: [id])
+  meetings  Meeting[] @relation("EmployeeMeetings")
+}
+
+model Meeting {
+  id              Int               @id @default(autoincrement())
+  title           String?
+  scheduledTime   DateTime
+  durationMinutes Int?
+  platform        String?
+  audioFileUrl    String?
+  status          String            @default("SCHEDULED")
+  managerId       Int
+  employeeId      Int
+  meetingBaasId   String?           @unique
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  manager         User              @relation("ManagerMeetings", fields: [managerId], references: [id])
+  employee        Employee          @relation("EmployeeMeetings", fields: [employeeId], references: [id])
+  transcript      Transcript?
+  insights        MeetingInsight[]
+
+  @@index([managerId])
+  @@index([employeeId])
+}
+
+model Transcript {
+  id           Int      @id @default(autoincrement())
+  meetingId    Int      @unique
+  content      String   @db.Text
+  languageCode String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+}
+
+model MeetingInsight {
+  id             Int      @id @default(autoincrement())
+  meetingId      Int
+  type           String
+  content        String
+  relevanceScore Float?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  meeting        Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
 }
