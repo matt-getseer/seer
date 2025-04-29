@@ -156,12 +156,12 @@ apiClient.interceptors.request.use(async (config) => {
       config.headers.Authorization = `Bearer ${token}`;
     } else {
       // If no token available, redirect to sign-in
-      window.location.href = '/sign-in';
+      window.location.href = '/login';
       return Promise.reject('No authentication token available');
     }
   } catch (error) {
     console.error('Error getting token for request:', error);
-    window.location.href = '/sign-in';
+    window.location.href = '/login';
     return Promise.reject(error);
   }
   
@@ -206,9 +206,9 @@ apiClient.interceptors.response.use(
         console.error('Authentication error:', data);
         
         // Save the current path for redirect after login
-        if (window.location.pathname !== '/sign-in') {
+        if (window.location.pathname !== '/login') {
           localStorage.setItem('redirectAfterLogin', window.location.pathname + window.location.search);
-          window.location.href = '/sign-in';
+          window.location.href = '/login';
         }
       }
       
