@@ -4,7 +4,7 @@ const SignUp = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <ClerkSignUp 
-        signInUrl="/login"
+        signInUrl="/sign-in"
         redirectUrl="/"
         appearance={{
           layout: {

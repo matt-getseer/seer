@@ -35,7 +35,7 @@ const RoutePersistence = memo(({ children }: { children: React.ReactNode }) => {
 
   // Save route on change, but only for meaningful navigation
   useEffect(() => {
-    const isAuthPage = location.pathname === '/login' || location.pathname === '/sign-up';
+    const isAuthPage = location.pathname === '/sign-in' || location.pathname === '/sign-up';
     const isRoot = location.pathname === '/';
     
     if (!isAuthPage && !isRoot) {
@@ -57,7 +57,7 @@ const RoutePersistence = memo(({ children }: { children: React.ReactNode }) => {
         location.pathname === '/' && 
         isSignedIn && 
         lastRoute !== '/' && 
-        !lastRoute.includes('/login') && 
+        !lastRoute.includes('/sign-in') && 
         !lastRoute.includes('/sign-up')) {
       navigate(lastRoute, { replace: true });
     }
@@ -94,12 +94,12 @@ const ClearRedirects = memo(({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     // Clear any redirects that might cause loops
     const lastRoute = localStorage.getItem('lastRoute');
-    if (lastRoute && (lastRoute.includes('/login') || lastRoute.includes('/sign-up'))) {
+    if (lastRoute && (lastRoute.includes('/sign-in') || lastRoute.includes('/sign-up'))) {
       localStorage.removeItem('lastRoute');
     }
     
     const redirectAfterLogin = localStorage.getItem('redirectAfterLogin');
-    if (redirectAfterLogin && (redirectAfterLogin.includes('/login') || redirectAfterLogin.includes('/sign-up'))) {
+    if (redirectAfterLogin && (redirectAfterLogin.includes('/sign-in') || redirectAfterLogin.includes('/sign-up'))) {
       localStorage.removeItem('redirectAfterLogin');
     }
   }, []);
@@ -155,6 +155,13 @@ function App() {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
   
+  // Add console logs to debug authentication state
+  useEffect(() => {
+    if (isLoaded) {
+      console.log('Auth state loaded:', { isSignedIn, userId: user?.id });
+    }
+  }, [isLoaded, isSignedIn, user]);
+
   // Memoize these callback functions to prevent unnecessary re-renders
   const handleSetSidebarCollapsed = useCallback((collapsed: boolean) => {
     setSidebarCollapsed(collapsed);
@@ -170,16 +177,20 @@ function App() {
     const location = useLocation();
     
     if (!isLoaded) {
+      // Still loading auth state, show loading spinner
       return <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>;
     }
     
     if (!isSignedIn) {
-      if (location.pathname !== '/') {
+      console.log('User not signed in, redirecting from:', location.pathname);
+      // Only save non-root paths for redirects
+      if (location.pathname !== '/' && !location.pathname.includes('/sign-in') && !location.pathname.includes('/sign-up')) {
         localStorage.setItem('redirectAfterLogin', location.pathname + location.search);
+        console.log('Saved redirect path:', location.pathname + location.search);
       }
-      return <Navigate to="/login" state={{ from: location }} replace />
+      return <Navigate to="/sign-in" state={{ from: location }} replace />
     }
     
     return <>{children}</>
@@ -210,7 +221,7 @@ function App() {
         <RoutePersistence>
           <Routes>
             {/* Public Routes */}
-            <Route path="/login" element={
+            <Route path="/sign-in" element={
               isSignedIn 
                 ? <Navigate to="/" replace /> 
                 : <ClearRedirects><SignIn /></ClearRedirects>
