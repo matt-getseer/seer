@@ -80,23 +80,30 @@ const MainLayout = memo(({ children, sidebarCollapsed, setSidebarCollapsed, setS
   const { isLoaded: isUserLoaded } = useUser();
   const { organization, isLoaded: isOrgLoaded } = useOrganization(); 
 
+  // Combine loading checks
+  const isLoading = !isUserLoaded || !isOrgLoaded;
+
   useEffect(() => {
-    if (!isUserLoaded || !isOrgLoaded) {
-      return;
+    // Wait until loading is complete before checking organization
+    if (isLoading) {
+      return; 
     }
 
-    if (isUserLoaded && isOrgLoaded && !organization && location.pathname !== '/organizations/new') {
-      console.log("User has no active organization. Redirecting to /organizations/new");
+    // If loaded but no org, and not on the create page, redirect
+    if (!organization && location.pathname !== '/organizations/new') {
+      console.log("User has no active organization after loading. Redirecting to /organizations/new");
       navigate('/organizations/new', { replace: true });
     }
-  }, [isUserLoaded, isOrgLoaded, organization, navigate, location.pathname]); 
+  }, [isLoading, organization, navigate, location.pathname]); 
 
-  if (!isUserLoaded || !isOrgLoaded) {
+  // Show loading spinner if user or org data is not ready
+  if (isLoading) {
       return <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>;
   }
 
+  // --- Only render the layout and children if loading is complete AND (organization exists OR user is on create org page) ---
   if (organization || location.pathname === '/organizations/new') {
     const handleSearchClick = useCallback(() => {
       setSearchModalOpen(true);
@@ -116,15 +123,21 @@ const MainLayout = memo(({ children, sidebarCollapsed, setSidebarCollapsed, setS
         <div className={`flex-1 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'pl-16' : 'pl-sidebar'}`}>
           <Navbar />
           <main className="p-6">
-            {children}
+            {/* Children are now rendered only when org check is complete */}
+            {children} 
           </main>
         </div>
       </div>
     )
   }
   
-  console.warn("MainLayout rendered in unexpected state (no org, not on create page)");
-  return null; 
+  // If we are loaded but don't have an org and are not on the create page, 
+  // the useEffect hook will redirect. Return null or a minimal loading state here 
+  // while the redirect happens. The spinner is already shown if isLoading is true.
+  console.log("MainLayout: Waiting for organization check/redirect.");
+  return <div className="flex items-center justify-center min-h-screen"> 
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+    </div>; // Or return null; A spinner might be better UX.
 });
 
 function App() {

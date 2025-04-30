@@ -3,6 +3,7 @@ import { teamService } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import { AxiosError } from 'axios'
 import { MagnifyingGlass } from '@phosphor-icons/react'
+import { useTeams } from '../hooks/useQueryHooks'
 
 type Employee = {
   id: number
@@ -25,72 +26,29 @@ type Team = {
 }
 
 const Teams = () => {
-  const [teams, setTeams] = useState<Team[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data: teams = [], isLoading: loading, error: queryError } = useTeams<Team[]>();
   const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState('')
 
-  const fetchTeams = useCallback(async () => {
-    if (!loading) return; // Prevent multiple simultaneous fetches
-    try {
-      const response = await teamService.getAllTeams()
-      setTeams(response.data)
-      setError(null)
-    } catch (err) {
-      console.error('Failed to fetch teams:', err)
-      const axiosError = err as AxiosError
-      
-      if (axiosError.response?.status === 404) {
-        setError('No teams found or teams endpoint unavailable.')
-      } else {
-        setError('Failed to load teams. Please try again later.')
-      }
-    } finally {
-      setLoading(false)
-    }
-  }, [loading]) // Only depend on loading state
-
-  useEffect(() => {
-    let mounted = true;
-    
-    const load = async () => {
-      setLoading(true);
-      try {
-        const response = await teamService.getAllTeams();
-        if (mounted) {
-          setTeams(response.data);
-          setError(null);
-        }
-      } catch (err) {
-        console.error('Failed to fetch teams:', err);
-        if (mounted) {
-          const axiosError = err as AxiosError;
-          if (axiosError.response?.status === 404) {
-            setError('No teams found or teams endpoint unavailable.');
-          } else {
-            setError('Failed to load teams. Please try again later.');
-          }
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    load();
-
-    return () => {
-      mounted = false;
-    };
-  }, []); // Empty deps array since we handle cleanup
+  const error = queryError 
+    ? (
+        (queryError instanceof AxiosError && 
+         queryError.response?.data && 
+         typeof queryError.response.data === 'object' && 
+         'message' in queryError.response.data && 
+         typeof queryError.response.data.message === 'string'
+        ) 
+          ? queryError.response.data.message // Use message from response data if available
+          : (queryError as Error).message // Otherwise, use the general error message
+      ) || 'Failed to load teams. Please try again later.' // Fallback message
+    : null;
 
   const handleEmployeeClick = useCallback((id: number) => {
     navigate(`/employees/${id}`)
   }, [navigate])
 
   const filteredTeams = useMemo(() => {
+    if (loading || error) return [];
     return teams.filter(team => {
       const teamMatches = team.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           team.department.toLowerCase().includes(searchTerm.toLowerCase())
@@ -103,7 +61,7 @@ const Teams = () => {
       
       return teamMatches || employeeMatches
     })
-  }, [teams, searchTerm])
+  }, [teams, searchTerm, loading, error])
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -135,7 +93,7 @@ const Teams = () => {
         </div>
       ) : filteredTeams.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-6 text-center">
-          {teams.length === 0 ? (
+          {teams.length === 0 && !searchTerm ? (
             <p className="text-gray-600">No teams found.</p>
           ) : (
             <p className="text-gray-600">No matches found for "{searchTerm}".</p>

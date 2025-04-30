@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { meetingService } from '../api/client'; // Import the service
+import { meetingService } from '../api/client'; // Keep for potential mutations
 import { format } from 'date-fns'; // For date formatting
+import { useMeetings } from '../hooks/useQueryHooks'; // Import the custom hook
+import { AxiosError } from 'axios'; // Import AxiosError
 
 // Define the expected structure of a meeting object from the API
 interface Meeting {
@@ -18,34 +20,31 @@ interface Meeting {
 }
 
 const MeetingsPage: React.FC = () => {
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Use the custom hook for data fetching, loading, and error state
+  const { data: meetings = [], isLoading, error: queryError } = useMeetings<Meeting[]>();
+
+  // Keep navigation state
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchMeetings = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await meetingService.getAllMeetings();
-        setMeetings(response.data); // Assuming response.data is the array of meetings
-      } catch (err) {
-        console.error("Error fetching meetings:", err);
-        setError('Failed to fetch meetings. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchMeetings();
-  }, []);
+  // Handle potential error from react-query
+  const error = queryError 
+  ? (
+      (queryError instanceof AxiosError && 
+       queryError.response?.data && 
+       typeof queryError.response.data === 'object' && 
+       'message' in queryError.response.data && 
+       typeof queryError.response.data.message === 'string'
+      ) 
+        ? queryError.response.data.message // Use message from response data if available
+        : (queryError as Error).message // Otherwise, use the general error message
+    ) || 'Failed to load meetings. Please try again later.' // Fallback message
+  : null;
 
   const handleRowClick = (meetingId: number) => {
     navigate(`/meetings/${meetingId}`);
   };
 
-  // Display loading state
+  // Display loading state from the hook
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -54,7 +53,7 @@ const MeetingsPage: React.FC = () => {
     );
   }
 
-  // Display error state
+  // Display error state from the hook
   if (error) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -64,7 +63,7 @@ const MeetingsPage: React.FC = () => {
     );
   }
 
-  // Display meeting table
+  // Display meeting table using data from the hook
   return (
     <div className="max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-6">

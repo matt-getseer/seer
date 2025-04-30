@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { meetingService } from '../api/client';
 import { format } from 'date-fns';
+import { useMeeting } from '../hooks/useQueryHooks';
+import { AxiosError } from 'axios';
 
 // Define the detailed meeting structure (should match backend includes)
 interface MeetingDetail {
@@ -36,33 +38,22 @@ interface MeetingDetail {
 
 const MeetingDetailPage: React.FC = () => {
   const { meetingId } = useParams<{ meetingId: string }>();
-  const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const id = meetingId ? (typeof meetingId === 'string' ? parseInt(meetingId) : meetingId) : null;
 
-  useEffect(() => {
-    if (!meetingId) {
-      setError('Meeting ID not found in URL.');
-      setIsLoading(false);
-      return;
-    }
+  const { data: meeting, isLoading, error: queryError } = useMeeting<MeetingDetail>(id);
 
-    const fetchMeetingDetails = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await meetingService.getMeetingById(meetingId);
-        setMeeting(response.data); // Assuming response.data is the detailed meeting object
-      } catch (err: any) {
-        console.error(`Error fetching meeting details for ID ${meetingId}:`, err);
-        setError(err.response?.data?.message || 'Failed to fetch meeting details. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchMeetingDetails();
-  }, [meetingId]);
+  const error = queryError 
+  ? (
+      (queryError instanceof AxiosError && 
+       queryError.response?.data && 
+       typeof queryError.response.data === 'object' && 
+       'message' in queryError.response.data && 
+       typeof queryError.response.data.message === 'string'
+      ) 
+        ? queryError.response.data.message
+        : (queryError as Error).message
+    ) || 'Failed to load meeting details. Please try again later.'
+  : null;
 
   // Helper to render insights grouped by type
   const renderInsights = () => {
@@ -104,7 +95,7 @@ const MeetingDetailPage: React.FC = () => {
     );
   };
 
-  // Display loading state
+  // Display loading state from hook
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -113,7 +104,7 @@ const MeetingDetailPage: React.FC = () => {
     );
   }
 
-  // Display error state
+  // Display error state from hook
   if (error) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -123,16 +114,16 @@ const MeetingDetailPage: React.FC = () => {
     );
   }
   
-  // Display not found state
+  // Display not found state (if hook returns null/undefined data after loading without error)
   if (!meeting) {
      return (
       <div className="text-center text-gray-500 mt-10">Meeting not found.</div>
     );
   }
 
-  // Display meeting details
+  // Display meeting details using data from hook
   return (
-    <div className="space-y-8">
+    <div className="max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">{meeting.title || 'Meeting Details'}</h1>
