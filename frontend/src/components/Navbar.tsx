@@ -188,7 +188,6 @@ const Navbar: FC = memo(() => {
                 hidePersonal
                 afterLeaveOrganizationUrl="/"
                 afterSelectOrganizationUrl="/organizations/:id"
-                organizationProfileUrl="/user"
                 appearance={{
                   elements: {
                     rootBox: "flex items-center",

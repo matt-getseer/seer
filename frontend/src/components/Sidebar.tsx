@@ -11,7 +11,7 @@ import {
   CaretDoubleLeft,
   CaretDoubleRight
 } from '@phosphor-icons/react'
-import { UserButton } from '@clerk/clerk-react'
+import { UserButton, useUser } from '@clerk/clerk-react'
 
 interface SidebarProps {
   onSearchClick: () => void;
@@ -86,6 +86,7 @@ const NavLinkItem = memo(({
 });
 
 const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: SidebarProps) => {
+  const { user } = useUser();
   const toggleCollapse = useCallback(() => {
     if (onToggleCollapse) {
       onToggleCollapse(!isCollapsed);
@@ -182,16 +183,26 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
 
       {/* User profile section at the bottom of sidebar */}
       <div className={`transition-all duration-300 ease-in-out ${isCollapsed ? 'p-2 flex justify-center' : 'p-4'}`}>
-        <UserButton 
-          afterSignOutUrl="/sign-in"
-          appearance={{
-            elements: {
-              userButtonTrigger: `${isCollapsed ? '' : 'w-full'}`,
-              userButtonBox: `${isCollapsed ? '' : 'w-full'}`,
-              avatarBox: "w-8 h-8"
-            }
-          }}
-        />
+        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'} w-full`}>
+          <UserButton 
+            afterSignOutUrl="/sign-in"
+            appearance={{
+              elements: {
+                avatarBox: "w-10 h-10"
+              }
+            }}
+          />
+          {!isCollapsed && (
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {user?.fullName ?? 'Loading user...'}
+              </p>
+              <p className="text-xs text-gray-500 truncate">
+                {user?.primaryEmailAddress?.emailAddress ?? ''}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   );
