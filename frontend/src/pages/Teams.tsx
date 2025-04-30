@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { teamService } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import { AxiosError } from 'axios'
-import { MagnifyingGlass } from '@phosphor-icons/react'
+import { MagnifyingGlass, ArrowUp, ArrowDown } from '@phosphor-icons/react'
 import { useTeams } from '../hooks/useQueryHooks'
 
 type Employee = {
@@ -13,6 +13,11 @@ type Employee = {
   startDate: string
   interviewCount?: number
 }
+
+type SortConfig = {
+  key: keyof Employee;
+  direction: 'ascending' | 'descending';
+} | null;
 
 type Team = {
   id: number
@@ -29,6 +34,7 @@ const Teams = () => {
   const { data: teams = [], isLoading: loading, error: queryError } = useTeams<Team[]>();
   const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState('')
+  const [sortConfig, setSortConfig] = useState<SortConfig>(null);
 
   const error = queryError 
     ? (
@@ -47,6 +53,24 @@ const Teams = () => {
     navigate(`/employees/${id}`)
   }, [navigate])
 
+  const requestSort = useCallback((key: keyof Employee) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  }, [sortConfig]);
+
+  const getSortIcon = useCallback((key: keyof Employee) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return null; // No icon if not sorted by this column
+    }
+    if (sortConfig.direction === 'ascending') {
+      return <ArrowUp size={16} className="inline ml-1" />;
+    }
+    return <ArrowDown size={16} className="inline ml-1" />;
+  }, [sortConfig]);
+
   const filteredTeams = useMemo(() => {
     if (loading || error) return [];
     return teams.filter(team => {
@@ -62,6 +86,42 @@ const Teams = () => {
       return teamMatches || employeeMatches
     })
   }, [teams, searchTerm, loading, error])
+
+  const sortEmployees = useCallback((employees: Employee[]) => {
+    if (!sortConfig) {
+      return employees; // Return original if no sorting applied
+    }
+    const sorted = [...employees].sort((a, b) => {
+      let aValue: any = a[sortConfig.key];
+      let bValue: any = b[sortConfig.key];
+
+      // Basic comparison logic (handle nulls, strings, numbers)
+      if (aValue === null || aValue === undefined) aValue = '';
+      if (bValue === null || bValue === undefined) bValue = '';
+
+      if (sortConfig.key === 'interviewCount') {
+          aValue = typeof aValue === 'number' ? aValue : 0;
+          bValue = typeof bValue === 'number' ? bValue : 0;
+      } else if (typeof aValue === 'string' && typeof bValue === 'string') {
+          aValue = aValue.toLowerCase();
+          bValue = bValue.toLowerCase();
+      } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+          // Numerical comparison
+      } else {
+           aValue = String(aValue);
+           bValue = String(bValue);
+      }
+
+      if (aValue < bValue) {
+        return sortConfig.direction === 'ascending' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'ascending' ? 1 : -1;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [sortConfig]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -119,25 +179,25 @@ const Teams = () => {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead>
                       <tr>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                          Name
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('name')}>
+                          Name {getSortIcon('name')}
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                          Title
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('title')}>
+                          Title {getSortIcon('title')}
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                          Email
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('email')}>
+                          Email {getSortIcon('email')}
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                          Start Date
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('startDate')}>
+                          Start Date {getSortIcon('startDate')}
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                          Interviews
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('interviewCount')}>
+                          Interviews {getSortIcon('interviewCount')}
                         </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {team.employees.map((employee) => (
+                      {sortEmployees(team.employees).map((employee) => (
                         <tr key={employee.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             <button 

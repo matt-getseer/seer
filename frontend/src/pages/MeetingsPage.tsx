@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { meetingService } from '../api/client'; // Keep for potential mutations
 import { format } from 'date-fns'; // For date formatting
 import { useMeetings } from '../hooks/useQueryHooks'; // Import the custom hook
 import { AxiosError } from 'axios'; // Import AxiosError
+import { ArrowUp, ArrowDown } from 'phosphor-react'; // Import Phosphor icons
 
 // Define the expected structure of a meeting object from the API
 interface Meeting {
@@ -19,9 +20,18 @@ interface Meeting {
   // Add other fields if needed for the list view
 }
 
+// Define sort configuration
+type SortConfig = {
+  key: keyof Meeting | 'employeeName'; // Allow sorting by nested employee name
+  direction: 'ascending' | 'descending';
+} | null;
+
 const MeetingsPage: React.FC = () => {
   // Use the custom hook for data fetching, loading, and error state
-  const { data: meetings = [], isLoading, error: queryError } = useMeetings<Meeting[]>();
+  const { data: meetingsData = [], isLoading, error: queryError } = useMeetings<Meeting[]>();
+
+  // Add state for sorting
+  const [sortConfig, setSortConfig] = useState<SortConfig>(null);
 
   // Keep navigation state
   const navigate = useNavigate();
@@ -42,6 +52,67 @@ const MeetingsPage: React.FC = () => {
 
   const handleRowClick = (meetingId: number) => {
     navigate(`/meetings/${meetingId}`);
+  };
+
+  // Memoized sorting logic
+  const sortedMeetings = useMemo(() => {
+    let sortableItems = [...meetingsData];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        let aValue: any;
+        let bValue: any;
+
+        // Handle nested employee name sorting
+        if (sortConfig.key === 'employeeName') {
+            aValue = a.employee?.name || '';
+            bValue = b.employee?.name || '';
+        } else {
+            aValue = a[sortConfig.key as keyof Meeting];
+            bValue = b[sortConfig.key as keyof Meeting];
+        }
+
+
+        // Basic comparison, handle nulls/undefined and case-insensitivity for strings
+        if (aValue === null || aValue === undefined) aValue = '';
+        if (bValue === null || bValue === undefined) bValue = '';
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+            aValue = aValue.toLowerCase();
+            bValue = bValue.toLowerCase();
+        }
+
+        if (aValue < bValue) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [meetingsData, sortConfig]);
+
+
+  // Function to request sorting
+  const requestSort = (key: keyof Meeting | 'employeeName') => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  // Function to render sort icons
+  const getSortIcon = (key: keyof Meeting | 'employeeName') => {
+    if (!sortConfig || sortConfig.key !== key) {
+      // Return a placeholder or default icon if needed, or null for no icon when not sorted
+      return null; // Or <SomeDefaultIcon size={16} />;
+    }
+    if (sortConfig.direction === 'ascending') {
+      return <ArrowUp size={16} className="inline ml-1" />;
+    }
+    return <ArrowDown size={16} className="inline ml-1" />;
   };
 
   // Display loading state from the hook
@@ -76,20 +147,30 @@ const MeetingsPage: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Title</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Employee</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Date/Time</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Platform</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Status</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('title')}>
+                    Title {getSortIcon('title')}
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('employeeName')}>
+                    Employee {getSortIcon('employeeName')}
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('scheduledTime')}>
+                    Date/Time {getSortIcon('scheduledTime')}
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('platform')}>
+                    Platform {getSortIcon('platform')}
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('status')}>
+                    Status {getSortIcon('status')}
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {meetings.length === 0 ? (
+                {sortedMeetings.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">No meetings found.</td>
                   </tr>
                 ) : (
-                  meetings.map((meeting) => (
+                  sortedMeetings.map((meeting) => (
                     <tr key={meeting.id} onClick={() => handleRowClick(meeting.id)} className="hover:bg-gray-50 cursor-pointer">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{meeting.title || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{meeting.employee?.name || 'N/A'}</td>

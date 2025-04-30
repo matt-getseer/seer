@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, memo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { MagnifyingGlass } from '@phosphor-icons/react'
+import { MagnifyingGlass, ArrowUp, ArrowDown } from '@phosphor-icons/react'
 import EmployeeProfile from '../components/EmployeeProfile'
 import Flag from 'react-world-flags'
 import { useEmployees } from '../hooks/useQueryHooks'
@@ -22,7 +22,15 @@ type Employee = {
     name: string
     department: string
   }
+  teamName?: string;
+  teamDepartment?: string;
 }
+
+// Define sort configuration for Employees
+type SortConfig = {
+  key: keyof Employee | 'teamName' | 'teamDepartment';
+  direction: 'ascending' | 'descending';
+} | null;
 
 // Cache for country codes to prevent recalculation
 const countryCodeCache: Record<string, string> = {};
@@ -156,30 +164,33 @@ const EmployeeRow = memo(({
   </tr>
 ));
 
-// Table header component extracted to prevent re-rendering
-const TableHeader = memo(() => (
+// Table header component extracted - NOW accepts sorting props
+const TableHeader = memo(({ requestSort, getSortIcon }: {
+  requestSort: (key: keyof Employee | 'teamName' | 'teamDepartment') => void;
+  getSortIcon: (key: keyof Employee | 'teamName' | 'teamDepartment') => React.ReactNode;
+}) => (
   <thead className="bg-gray-50">
     <tr>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-        Name
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('name')}>
+        Name {getSortIcon('name')}
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-        Title
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('title')}>
+        Title {getSortIcon('title')}
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-        Team
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('teamName')}>
+        Team {getSortIcon('teamName')}
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-        Email
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('email')}>
+        Email {getSortIcon('email')}
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-        Country
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('country')}>
+        Country {getSortIcon('country')}
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-        Start Date
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('startDate')}>
+        Start Date {getSortIcon('startDate')}
       </th>
-      <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 tracking-wider">
-        Meetings
+      <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('meetingCount')}>
+        Meetings {getSortIcon('meetingCount')}
       </th>
       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
         Actions
@@ -216,9 +227,10 @@ const Employees = () => {
   const { id: employeeId } = useParams<{ id?: string }>()
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [selectedEmployeeForScheduling, setSelectedEmployeeForScheduling] = useState<Employee | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   
   const selectedEmployeeId = employeeId ? parseInt(employeeId, 10) : null
-  const { data: employees = [], isLoading, error } = useEmployees();
+  const { data: employeesData = [], isLoading, error } = useEmployees<Employee[]>();
 
   // Format date for display - memoized to avoid recreation
   const formatDate = useCallback((dateString: string | null) => {
@@ -240,11 +252,11 @@ const Employees = () => {
   // Filter employees based on search term - memoized to prevent recalculation
   const filteredEmployees = useMemo(() => {
     if (!searchTerm.trim()) {
-      return employees;
+      return employeesData;
     }
     
     const searchLower = searchTerm.toLowerCase();
-    return employees.filter((employee: Employee) => (
+    return employeesData.filter((employee: Employee) => (
       employee.name.toLowerCase().includes(searchLower) ||
       employee.title.toLowerCase().includes(searchLower) ||
       employee.email.toLowerCase().includes(searchLower) ||
@@ -252,7 +264,75 @@ const Employees = () => {
       (employee.team?.name && employee.team.name.toLowerCase().includes(searchLower)) ||
       (employee.team?.department && employee.team.department.toLowerCase().includes(searchLower))
     ));
-  }, [employees, searchTerm]);
+  }, [employeesData, searchTerm]);
+
+  // Function to request sorting
+  const requestSort = useCallback((key: keyof Employee | 'teamName' | 'teamDepartment') => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  }, [sortConfig]);
+
+  // Function to render sort icons
+  const getSortIcon = useCallback((key: keyof Employee | 'teamName' | 'teamDepartment') => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return null;
+    }
+    if (sortConfig.direction === 'ascending') {
+      return <ArrowUp size={16} className="inline ml-1" />;
+    }
+    return <ArrowDown size={16} className="inline ml-1" />;
+  }, [sortConfig]);
+
+  // Sort the filtered employees - memoized
+  const sortedAndFilteredEmployees = useMemo(() => {
+    let sortableItems = [...filteredEmployees];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        let aValue: any;
+        let bValue: any;
+
+        if (sortConfig.key === 'teamName') {
+          aValue = a.team?.name || '';
+          bValue = b.team?.name || '';
+        } else if (sortConfig.key === 'teamDepartment') {
+          aValue = a.team?.department || '';
+          bValue = b.team?.department || '';
+        } else {
+          const key = sortConfig.key as keyof Employee;
+          aValue = a[key];
+          bValue = b[key];
+        }
+
+        if (aValue === null || aValue === undefined) aValue = '';
+        if (bValue === null || bValue === undefined) bValue = '';
+        
+        if (sortConfig.key === 'meetingCount') {
+          aValue = typeof aValue === 'number' ? aValue : 0;
+          bValue = typeof bValue === 'number' ? bValue : 0;
+        } else if (typeof aValue === 'string' && typeof bValue === 'string') {
+          aValue = aValue.toLowerCase();
+          bValue = bValue.toLowerCase();
+        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+          // Numerical comparison
+        } else {
+          aValue = String(aValue);
+          bValue = String(bValue);
+        }
+
+        if (aValue < bValue) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [filteredEmployees, sortConfig]);
 
   // Memoized event handlers
   const handleEmployeeClick = useCallback((id: number) => {
@@ -308,17 +388,17 @@ const Employees = () => {
         <LoadingState />
       ) : error ? (
         <ErrorState message={`Error loading employees: ${(error as Error).message}`} />
-      ) : filteredEmployees.length === 0 ? (
-        <EmptyState searchTerm={searchTerm} hasEmployees={employees.length > 0} />
+      ) : sortedAndFilteredEmployees.length === 0 ? (
+        <EmptyState searchTerm={searchTerm} hasEmployees={employeesData.length > 0} />
       ) : (
         <div className="flex flex-col mt-4">
           <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
             <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
               <div className="overflow-hidden border border-gray-200 sm:rounded-lg">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <TableHeader />
+                  <TableHeader requestSort={requestSort} getSortIcon={getSortIcon} />
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredEmployees.map((employee: Employee) => (
+                    {sortedAndFilteredEmployees.map((employee: Employee) => (
                       <EmployeeRow 
                         key={employee.id} 
                         employee={employee} 
