@@ -109,20 +109,8 @@ const getCountryCode = (countryName: string | null | undefined): string => {
 
 // Loading state component
 const ProfileLoadingState = memo(() => (
-  <div className="bg-white rounded-lg shadow p-6">
-    <div className="animate-pulse space-y-4">
-      <div className="h-6 bg-gray-200 rounded w-1/4"></div>
-      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-      <div className="h-32 bg-gray-200 rounded"></div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="h-4 bg-gray-200 rounded"></div>
-        <div className="h-4 bg-gray-200 rounded"></div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="h-4 bg-gray-200 rounded"></div>
-        <div className="h-4 bg-gray-200 rounded"></div>
-      </div>
-    </div>
+  <div className="flex justify-center items-center h-64 p-6">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
   </div>
 ));
 
@@ -148,7 +136,7 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
   const navigate = useNavigate();
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Header with back button */}
       <div className="flex items-center">
         <button
@@ -391,27 +379,21 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
 });
 
 const EmployeeProfile = ({ employeeId, onClose }: EmployeeProfileProps) => {
-  const { data: employee, isLoading: isLoadingEmployee, error: employeeError, refetch: refetchEmployee } = useEmployee(employeeId);
+  const { data: employee, isLoading, error, refetch } = useEmployee(employeeId);
 
-  if (isLoadingEmployee) {
+  if (isLoading) {
     return <ProfileLoadingState />;
   }
 
-  if (employeeError || !employee) {
-    return (
-      <ProfileErrorState 
-        message={employeeError?.message || 'Employee not found.'}
-        onRetry={refetchEmployee}
-      />
-    );
+  if (error) {
+    return <ProfileErrorState message={(error as Error).message || "Failed to load employee data."} onRetry={refetch} />;
   }
 
-  return (
-    <EmployeeProfileContent 
-      employee={employee}
-      onClose={onClose}
-    />
-  );
+  if (!employee) {
+    return <div className="text-center p-6">Employee not found.</div>; 
+  }
+
+  return <EmployeeProfileContent employee={employee} onClose={onClose} />;
 };
 
 export default EmployeeProfile;

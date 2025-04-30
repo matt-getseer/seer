@@ -64,13 +64,8 @@ const getCountryCode = (countryName: string | null | undefined): string => {
 
 // Loading UI component - extracted to avoid re-rendering the entire component when loading changes
 const LoadingState = memo(() => (
-  <div className="bg-white rounded-lg shadow p-6 text-center">
-    <div className="animate-pulse space-y-4">
-      <div className="h-4 bg-gray-200 rounded w-1/4 mx-auto"></div>
-      <div className="h-10 bg-gray-200 rounded"></div>
-      <div className="h-32 bg-gray-200 rounded"></div>
-      <div className="h-32 bg-gray-200 rounded"></div>
-    </div>
+  <div className="flex justify-center items-center h-64">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
   </div>
 ));
 

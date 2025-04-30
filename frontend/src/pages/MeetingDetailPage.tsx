@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { meetingService } from '../api/client';
 import { format } from 'date-fns';
 import { useMeeting } from '../hooks/useQueryHooks';
 import { AxiosError } from 'axios';
+import { ArrowLeft } from '@phosphor-icons/react';
 
 // Define the detailed meeting structure (should match backend includes)
 interface MeetingDetail {
@@ -38,6 +39,7 @@ interface MeetingDetail {
 
 const MeetingDetailPage: React.FC = () => {
   const { meetingId } = useParams<{ meetingId: string }>();
+  const navigate = useNavigate();
   const id = meetingId ? (typeof meetingId === 'string' ? parseInt(meetingId) : meetingId) : null;
 
   const { data: meeting, isLoading, error: queryError } = useMeeting<MeetingDetail>(id);
@@ -54,6 +56,11 @@ const MeetingDetailPage: React.FC = () => {
         : (queryError as Error).message
     ) || 'Failed to load meeting details. Please try again later.'
   : null;
+
+  // Back button handler
+  const handleBackClick = () => {
+    navigate('/meetings');
+  };
 
   // Helper to render insights grouped by type
   const renderInsights = () => {
@@ -123,19 +130,33 @@ const MeetingDetailPage: React.FC = () => {
 
   // Display meeting details using data from hook
   return (
-    <div className="max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">{meeting.title || 'Meeting Details'}</h1>
-        <p className="text-sm text-gray-500">
-          {format(new Date(meeting.scheduledTime), 'PPPPpppp')} ({meeting.platform || 'Unknown Platform'})
-        </p>
-        <span className={`mt-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${ meeting.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : meeting.status.startsWith('ERROR') ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800' }`}>
-          Status: {meeting.status}
-        </span>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* Header - Apply EmployeeProfile style */}
+      <div className="flex items-center">
+        <button
+          onClick={handleBackClick}
+          className="mr-4 p-2 rounded-full hover:bg-gray-100 transition-colors"
+          aria-label="Go back to meetings"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        {/* Use h1 for semantic correctness, but style like profile */}
+        <div className="flex-1 min-w-0">
+          <h2 className="text-2xl font-semibold leading-7 text-gray-900 sm:truncate sm:tracking-tight">
+            {meeting.title}
+          </h2>
+          {/* Apply mt-1 max-w-2xl text-sm text-gray-500 */}
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+            {format(new Date(meeting.scheduledTime), 'PPPPpppp')} ({meeting.platform || 'Unknown Platform'})
+          </p>
+          {/* Status badge remains, no longer indented */}
+          <span className={`mt-1 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${ meeting.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : meeting.status.startsWith('ERROR') ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800' }`}>
+            Status: {meeting.status}
+          </span>
+        </div>
       </div>
-
-       {/* Participants - Simple display */}
+      
+      {/* Participants - Simple display */}
        <div className="bg-white shadow overflow-hidden sm:rounded-lg p-4 md:p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-3">Participants</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">

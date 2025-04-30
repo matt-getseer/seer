@@ -81,7 +81,7 @@ const Engagement = () => {
   const [timeRange, setTimeRange] = useState('Last 6 months')
   
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Header with back button, title, and actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
