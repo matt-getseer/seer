@@ -153,6 +153,14 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
           />
           
           <NavLinkItem 
+            to="/meetings"
+            title="Meetings"
+            isCollapsed={isCollapsed}
+            icon={ChatCircle}
+            label="Meetings"
+          />
+          
+          <NavLinkItem 
             to="/reports"
             title="Reports"
             isCollapsed={isCollapsed}

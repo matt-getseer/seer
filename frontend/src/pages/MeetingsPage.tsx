@@ -1,0 +1,118 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { meetingService } from '../api/client'; // Import the service
+import { format } from 'date-fns'; // For date formatting
+
+// Define the expected structure of a meeting object from the API
+interface Meeting {
+  id: number;
+  title: string | null;
+  scheduledTime: string;
+  platform: string | null;
+  status: string;
+  employee: {
+    id: number;
+    name: string | null;
+  };
+  // Add other fields if needed for the list view
+}
+
+const MeetingsPage: React.FC = () => {
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchMeetings = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await meetingService.getAllMeetings();
+        setMeetings(response.data); // Assuming response.data is the array of meetings
+      } catch (err) {
+        console.error("Error fetching meetings:", err);
+        setError('Failed to fetch meetings. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMeetings();
+  }, []);
+
+  const handleRowClick = (meetingId: number) => {
+    navigate(`/meetings/${meetingId}`);
+  };
+
+  // Display loading state
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  // Display error state
+  if (error) {
+    return (
+      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+        <strong className="font-bold">Error:</strong>
+        <span className="block sm:inline"> {error}</span>
+      </div>
+    );
+  }
+
+  // Display meeting table
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+         <h1 className="text-2xl font-semibold text-gray-900">Meetings</h1>
+         {/* TODO: Add button to trigger recording? */}
+      </div>
+     
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {meetings.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">No meetings found.</td>
+                  </tr>
+                ) : (
+                  meetings.map((meeting) => (
+                    <tr key={meeting.id} onClick={() => handleRowClick(meeting.id)} className="hover:bg-gray-50 cursor-pointer">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{meeting.title || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{meeting.employee?.name || 'N/A'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {format(new Date(meeting.scheduledTime), 'PPpp')} 
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{meeting.platform || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                         {/* Basic status badge - can be enhanced */}
+                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${ meeting.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : meeting.status.startsWith('ERROR') ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800' }`}>
+                           {meeting.status}
+                         </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default MeetingsPage; 

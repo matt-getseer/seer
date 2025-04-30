@@ -267,8 +267,9 @@ export const taskService = {
 
 // Teams Service
 export const teamService = {
-  getAllTeams: async () => {
-    return await apiClient.get('/teams');
+  getAllTeams: async (skipCache = false) => {
+    console.log('Fetching teams, skipCache:', skipCache);
+    return await apiClient.get('/teams', { params: { skipCache } });
   },
   getTeamById: async (id: number) => {
     return await apiClient.get(`/teams/${id}`);
@@ -294,8 +295,9 @@ export const employeeService = {
   getTeamEmployees: async (teamId: number) => {
     return await apiClient.get(`/employees/team/${teamId}`);
   },
-  getAllEmployees: async () => {
-    return await apiClient.get('/employees');
+  getAllEmployees: async (skipCache = false) => {
+    console.log('Fetching employees, skipCache:', skipCache);
+    return await apiClient.get('/employees', { params: { skipCache } });
   },
   getEmployeeById: async (id: number) => {
     return await apiClient.get(`/employees/${id}`);
@@ -329,6 +331,29 @@ export const employeeService = {
     invalidateCache(`/employees/${id}`);
     return response;
   }
+};
+
+// Meeting Service
+export const meetingService = {
+  // Fetch all meetings for the logged-in user
+  getAllMeetings: async (skipCache = false) => {
+    console.log('Fetching meetings, skipCache:', skipCache);
+    return await apiClient.get('/meetings', { params: { skipCache } });
+  },
+
+  // Fetch details for a specific meeting by ID
+  getMeetingById: async (meetingId: number | string, skipCache = false) => {
+    console.log(`Fetching meeting details for ID: ${meetingId}, skipCache: ${skipCache}`);
+    return await apiClient.get(`/meetings/${meetingId}`, { params: { skipCache } });
+  },
+
+  // Invite bot to record a meeting
+  recordMeeting: async (data: { meetingUrl: string; employeeId: number; title?: string }) => {
+    console.log('Sending request to record meeting:', data.meetingUrl);
+    // Invalidate meeting list cache after requesting a new recording
+    invalidateCache('/meetings'); 
+    return await apiClient.post('/meetings/record', data);
+  },
 };
 
 export default apiClient;

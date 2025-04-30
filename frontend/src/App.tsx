@@ -23,6 +23,10 @@ const Sentiment = lazy(() => import('./pages/reports/Sentiment'))
 const TopPerformer = lazy(() => import('./pages/reports/TopPerformer'))
 const EmployeesAtRisk = lazy(() => import('./pages/reports/EmployeesAtRisk'))
 
+// Lazy load meeting pages
+const MeetingsPage = lazy(() => import('./pages/MeetingsPage'))
+const MeetingDetailPage = lazy(() => import('./pages/MeetingDetailPage'))
+
 // Navigation setup component
 const NavigationSetup = memo(({ children }: { children: React.ReactNode }) => {
   const { isLoaded, getToken } = useAuth()
@@ -210,69 +214,178 @@ function App() {
   return (
     <Router>
       <NavigationSetup>
-        <Routes>
-          {/* Public Routes */} 
-          <Route path="/sign-in" element={<PublicRoute><SignIn /></PublicRoute>} />
-          <Route path="/sign-up" element={<PublicRoute><SignUp /></PublicRoute>} />
-          
-          {/* Org Creation Route */} 
-          <Route 
-            path="/organizations/new" 
-            element={
-              <ProtectedRoute>
-                <MinimalLayout>
-                  <CreateOrganization />
-                </MinimalLayout>
-              </ProtectedRoute>
-            } 
-          />
-          
-          {/* Restore Original Protected Route Structure */} 
-          <Route 
-            path="/" 
-            element={
-              <ProtectedRoute>
-                <MainLayout
-                  sidebarCollapsed={sidebarCollapsed}
-                  setSidebarCollapsed={handleSetSidebarCollapsed}
-                  setSearchModalOpen={handleSetSearchModalOpen}
-                >
-                  <Home />
-                </MainLayout>
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/employees" 
-            element={
-              <ProtectedRoute>
-                <MainLayout
-                  sidebarCollapsed={sidebarCollapsed}
-                  setSidebarCollapsed={handleSetSidebarCollapsed}
-                  setSearchModalOpen={handleSetSearchModalOpen}
-                >
-                  <Employees />
-                </MainLayout>
-              </ProtectedRoute>
-            } 
-          />
-           {/* ... Add ALL other protected routes back here in the same pattern ... */}
-           <Route path="/employees/:id" element={<ProtectedRoute><MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}><Employees /></MainLayout></ProtectedRoute>} />
-           <Route path="/teams" element={<ProtectedRoute><MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}><Teams /></MainLayout></ProtectedRoute>} />
-           <Route path="/reports" element={<ProtectedRoute><MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}><Reports /></MainLayout></ProtectedRoute>} />
-           <Route path="/settings" element={<ProtectedRoute><MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}><Settings /></MainLayout></ProtectedRoute>} />
-           {/* Lazy Loaded Reports */}
-           <Route path="/reports/team-performance" element={<ProtectedRoute><MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}><Suspense fallback={<div>Loading...</div>}><TeamPerformance /></Suspense></MainLayout></ProtectedRoute>} />
-           <Route path="/reports/core-competency" element={<ProtectedRoute><MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}><Suspense fallback={<div>Loading...</div>}><CoreCompetency /></Suspense></MainLayout></ProtectedRoute>} />
-           <Route path="/reports/engagement" element={<ProtectedRoute><MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}><Suspense fallback={<div>Loading...</div>}><Engagement /></Suspense></MainLayout></ProtectedRoute>} />
-           <Route path="/reports/sentiment" element={<ProtectedRoute><MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}><Suspense fallback={<div>Loading...</div>}><Sentiment /></Suspense></MainLayout></ProtectedRoute>} />
-           <Route path="/reports/top-performer" element={<ProtectedRoute><MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}><Suspense fallback={<div>Loading...</div>}><TopPerformer /></Suspense></MainLayout></ProtectedRoute>} />
-           <Route path="/reports/employees-at-risk" element={<ProtectedRoute><MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}><Suspense fallback={<div>Loading...</div>}><EmployeesAtRisk /></Suspense></MainLayout></ProtectedRoute>} />
-           
-           {/* Catch-all for unknown routes (optional, could be a 404 page) */}
-           <Route path="*" element={<Navigate to="/" replace />} /> 
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>}>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/sign-in" element={<PublicRoute><SignIn /></PublicRoute>} />
+            <Route path="/sign-up" element={<PublicRoute><SignUp /></PublicRoute>} />
 
-        </Routes>
+            {/* Routes requiring authentication AND organization */}
+            <Route 
+              path="/" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Home />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/employees" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Employees />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/teams" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Teams />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/meetings" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <MeetingsPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/meetings/:meetingId" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <MeetingDetailPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/reports" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Reports />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/settings" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Settings />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/employees/:id" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Employees />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/reports/team-performance" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Suspense fallback={<div>Loading...</div>}>
+                      <TeamPerformance />
+                    </Suspense>
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/reports/core-competency" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Suspense fallback={<div>Loading...</div>}>
+                      <CoreCompetency />
+                    </Suspense>
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/reports/engagement" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Suspense fallback={<div>Loading...</div>}>
+                      <Engagement />
+                    </Suspense>
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/reports/sentiment" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Suspense fallback={<div>Loading...</div>}>
+                      <Sentiment />
+                    </Suspense>
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/reports/top-performer" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Suspense fallback={<div>Loading...</div>}>
+                      <TopPerformer />
+                    </Suspense>
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/reports/employees-at-risk" 
+              element={
+                <ProtectedRoute>
+                  <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                    <Suspense fallback={<div>Loading...</div>}>
+                      <EmployeesAtRisk />
+                    </Suspense>
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/organizations/new" 
+              element={
+                <ProtectedRoute>
+                  <MinimalLayout>
+                    <CreateOrganization />
+                  </MinimalLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
         {renderSearchModal()}
       </NavigationSetup>
     </Router>

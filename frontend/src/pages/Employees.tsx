@@ -4,6 +4,7 @@ import { MagnifyingGlass } from '@phosphor-icons/react'
 import EmployeeProfile from '../components/EmployeeProfile'
 import Flag from 'react-world-flags'
 import { useEmployees } from '../hooks/useQueryHooks'
+import RecordMeetingModal from '../components/RecordMeetingModal'
 
 type Employee = {
   id: number
@@ -95,10 +96,12 @@ const EmptyState = memo(({ searchTerm, hasEmployees }: { searchTerm: string, has
 const EmployeeRow = memo(({ 
   employee, 
   onEmployeeClick,
+  onRecordClick,
   formatDate
 }: { 
   employee: Employee, 
   onEmployeeClick: (id: number) => void,
+  onRecordClick: (employee: Employee) => void,
   formatDate: (dateString: string | null) => string
 }) => (
   <tr key={employee.id}>
@@ -141,6 +144,14 @@ const EmployeeRow = memo(({
     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
       {formatDate(employee.startDate)}
     </td>
+    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+      <button 
+        onClick={() => onRecordClick(employee)}
+        className="text-indigo-600 hover:text-indigo-900 focus:outline-none text-sm font-medium"
+      >
+        Record
+      </button>
+    </td>
   </tr>
 ));
 
@@ -165,6 +176,9 @@ const TableHeader = memo(() => (
       </th>
       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
         Start Date
+      </th>
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+        Actions
       </th>
     </tr>
   </thead>
@@ -196,6 +210,8 @@ const Employees = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const navigate = useNavigate()
   const { id: employeeId } = useParams<{ id?: string }>()
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedEmployeeForModal, setSelectedEmployeeForModal] = useState<Employee | null>(null);
   
   const selectedEmployeeId = employeeId ? parseInt(employeeId, 10) : null
   const { data: employees = [], isLoading, error } = useEmployees();
@@ -247,6 +263,12 @@ const Employees = () => {
     setSearchTerm(e.target.value);
   }, []);
 
+  // Handler for the Record button click
+  const handleRecordClick = useCallback((employee: Employee) => {
+    setSelectedEmployeeForModal(employee);
+    setIsModalOpen(true);
+  }, []);
+
   // If an employee is selected, render the EmployeeProfile component
   if (selectedEmployeeId) {
     return (
@@ -274,26 +296,45 @@ const Employees = () => {
 
       {isLoading ? (
         <LoadingState />
+      ) : error ? (
+        <ErrorState message={`Error loading employees: ${(error as Error).message}`} />
       ) : filteredEmployees.length === 0 ? (
         <EmptyState searchTerm={searchTerm} hasEmployees={employees.length > 0} />
       ) : (
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 table-fixed">
-              <TableHeader />
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredEmployees.map((employee: Employee) => (
-                  <EmployeeRow 
-                    key={employee.id}
-                    employee={employee}
-                    onEmployeeClick={handleEmployeeClick}
-                    formatDate={formatDate}
-                  />
-                ))}
-              </tbody>
-            </table>
+        <div className="flex flex-col mt-4">
+          <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+            <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
+              <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <TableHeader />
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredEmployees.map((employee: Employee) => (
+                      <EmployeeRow 
+                        key={employee.id} 
+                        employee={employee} 
+                        onEmployeeClick={handleEmployeeClick}
+                        onRecordClick={handleRecordClick}
+                        formatDate={formatDate} 
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
+      )}
+
+      {selectedEmployeeForModal && (
+        <RecordMeetingModal 
+          employeeId={selectedEmployeeForModal.id}
+          employeeName={selectedEmployeeForModal.name}
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedEmployeeForModal(null);
+          }}
+        />
       )}
     </div>
   )
