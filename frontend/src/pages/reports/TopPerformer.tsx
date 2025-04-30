@@ -185,20 +185,20 @@ const TopPerformer = () => {
       
       {/* Top performers table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-6 py-4 border-gray-200">
           <h2 className="text-lg font-medium text-gray-900">Top Performers List</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Performance Score</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Leadership</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Innovation</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teamwork</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quality</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Department</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Performance Score</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Leadership</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Innovation</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Teamwork</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Quality</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -222,18 +222,18 @@ const TopPerformer = () => {
       
       {/* Career progression table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-6 py-4 border-gray-200">
           <h2 className="text-lg font-medium text-gray-900">Career Progression Status</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Promoted</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time in Role</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Readiness for Next Level</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Department</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Last Promoted</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Time in Role</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Readiness for Next Level</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">

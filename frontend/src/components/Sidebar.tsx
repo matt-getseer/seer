@@ -11,6 +11,7 @@ import {
   CaretDoubleLeft,
   CaretDoubleRight
 } from '@phosphor-icons/react'
+import { UserButton } from '@clerk/clerk-react'
 
 interface SidebarProps {
   onSearchClick: () => void;
@@ -70,16 +71,16 @@ const NavLinkItem = memo(({
       to={to} 
       end={to === '/'}
       className={({ isActive }) => 
-        `flex items-center ${isCollapsed ? 'justify-center' : 'px-3'} py-2 text-sm font-medium rounded-md transition-all duration-300 ease-in-out ${
+        `flex items-center ${isCollapsed ? 'justify-center' : 'px-3'} py-2 text-sm font-medium rounded-md transition-all duration-200 ease-in-out ${
           isActive 
-            ? 'text-primary-600 bg-primary-50' 
-            : 'text-gray-600 hover:bg-gray-100'
+            ? 'text-gray-900 bg-gray-200 border-l-2 border-gray-900' 
+            : 'text-gray-900 hover:bg-gray-200 hover:text-gray-900'
         }`
       }
       title={title}
     >
-      <Icon className={`transition-all duration-300 ease-in-out ${isCollapsed ? 'h-5 w-5' : 'mr-3 h-5 w-5'}`} />
-      {!isCollapsed && <span className="transition-opacity duration-300 ease-in-out">{label}</span>}
+      <Icon className={`transition-all duration-200 ease-in-out ${isCollapsed ? 'h-5 w-5' : 'mr-3 h-5 w-5'}`} />
+      {!isCollapsed && <span className="transition-opacity duration-200 ease-in-out">{label}</span>}
     </NavLink>
   );
 });
@@ -92,8 +93,8 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
   }, [onToggleCollapse, isCollapsed]);
 
   return (
-    <aside className={`bg-gray-50 border-r border-gray-200 fixed h-screen flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16' : 'w-sidebar'}`}>
-      <div className={`h-16 flex items-center border-b border-gray-200 transition-all duration-300 ease-in-out ${isCollapsed ? 'justify-center' : 'px-4 justify-between'}`}>
+    <aside className={`bg-[#f4f4f5] fixed h-screen flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16' : 'w-sidebar'}`}>
+      <div className={`h-16 flex items-center transition-all duration-300 ease-in-out ${isCollapsed ? 'justify-center' : 'px-4 justify-between'}`}>
         {!isCollapsed && (
           <Link to="/" className="flex items-center space-x-2 transition-opacity duration-300 ease-in-out">
             <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
@@ -111,7 +112,7 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
         </button>
       </div>
 
-      <nav className={`${isCollapsed ? 'p-2' : 'p-4'} space-y-1 flex-1 overflow-y-auto transition-all duration-300 ease-in-out`}>
+      <nav className={`${isCollapsed ? 'p-2' : 'pt-8 px-4'} space-y-1 flex-1 overflow-y-auto transition-all duration-200 ease-in-out`}>
         <NavLinkItem 
           to="/"
           title="Home"
@@ -122,11 +123,11 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
         
         <button 
           onClick={onSearchClick}
-          className={`flex items-center ${isCollapsed ? 'justify-center' : 'px-3'} py-2 text-sm font-medium rounded-md text-gray-600 hover:bg-gray-100 w-full transition-all duration-300 ease-in-out`}
+          className={`flex items-center ${isCollapsed ? 'justify-center' : 'px-3'} py-2 text-sm font-medium rounded-md text-gray-900 hover:bg-gray-200 hover:text-gray-900 w-full transition-all duration-200 ease-in-out mb-4`}
           title="Search"
         >
-          <MagnifyingGlass className={`transition-all duration-300 ease-in-out ${isCollapsed ? 'h-5 w-5' : 'mr-3 h-5 w-5'}`} />
-          {!isCollapsed && <span className="transition-opacity duration-300 ease-in-out">Search</span>}
+          <MagnifyingGlass className={`transition-all duration-200 ease-in-out ${isCollapsed ? 'h-5 w-5' : 'mr-3 h-5 w-5'}`} />
+          {!isCollapsed && <span className="transition-opacity duration-200 ease-in-out">Search</span>}
         </button>
         
         <div className="pt-4">
@@ -179,20 +180,17 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
       </nav>
 
       {/* User profile section at the bottom of sidebar */}
-      <div className={`border-t border-gray-200 transition-all duration-300 ease-in-out ${isCollapsed ? 'p-2' : 'p-4'}`}>
-        <div className={`flex ${isCollapsed ? 'justify-center' : ''}`}>
-          <div className="relative">
-            <img
-              className="h-8 w-8 rounded-full"
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
-              alt="User avatar"
-            />
-            <span className="absolute bottom-0 right-0 block h-2 w-2 rounded-full bg-green-400 transform translate-x-1/4 translate-y-1/4 border border-white"></span>
-          </div>
-          {!isCollapsed && (
-            <span className="ml-3 text-sm font-medium text-gray-700">Test User</span>
-          )}
-        </div>
+      <div className={`transition-all duration-300 ease-in-out ${isCollapsed ? 'p-2 flex justify-center' : 'p-4'}`}>
+        <UserButton 
+          afterSignOutUrl="/sign-in"
+          appearance={{
+            elements: {
+              userButtonTrigger: `${isCollapsed ? '' : 'w-full'}`,
+              userButtonBox: `${isCollapsed ? '' : 'w-full'}`,
+              avatarBox: "w-8 h-8"
+            }
+          }}
+        />
       </div>
     </aside>
   );

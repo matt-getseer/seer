@@ -145,12 +145,18 @@ const EmployeeRow = memo(({
       {formatDate(employee.startDate)}
     </td>
     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-      <button 
-        onClick={() => onRecordClick(employee)}
-        className="text-indigo-600 hover:text-indigo-900 focus:outline-none text-sm font-medium"
-      >
-        Record
-      </button>
+      {/* TODO: Add actual interview count data */}
+      <span className="inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+        0 
+      </span>
+    </td>
+    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+       <button 
+         onClick={() => onRecordClick(employee)}
+         className="text-indigo-600 hover:text-indigo-900 focus:outline-none text-sm font-medium"
+       >
+         Record
+       </button>
     </td>
   </tr>
 ));
@@ -159,25 +165,28 @@ const EmployeeRow = memo(({
 const TableHeader = memo(() => (
   <thead className="bg-gray-50">
     <tr>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
         Name
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
         Title
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
         Team
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
         Email
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
         Country
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
         Start Date
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+        Interviews
+      </th>
+      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
         Actions
       </th>
     </tr>
@@ -286,7 +295,7 @@ const Employees = () => {
 
   // Otherwise, render the employees list
   return (
-    <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Employees</h1>
         <SearchBar searchTerm={searchTerm} onSearchChange={handleSearchChange} />
@@ -304,7 +313,7 @@ const Employees = () => {
         <div className="flex flex-col mt-4">
           <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
             <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-              <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
+              <div className="overflow-hidden border border-gray-200 sm:rounded-lg">
                 <table className="min-w-full divide-y divide-gray-200">
                   <TableHeader />
                   <tbody className="bg-white divide-y divide-gray-200">

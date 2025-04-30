@@ -36,11 +36,26 @@ const Navbar: FC = memo(() => {
   const location = useLocation()
   const { signOut } = useClerk()
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
+  const [isScrolled, setIsScrolled] = useState(false);
 
   const handleLogout = useCallback(async () => {
     await signOut()
     navigate('/sign-in')
   }, [signOut, navigate])
+
+  // Effect to handle scroll detection
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 0);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    // Call handler once on mount to check initial scroll position
+    handleScroll(); 
+
+    // Cleanup listener on unmount
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []); // Empty dependency array ensures this runs only once on mount and cleanup on unmount
 
   // Fetch employee data for ID-based routes with caching
   useEffect(() => {
@@ -145,8 +160,10 @@ const Navbar: FC = memo(() => {
 
   return (
     <>
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <nav className={`bg-white sticky top-0 z-10 transition-shadow duration-200 ${
+          isScrolled ? '[box-shadow:0_1px_2px_0_rgba(0,0,0,0.05)]' : ''
+        }`}>
+        <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 justify-between items-center">
             <div className="flex-1">
               <nav className="flex" aria-label="Breadcrumb">
@@ -176,14 +193,6 @@ const Navbar: FC = memo(() => {
                   elements: {
                     rootBox: "flex items-center",
                     organizationSwitcherTrigger: "flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100"
-                  }
-                }}
-              />
-              <UserButton 
-                afterSignOutUrl="/sign-in"
-                appearance={{
-                  elements: {
-                    avatarBox: "w-8 h-8"
                   }
                 }}
               />
