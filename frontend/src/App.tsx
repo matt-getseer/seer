@@ -1,6 +1,6 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate, Link } from 'react-router-dom'
-import { useState, useEffect, lazy, Suspense, useCallback, useMemo, memo } from 'react'
-import { useAuth, useUser, useOrganizationList, useOrganization } from '@clerk/clerk-react'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom'
+import { useState, useEffect, lazy, Suspense, useCallback, memo } from 'react'
+import { useAuth, useUser, useOrganization, SignedIn, SignedOut, Protect } from '@clerk/clerk-react'
 import Sidebar from './components/Sidebar'
 import Navbar from './components/Navbar'
 import SearchModal from './components/SearchModal'
@@ -102,8 +102,37 @@ const MainLayout = memo(({ children, sidebarCollapsed, setSidebarCollapsed, setS
   );
 });
 
-function App() {
-  // Use useState with function initialization to ensure localStorage is only accessed once
+// --- NEW: Component to handle organization check after sign-in ---
+const OrganizationCheckWrapper = memo(({ children }: { children: React.ReactNode }) => {
+  const { organization, isLoaded } = useOrganization();
+  const location = useLocation();
+
+  console.log('[OrganizationCheckWrapper] State:', { isLoaded, hasOrg: !!organization, pathname: location.pathname });
+
+  if (!isLoaded) {
+    console.log('[OrganizationCheckWrapper] Not loaded, showing spinner.');
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  // After loading, check if org exists and if we are not on the creation page
+  if (!organization && location.pathname !== '/organizations/new') {
+    console.log('[OrganizationCheckWrapper] No org and not on /organizations/new, redirecting to /organizations/new.');
+    return <Navigate to="/organizations/new" replace />;
+  }
+
+  // If loaded and (organization exists OR we are on the creation page), render children
+  console.log('[OrganizationCheckWrapper] Checks passed, rendering children.');
+  return <>{children}</>;
+});
+// --- End NEW Component ---
+
+// NEW Component: Contains the main application logic previously in App
+const AppRoutes = () => {
+  // Move state hooks here
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -113,17 +142,24 @@ function App() {
     return false;
   });
 
+  // Move auth and location hooks here
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
-  
-  // Add console logs to debug authentication state
+  const location = useLocation(); // This is now valid as AppRoutes is inside Router
+
+  // Move logging useEffect here
   useEffect(() => {
     if (isLoaded) {
-      console.log('Auth state loaded:', { isSignedIn, userId: user?.id });
+      // Log auth state and current path
+      console.log('Auth state check:', { 
+        pathname: location.pathname, 
+        isSignedIn, 
+        userId: user?.id 
+      });
     }
-  }, [isLoaded, isSignedIn, user]);
+  }, [isLoaded, isSignedIn, user, location.pathname]);
 
-  // Memoize these callback functions to prevent unnecessary re-renders
+  // Move callback hooks here
   const handleSetSidebarCollapsed = useCallback((collapsed: boolean) => {
     setSidebarCollapsed(collapsed);
     localStorage.setItem('sidebarCollapsed', String(collapsed));
@@ -133,291 +169,208 @@ function App() {
     setSearchModalOpen(open);
   }, []);
 
-  // Remove useCallback wrapper, make it a regular component function
-  const ProtectedRoute = ({ children, requiresOrg = true }: { children: React.ReactNode; requiresOrg?: boolean }) => {
-    const location = useLocation();
-    const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
-    const { organization, isLoaded: isOrgLoaded } = useOrganization();
-    // State to track if initial checks passed successfully for this instance
-    const [initialPassComplete, setInitialPassComplete] = useState(false);
-
-    // Log entry point including state
-    console.log(`ProtectedRoute Render: Path=${location.pathname}, AuthLoaded=${isAuthLoaded}, OrgLoaded=${isOrgLoaded}, SignedIn=${isSignedIn}, InitialPass=${initialPassComplete}`);
-
-    // Only run the full suite of checks if the initial pass isn't marked complete yet
-    if (!initialPassComplete) {
-      const isLoading = !isAuthLoaded || (requiresOrg && !isOrgLoaded);
-
-      if (isLoading) {
-        console.log(`ProtectedRoute (${location.pathname}): Internal loading state ACTIVE (Initial Check)`);
-        return <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-        </div>;
-      }
-
-      if (!isSignedIn) {
-        console.log(`ProtectedRoute (${location.pathname}): User not signed in (Initial Check)`);
-        // Save redirect path and navigate
-        if (location.pathname !== '/' && !location.pathname.includes('/sign-in') && !location.pathname.includes('/sign-up')) {
-          localStorage.setItem('redirectAfterLogin', location.pathname + location.search);
-        }
-        return <Navigate to="/sign-in" state={{ from: location }} replace />;
-      }
-
-      if (requiresOrg && !organization && location.pathname !== '/organizations/new') {
-        console.log(`ProtectedRoute (${location.pathname}): Org check failed (Initial Check)`);
-        return <Navigate to="/organizations/new" replace />;
-      }
-
-      // All initial checks passed! Mark as complete and render children.
-      console.log(`ProtectedRoute (${location.pathname}): Initial checks PASSED`);
-      setInitialPassComplete(true); // Set state AFTER checks pass
-      return <>{children}</>; // Render children immediately
-
-    } else {
-      // ----- Initial pass was already complete for this instance -----
-      // On subsequent re-renders, just do a quick check for logout
-      if (!isSignedIn) {
-         console.log(`ProtectedRoute (${location.pathname}): User signed OUT after initial pass! Redirecting.`);
-         // Consider clearing localStorage here too if needed
-         if (location.pathname !== '/' && !location.pathname.includes('/sign-in') && !location.pathname.includes('/sign-up')) {
-           localStorage.setItem('redirectAfterLogin', location.pathname + location.search); // Still save path
-         }
-         // Resetting state might be needed if the component instance survives the redirect somehow, but often isn't.
-         // setInitialPassComplete(false); 
-         return <Navigate to="/sign-in" state={{ from: location }} replace />;
-      }
-
-      // If still signed in, assume org status is fine and render children immediately
-      console.log(`ProtectedRoute (${location.pathname}): Subsequent render, skipping full checks.`);
-      return <>{children}</>;
-    }
-  }; // End of ProtectedRoute component definition
-
-  // Memoized SearchModal rendering
+  // Move modal rendering here
   const renderSearchModal = useCallback(() => {
-    if (isSignedIn) {
-      return <SearchModal 
-        isOpen={searchModalOpen}
-        setIsOpen={handleSetSearchModalOpen}
-        onOpen={() => handleSetSearchModalOpen(true)} 
-      />;
-    }
-    return null;
-  }, [isSignedIn, searchModalOpen, handleSetSearchModalOpen]);
+    return <SearchModal 
+      isOpen={searchModalOpen}
+      setIsOpen={handleSetSearchModalOpen}
+      onOpen={() => handleSetSearchModalOpen(true)} 
+    />;
+  }, [searchModalOpen, handleSetSearchModalOpen]);
 
-  // PublicRoute helper (keep this)
-  const PublicRoute = ({ children }: { children: React.ReactNode }) => {
-    const { isSignedIn } = useAuth();
-    if (isSignedIn) {
-      return <Navigate to="/" replace />;
-    }
-    return <ClearRedirects>{children}</ClearRedirects>; 
-  };
-  
+  // Return the previous content of App's return statement
+  return (
+    <NavigationSetup>
+      <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>}>
+        <Routes>
+          {/* Routes visible only when signed OUT */}
+          <Route 
+            path="/sign-in" 
+            element={
+              <ClearRedirects><SignIn /></ClearRedirects>
+            }
+          />
+          <Route 
+            path="/sign-up" 
+            element={
+              <ClearRedirects><SignUp /></ClearRedirects>
+            }
+          />
+
+          {/* Routes visible only when signed IN - Use Protect */}
+          <Route 
+            path="/*" // Match all other paths for signed-in users
+            element={
+              <Protect fallback={<Navigate to="/sign-in" replace />}> 
+                {/* Search Modal makes sense only when signed in */} 
+                {renderSearchModal()}
+                
+                {/* Check for organization before rendering main layouts/routes */}
+                <OrganizationCheckWrapper>
+                  <Routes> {/* Nested Routes for organization-dependent paths */}
+                    {/* Org Creation: Special case handled by Org Check Wrapper */}
+                    <Route 
+                      path="/organizations/new" 
+                      element={
+                          <MinimalLayout> 
+                            <CreateOrganization />
+                          </MinimalLayout>
+                      }
+                    />
+                    
+                    {/* Main application routes requiring organization */}
+                    <Route 
+                      path="/" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Home />
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/employees" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Employees />
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/employees/:id" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Employees />
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/teams" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Teams />
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/meetings" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <MeetingsPage />
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/meetings/:meetingId" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <MeetingDetailPage />
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/reports" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Reports />
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/reports/team-performance" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                           <TeamPerformance />
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/reports/core-competency" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Suspense fallback={<div>Loading...</div>}>
+                            <CoreCompetency />
+                          </Suspense>
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/reports/engagement" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Suspense fallback={<div>Loading...</div>}>
+                            <Engagement />
+                          </Suspense>
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/reports/sentiment" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Suspense fallback={<div>Loading...</div>}>
+                            <Sentiment />
+                          </Suspense>
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/reports/top-performer" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Suspense fallback={<div>Loading...</div>}>
+                            <TopPerformer />
+                          </Suspense>
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/reports/employees-at-risk" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Suspense fallback={<div>Loading...</div>}>
+                            <EmployeesAtRisk />
+                          </Suspense>
+                        </MainLayout>
+                      }
+                    />
+                    <Route 
+                      path="/settings" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <Settings />
+                        </MainLayout>
+                      }
+                    />
+                    
+                    {/* Catch-all INSIDE organization check (user is signed in, has org) */}
+                    <Route 
+                      path="*" 
+                      element={
+                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                          <div className="text-center py-10">
+                            <h2 className="text-2xl font-semibold mb-2">404 - Page Not Found</h2>
+                            <p className="text-gray-600 mb-4">Sorry, the page you are looking for does not exist within your organization.</p>
+                            <Link to="/" className="text-indigo-600 hover:text-indigo-800 font-medium">Go to Home</Link>
+                          </div>
+                        </MainLayout>
+                      }
+                    />
+                  </Routes>
+                </OrganizationCheckWrapper>
+              </Protect>
+            }
+          />
+        </Routes>
+      </Suspense>
+    </NavigationSetup>
+  );
+}
+
+// Simplified App component
+function App() {
   return (
     <Router>
-      <NavigationSetup>
-        {!isLoaded ? (
-          // Show top-level loading spinner while Clerk initializes
-          <div className="flex items-center justify-center min-h-screen">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-          </div>
-        ) : (
-          // Clerk is loaded, now render routing and modals
-          <>
-            <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>}>
-              <Routes>
-                {/* Public routes */}
-                <Route path="/sign-in" element={<PublicRoute><SignIn /></PublicRoute>} />
-                <Route path="/sign-up" element={<PublicRoute><SignUp /></PublicRoute>} />
-
-                {/* Special case: Organization creation doesn't require an existing org */}
-                <Route 
-                  path="/organizations/new" 
-                  element={
-                    <ProtectedRoute requiresOrg={false}>
-                      <MinimalLayout>
-                        <CreateOrganization />
-                      </MinimalLayout>
-                    </ProtectedRoute>
-                  }
-                />
-
-                {/* Routes requiring authentication AND organization */}
-                <Route 
-                  path="/" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Home />
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/employees" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Employees />
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/teams" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Teams />
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/meetings" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <MeetingsPage />
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/meetings/:meetingId" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <MeetingDetailPage />
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/reports" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Reports />
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/settings" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Settings />
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/employees/:id" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Employees />
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/reports/team-performance" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Suspense fallback={<div>Loading...</div>}>
-                          <TeamPerformance />
-                        </Suspense>
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/reports/core-competency" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Suspense fallback={<div>Loading...</div>}>
-                          <CoreCompetency />
-                        </Suspense>
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/reports/engagement" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Suspense fallback={<div>Loading...</div>}>
-                          <Engagement />
-                        </Suspense>
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/reports/sentiment" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Suspense fallback={<div>Loading...</div>}>
-                          <Sentiment />
-                        </Suspense>
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/reports/top-performer" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Suspense fallback={<div>Loading...</div>}>
-                          <TopPerformer />
-                        </Suspense>
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route 
-                  path="/reports/employees-at-risk" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <Suspense fallback={<div>Loading...</div>}>
-                          <EmployeesAtRisk />
-                        </Suspense>
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                {/* Catch-all for authenticated users - Render 404 within layout */}
-                <Route 
-                  path="*" 
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                        <div className="text-center py-10">
-                          <h2 className="text-2xl font-semibold mb-2">404 - Page Not Found</h2>
-                          <p className="text-gray-600 mb-4">Sorry, the page you are looking for does not exist.</p>
-                          <Link to="/" className="text-indigo-600 hover:text-indigo-800 font-medium">Go to Home</Link>
-                        </div>
-                      </MainLayout>
-                    </ProtectedRoute>
-                  }
-                />
-              </Routes>
-            </Suspense>
-            {renderSearchModal()}
-          </>
-        )}
-      </NavigationSetup>
+      <AppRoutes /> 
     </Router>
   )
 }

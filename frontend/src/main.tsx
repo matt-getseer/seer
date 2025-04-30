@@ -31,7 +31,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         publishableKey={PUBLISHABLE_KEY}
         signInUrl="/sign-in"
         signUpUrl="/sign-up"
-        afterSignInUrl="/"
         signInFallbackRedirectUrl="/"
         signUpFallbackRedirectUrl="/"
       >

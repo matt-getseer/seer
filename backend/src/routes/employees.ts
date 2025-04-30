@@ -237,10 +237,65 @@ const getAllEmployees = async (req: AuthenticatedRequest, res: Response, next: N
   }
 };
 
+// Get meetings for a specific employee (filtered by the logged-in manager)
+const getEmployeeMeetings = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { employeeId } = req.params;
+    const managerId = req.user?.userId;
+
+    if (!managerId) {
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
+
+    if (!employeeId) {
+       res.status(400).json({ error: 'Employee ID is required' });
+       return;
+    }
+
+    // Verify the manager has access to this employee (optional but good practice)
+    const employeeCheck = await prisma.employee.findFirst({
+      where: {
+        id: parseInt(employeeId),
+        userId: managerId
+      }
+    });
+
+    if (!employeeCheck) {
+      res.status(404).json({ error: 'Employee not found or unauthorized' });
+      return;
+    }
+
+    // Fetch meetings for this employee where the current user is the manager
+    const meetings = await prisma.meeting.findMany({
+      where: {
+        employeeId: parseInt(employeeId),
+        managerId: managerId
+      },
+      select: { // Select only necessary fields for the list
+        id: true,
+        title: true,
+        scheduledTime: true,
+        status: true,
+        platform: true,
+      },
+      orderBy: {
+        scheduledTime: 'desc' // Show most recent first
+      }
+    });
+
+    res.json(meetings);
+
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Route handlers
 router.get('/', authenticate, extractUserInfo, getAllEmployees);
 router.get('/team/:teamId', authenticate, extractUserInfo, getTeamEmployees);
 router.get('/:id', authenticate, extractUserInfo, getEmployeeById);
+router.get('/:employeeId/meetings', authenticate, extractUserInfo, getEmployeeMeetings);
 router.post('/', authenticate, extractUserInfo, createEmployee);
 router.put('/:id', authenticate, extractUserInfo, updateEmployee);
 router.delete('/:id', authenticate, extractUserInfo, deleteEmployee);

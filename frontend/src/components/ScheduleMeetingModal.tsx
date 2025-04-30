@@ -20,11 +20,12 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [startDate, setStartDate] = useState<Date | null>(new Date()); // Default to now
-  const [endDate, setEndDate] = useState<Date | null>(() => { // Default to 1 hour from now
-    const date = new Date();
-    date.setHours(date.getHours() + 1);
-    return date;
-  });
+  // const [endDate, setEndDate] = useState<Date | null>(() => { // Default to 1 hour from now
+  //   const date = new Date();
+  //   date.setHours(date.getHours() + 1);
+  //   return date;
+  // });
+  const [durationMinutes, setDurationMinutes] = useState<number>(30); // Default duration
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,10 +37,11 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
       setTitle(`Meeting with ${employeeName || 'Employee'}`);
       setDescription('');
       const now = new Date();
-      const oneHourLater = new Date();
-      oneHourLater.setHours(now.getHours() + 1);
+      // const oneHourLater = new Date();
+      // oneHourLater.setHours(now.getHours() + 1);
       setStartDate(now);
-      setEndDate(oneHourLater);
+      // setEndDate(oneHourLater);
+      setDurationMinutes(30); // Reset duration
       setError(null);
       setSuccessMessage(null);
       setIsLoading(false);
@@ -49,19 +51,25 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Validate inputs
-    if (!title || !startDate || !endDate || isLoading) return;
-    if (endDate <= startDate) {
-       setError('End time must be after start time.');
-       return;
-    }
+    // if (!title || !startDate || !endDate || isLoading) return;
+    // if (endDate <= startDate) {
+    //    setError('End time must be after start time.');
+    //    return;
+    // }
+    if (!title || !startDate || isLoading) return; // Removed endDate check
 
     setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
+      const calculatedEndDate = new Date(startDate!.getTime());
+      calculatedEndDate.setMinutes(calculatedEndDate.getMinutes() + durationMinutes);
+
       const startDateTimeISO = startDate!.toISOString();
-      const endDateTimeISO = endDate!.toISOString();
+      // const endDateTimeISO = endDate!.toISOString();
+      const endDateTimeISO = calculatedEndDate.toISOString(); // Use calculated end date
+
       // Get user's local timezone
       const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -70,7 +78,7 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
         title,
         description,
         startDateTime: startDateTimeISO,
-        endDateTime: endDateTimeISO,
+        endDateTime: endDateTimeISO, // Send calculated end time
         timeZone: userTimeZone, // Include timezone
       });
 
@@ -79,7 +87,7 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
         title,
         description,
         startDateTime: startDateTimeISO,
-        endDateTime: endDateTimeISO,
+        endDateTime: endDateTimeISO, // Send calculated end time
         timeZone: userTimeZone, // Pass timezone
       });
 
@@ -88,13 +96,41 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
          handleClose();
       }, 2500);
 
-    } catch (err: any) {
+    } catch (err: any) { 
       console.error("Failed to schedule meeting:", err);
-       if (err.response?.status === 401 && err.response?.data?.message?.includes('Google authentication required')) {
-          setError('Google account connection required. Please connect your Google Calendar account in settings.');
-      } else {
-         setError(err.response?.data?.message || 'Failed to schedule meeting. Please try again.');
+
+      // Default error message
+      let displayError = 'Failed to schedule meeting. Please try again.';
+
+      // Check for specific Google Auth error first (safe access)
+      if (err?.response?.status === 401 && typeof err.response?.data?.message === 'string' && err.response.data.message.includes('Google authentication required')) {
+          displayError = 'Google account connection required. Please connect your Google Calendar account in settings.';
+      } 
+      // Check if it's likely an Axios error with response data
+      else if (err?.isAxiosError && err.response?.data) { 
+          const errorData = err.response.data;
+          // Try to extract message or detail, otherwise stringify
+          if (typeof errorData === 'object' && errorData !== null) {
+              // Use type assertion to satisfy TypeScript if necessary, or keep as any
+              displayError = (errorData as any).message || (errorData as any).detail || JSON.stringify(errorData);
+          } else {
+              displayError = String(errorData); // Handle non-object data (e.g., plain text error)
+          }
+          // Add status code for more context
+          displayError = `Error: ${displayError} (Status: ${err.response.status})`; 
+      } 
+      // Handle other types of errors (Network error, generic Error objects)
+      else if (err instanceof Error) {
+          displayError = err.message; // Use the standard error message
+      } 
+      // Fallback for completely unknown errors
+      else if (err) {
+         try {
+             displayError = JSON.stringify(err);
+         } catch { /* Ignore stringify error */ }
       }
+
+      setError(displayError); // Set the determined error message
     } finally {
       setIsLoading(false);
     }
@@ -155,7 +191,7 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
             />
           </div>
 
-          {/* Start Date/Time Picker */}
+          {/* Start Date/Time Picker & Duration Dropdown */}
           <div className="flex flex-col sm:flex-row sm:space-x-4">
              <div className='flex-1 mb-4 sm:mb-0'>
                 <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
@@ -168,29 +204,29 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
                    timeFormat="HH:mm"
                    timeIntervals={15}
                    dateFormat="Pp" // Format like "9/14/2021, 5:30 PM"
-                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                   className="mt-1 block w-full px-3 py-1 h-8 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                    minDate={new Date()} // Prevent selecting past dates
                    disabled={isLoading}
                    required
                 />
              </div>
-             {/* End Date/Time Picker */}
+             {/* Duration Dropdown */}
              <div className='flex-1'>
-                <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
-                   End Time <span className="text-red-500">*</span>
+                <label htmlFor="duration" className="block text-sm font-medium text-gray-700 mb-1">
+                   Duration <span className="text-red-500">*</span>
                 </label>
-                <DatePicker
-                   selected={endDate}
-                   onChange={(date: Date | null) => setEndDate(date)}
-                   showTimeSelect
-                   timeFormat="HH:mm"
-                   timeIntervals={15}
-                   dateFormat="Pp"
-                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                   minDate={startDate || new Date()} // End date cannot be before start date
+                <select
+                   id="duration"
+                   value={durationMinutes}
+                   onChange={(e) => setDurationMinutes(parseInt(e.target.value, 10))}
+                   className="mt-1 block w-full px-3 py-1 h-8 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
                    disabled={isLoading}
                    required
-                />
+                >
+                   <option value={30}>30 minutes</option>
+                   <option value={45}>45 minutes</option>
+                   <option value={60}>1 hour</option>
+                 </select>
              </div>
            </div>
 
@@ -218,7 +254,8 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isLoading || !title || !startDate || !endDate || (!!endDate && !!startDate && endDate <= startDate)}
+              // disabled={isLoading || !title || !startDate || !endDate || (!!endDate && !!startDate && endDate <= startDate)}
+              disabled={isLoading || !title || !startDate} // Removed endDate checks
               className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
               {isLoading ? (

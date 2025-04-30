@@ -1,11 +1,11 @@
 import { useState, useEffect, memo, useCallback } from 'react';
-import { employeeService } from '../api/client';
+import { employeeService, meetingService } from '../api/client';
 import Flag from 'react-world-flags';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
-import { useEmployee } from '../hooks/useQueryHooks';
-import { ArrowLeft, EnvelopeSimple, Phone, Calendar, MapPin, Building } from '@phosphor-icons/react';
+import { useEmployee, useEmployeeMeetings } from '../hooks/useQueryHooks';
+import { ArrowLeft, EnvelopeSimple, Phone, Calendar, MapPin, Building, WarningCircle } from '@phosphor-icons/react';
 import { AxiosResponse } from 'axios';
 
 type Employee = {
@@ -74,6 +74,16 @@ const mockRecommendations = [
   "Consider cross-training with the Product team"
 ];
 
+// Define Meeting type locally for this component (can be moved to a shared types file later)
+interface Meeting {
+  id: number;
+  title: string | null;
+  scheduledTime: string; // ISO string
+  platform: string | null;
+  status: string;
+  // Add other fields if needed
+}
+
 interface EmployeeProfileProps {
   employeeId: number;
   onClose: () => void;
@@ -134,6 +144,31 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
   onClose: () => void;
 }) => {
   const navigate = useNavigate();
+
+  // Fetch meetings for this employee
+  const { 
+    data: meetings = [], // Default to empty array
+    isLoading: meetingsLoading, 
+    error: meetingsError 
+  } = useEmployeeMeetings<Meeting[]>(employee.id);
+
+  // Helper function to format meeting date/time
+  const formatMeetingTime = (isoString: string) => {
+    try {
+      return format(new Date(isoString), 'PPpp'); // Format like "Sep 14, 2021, 5:30:00 PM"
+    } catch (e) {
+      console.error("Error formatting date:", e);
+      return "Invalid Date";
+    }
+  };
+
+  // Helper to get status badge class
+  const getStatusBadgeClass = (status: string) => {
+    if (status === 'COMPLETED') return 'bg-green-100 text-green-800';
+    if (status.startsWith('ERROR')) return 'bg-red-100 text-red-800';
+    if (status === 'SCHEDULED' || status === 'PENDING_BOT_INVITE' || status === 'BOT_INVITED') return 'bg-blue-100 text-blue-800';
+    return 'bg-yellow-100 text-yellow-800'; // Default/pending
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -332,46 +367,62 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
 
       {/* --- ADDED SECTIONS END --- */}
 
-      {/* Recent Activity */}
+      {/* Meetings Section */}
       <div className="bg-white shadow sm:rounded-lg">
         <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg font-medium text-gray-900">Recent Activity</h3>
+          <h3 className="text-lg font-medium text-gray-900">Meetings</h3>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">
-            Latest interviews and feedback
+            Recent meetings involving this employee.
           </p>
         </div>
-        <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
-          {/* Interviews Section */}
-          {/* Removing the interviews section entirely */}
-          {/* {interviewsLoading ? (
-            <div className="text-sm text-gray-500">Loading interviews...</div>
-          ) : interviewsError ? (
-            <div className="text-sm text-red-600">Error loading interviews.</div>
-          ) : interviews && interviews.length > 0 ? (
-            <div className="mt-8">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Interviews</h3>
-              <ul className="space-y-3">
-                {interviews.map((interview) => (
-                  <li key={interview.id} className="bg-gray-50 p-3 rounded-md shadow-sm hover:bg-gray-100 transition-colors">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">{interview.interviewName}</p>
-                        <p className="text-xs text-gray-500">Taken on: {format(new Date(interview.dateTaken), 'PPP')}</p>
-                      </div>
-                      <button 
-                        onClick={() => navigate(`/interviews/${interview.id}`)}
-                        className="text-sm text-blue-600 hover:text-blue-800"
-                      >
-                        View Details
-                      </button>
+        <div className="border-t border-gray-200">
+          {/* Meetings List - Mimics MeetingsPage table styling within a div/list */}
+          <div className="overflow-x-auto">
+            {meetingsLoading ? (
+              <div className="px-6 py-4 text-sm text-gray-500 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600 mr-3"></div>
+                Loading meetings...
+              </div>
+            ) : meetingsError ? (
+              <div className="px-6 py-4 text-sm text-red-600 bg-red-50 flex items-center">
+                 <WarningCircle size={20} className="mr-2 text-red-400" />
+                 Error loading meetings: {(meetingsError as Error).message || 'Unknown error'}
+              </div>
+            ) : meetings.length === 0 ? (
+               <div className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                 No meetings found for this employee.
+               </div>
+            ) : (
+              <ul className="divide-y divide-gray-200">
+                {meetings.map((meeting) => (
+                  <li 
+                    key={meeting.id} 
+                    onClick={() => navigate(`/meetings/${meeting.id}`)} 
+                    className="px-6 py-4 hover:bg-gray-50 cursor-pointer grid grid-cols-6 gap-4 items-center"
+                  >
+                    {/* Title (wider column) */}
+                    <div className="col-span-2 text-sm font-medium text-gray-900 truncate" title={meeting.title || '-'}>
+                       {meeting.title || '-'}
+                    </div>
+                    {/* Date/Time */}
+                    <div className="col-span-2 text-sm text-gray-500 whitespace-nowrap">
+                       {formatMeetingTime(meeting.scheduledTime)}
+                    </div>
+                    {/* Platform */}
+                    <div className="col-span-1 text-sm text-gray-500 truncate" title={meeting.platform || '-'}>
+                       {meeting.platform || '-'}
+                    </div>
+                     {/* Status Badge */}
+                    <div className="col-span-1 text-sm text-gray-500 whitespace-nowrap text-right">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(meeting.status)}`}>
+                        {meeting.status}
+                      </span>
                     </div>
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 mt-4">No interviews recorded for this employee.</p>
-          )} */}
+            )}
+          </div>
         </div>
       </div>
     </div>

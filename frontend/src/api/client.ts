@@ -155,14 +155,14 @@ apiClient.interceptors.request.use(async (config) => {
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     } else {
-      // If no token available, redirect to sign-in
-      window.location.href = '/sign-in';
-      return Promise.reject('No authentication token available');
+      // If no token available, DO NOT redirect here.
+      console.error('No authentication token available for request');
+      return Promise.reject(new Error('No authentication token available')); 
     }
   } catch (error) {
     console.error('Error getting token for request:', error);
-    window.location.href = '/sign-in';
-    return Promise.reject(error);
+    // DO NOT redirect here.
+    return Promise.reject(error); 
   }
   
   return config;
@@ -201,13 +201,8 @@ apiClient.interceptors.response.use(
       
       // Handle authentication errors
       if (status === 401 || status === 403) {
-        console.error('Authentication error:', data);
-        
-        // Save the current path for redirect after login
-        if (window.location.pathname !== '/sign-in') {
-          localStorage.setItem('redirectAfterLogin', window.location.pathname + window.location.search);
-          window.location.href = '/sign-in';
-        }
+        console.error('Authentication error (401/403): Letting TanStack Query or component handle it.', data);
+        // DO NOT redirect here.
       }
       
       // Handle server errors
@@ -221,6 +216,7 @@ apiClient.interceptors.response.use(
       }
     }
     
+    // IMPORTANT: Always reject the promise on error so callers (like TanStack Query) know it failed.
     return Promise.reject(error);
   }
 );
@@ -340,7 +336,7 @@ export const employeeService = {
     invalidateCache('/employees');
     invalidateCache(`/employees/${id}`);
     return response;
-  }
+  },
 };
 
 // Meeting Service Data Transfer Object for scheduling
@@ -379,7 +375,15 @@ export const meetingService = {
     console.log('Sending request to schedule meeting:', data.title);
     // Invalidate meeting list cache after scheduling a new meeting
     invalidateCache('/meetings');
+    invalidateCache('/employees'); // Invalidate employee meetings too?
     return await apiClient.post('/meetings/schedule', data);
+  },
+
+  // Fetch meetings for a specific employee (for the logged-in manager)
+  getMeetingsByEmployeeId: async (employeeId: number, skipCache = false) => {
+    console.log(`Fetching meetings for employee ID: ${employeeId}, skipCache: ${skipCache}`);
+    // Note: Cache key includes employeeId to avoid conflicts
+    return await apiClient.get(`/employees/${employeeId}/meetings`, { params: { skipCache } });
   }
 };
 

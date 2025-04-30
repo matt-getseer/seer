@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { employeeService, teamService, meetingService } from '../api/client';
 import { AxiosError } from 'axios';
-import { useOrganization } from '@clerk/clerk-react';
+import { useOrganization, useAuth } from '@clerk/clerk-react';
 
 /**
  * React Query-based hooks for API data fetching with optimized caching and state management
@@ -54,7 +54,8 @@ export function useEmployees<TData = any, TError = unknown>(
   options?: QueryHookOptions<TData, TError>
 ) {
   const { isLoaded: isOrgLoaded, organization } = useOrganization();
-  const enabled = isOrgLoaded && !!organization;
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const enabled = isOrgLoaded && isAuthLoaded && !!organization && isSignedIn;
 
   return useQuery<TData, TError>({
     queryKey: ['employees', organization?.id],
@@ -74,7 +75,8 @@ export function useEmployees<TData = any, TError = unknown>(
 
 export function useEmployee<TData = any, TError = unknown>(id: number | null) {
   const { isLoaded: isOrgLoaded, organization } = useOrganization();
-  const enabled = isOrgLoaded && !!organization && !!id;
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const enabled = isOrgLoaded && isAuthLoaded && !!organization && !!id && isSignedIn;
   const queryKey = ['employee', id, organization?.id];
 
   return useQuery<TData, TError>({
@@ -94,7 +96,8 @@ export function useEmployee<TData = any, TError = unknown>(id: number | null) {
 
 export function useTeamEmployees(teamId: number | null) {
   const { isLoaded: isOrgLoaded, organization } = useOrganization();
-  const enabled = isOrgLoaded && !!organization && !!teamId;
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const enabled = isOrgLoaded && isAuthLoaded && !!organization && !!teamId && isSignedIn;
 
   return useQuery({
     queryKey: ['employees', 'team', teamId, organization?.id],
@@ -179,7 +182,8 @@ export function useTeams<TData = any, TError = unknown>(
   options?: QueryHookOptions<TData, TError>
 ) {
   const { isLoaded: isOrgLoaded, organization } = useOrganization();
-  const enabled = isOrgLoaded && !!organization;
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const enabled = isOrgLoaded && isAuthLoaded && !!organization && isSignedIn;
 
   return useQuery<TData, TError>({
     queryKey: ['teams', organization?.id],
@@ -199,7 +203,8 @@ export function useTeams<TData = any, TError = unknown>(
 
 export function useTeam<TData = any, TError = unknown>(id: number | null) {
   const { isLoaded: isOrgLoaded, organization } = useOrganization();
-  const enabled = isOrgLoaded && !!organization && !!id;
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const enabled = isOrgLoaded && isAuthLoaded && !!organization && !!id && isSignedIn;
   const queryKey = ['team', id, organization?.id];
 
   return useQuery<TData, TError>({
@@ -260,7 +265,8 @@ export function useMeetings<TData = any, TError = unknown>(
   options?: QueryHookOptions<TData, TError>
 ) {
   const { isLoaded: isOrgLoaded, organization } = useOrganization();
-  const enabled = isOrgLoaded && !!organization;
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const enabled = isOrgLoaded && isAuthLoaded && !!organization && isSignedIn;
 
   return useQuery<TData, TError>({
     queryKey: ['meetings', organization?.id],
@@ -283,8 +289,9 @@ export function useMeeting<TData = any, TError = unknown>(
   options?: QueryHookOptions<TData, TError>
 ) {
   const { isLoaded: isOrgLoaded, organization } = useOrganization();
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
   const id = meetingId ? (typeof meetingId === 'string' ? parseInt(meetingId, 10) : meetingId) : null;
-  const enabled = isOrgLoaded && !!organization && !!id;
+  const enabled = isOrgLoaded && isAuthLoaded && !!organization && !!id && isSignedIn;
   const queryKey = ['meeting', id, organization?.id];
 
   return useQuery<TData, TError>({
@@ -296,6 +303,34 @@ export function useMeeting<TData = any, TError = unknown>(
         return await processApiResponse<TData>(response, `meeting ${id}`);
       } catch (err) {
         return handleQueryFnError(err, `meeting ${id}`);
+      }
+    },
+    enabled: enabled,
+    ...options,
+  });
+}
+
+// Fetch meetings associated with a specific employee ID
+export function useEmployeeMeetings<TData = any, TError = unknown>(
+  employeeId: number | null | undefined,
+  options?: QueryHookOptions<TData, TError>
+) {
+  const { isLoaded: isOrgLoaded, organization } = useOrganization();
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const id = employeeId ? (typeof employeeId === 'string' ? parseInt(employeeId, 10) : employeeId) : null;
+  const enabled = isOrgLoaded && isAuthLoaded && !!organization && !!id && isSignedIn;
+  // Use a distinct query key including the employee ID
+  const queryKey = ['meetings', 'employee', id, organization?.id];
+
+  return useQuery<TData, TError>({
+    queryKey: queryKey,
+    queryFn: async () => {
+      console.log(`RQ: Fetching meetings for employee ${id}...`);
+      try {
+        const response = await meetingService.getMeetingsByEmployeeId(id!);
+        return await processApiResponse<TData>(response, `meetings for employee ${id}`);
+      } catch (err) {
+        return handleQueryFnError(err, `meetings for employee ${id}`);
       }
     },
     enabled: enabled,
