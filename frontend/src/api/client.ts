@@ -72,57 +72,9 @@ export const getClerkToken = async () => {
 
 // Dynamic token getter for use outside React components
 let tokenGetter: (() => Promise<string | null>) | null = null;
-let tokenPromise: Promise<string | null> | null = null;
-let tokenRefreshTimeout: NodeJS.Timeout | null = null;
 
 export const setTokenGetter = (getter: any) => {
   tokenGetter = getter;
-  
-  // Clear existing timeout if any
-  if (tokenRefreshTimeout) {
-    clearTimeout(tokenRefreshTimeout);
-    tokenRefreshTimeout = null;
-  }
-  
-  // Reset the token promise
-  tokenPromise = null;
-};
-
-// Get token with caching to prevent multiple simultaneous requests
-const getToken = async (): Promise<string | null> => {
-  if (!tokenGetter) {
-    console.error('Token getter not initialized');
-    return null;
-  }
-
-  // If a token request is already in progress, return the existing promise
-  if (tokenPromise) {
-    return tokenPromise;
-  }
-
-  // Create a new promise to get the token
-  tokenPromise = (async () => {
-    try {
-      const token = await tokenGetter();
-      
-      // Set a timeout to refresh the token promise after 50 minutes
-      // This ensures we don't keep using the same promise indefinitely
-      if (tokenRefreshTimeout) {
-        clearTimeout(tokenRefreshTimeout);
-      }
-      
-      tokenRefreshTimeout = setTimeout(() => {
-        tokenPromise = null;
-      }, 50 * 60 * 1000); // 50 minutes in milliseconds
-      
-      return token;
-    } catch (error) {
-      console.error('Error getting token:', error);
-      return null;
-    }
-  })();
-
-  return tokenPromise;
 };
 
 // Add token to requests
@@ -151,7 +103,13 @@ apiClient.interceptors.request.use(async (config) => {
   }
 
   try {
-    const token = await getToken();
+    // Directly call the getter function, relying on Clerk's internal caching/refresh
+    if (!tokenGetter) {
+        console.error('Token getter not initialized before request.');
+        throw new Error('Token getter not initialized');
+    }
+    const token = await tokenGetter(); // Direct call
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     } else {
