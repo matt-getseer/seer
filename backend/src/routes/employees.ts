@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Employee as PrismaEmployee, Prisma } from '@prisma/client';
 import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
 
 // Typed prisma client
@@ -216,6 +216,7 @@ const getAllEmployees = async (req: AuthenticatedRequest, res: Response, next: N
       return;
     }
 
+    // Fetch employees with includes
     const employees = await prisma.employee.findMany({
       where: {
         userId: req.user.userId
@@ -227,11 +228,24 @@ const getAllEmployees = async (req: AuthenticatedRequest, res: Response, next: N
             name: true,
             department: true
           }
+        },
+        _count: {
+          select: { meetings: true }
         }
       }
     });
 
-    res.json(employees);
+    // Define the type inline for the map parameter
+    const employeesWithMeetingCount = employees.map((emp: (PrismaEmployee & {
+      team: { id: number; name: string; department: string; } | null;
+      _count: { meetings: number; };
+    })) => ({
+      ...emp,
+      meetingCount: emp._count?.meetings ?? 0,
+      _count: undefined // Remove the internal _count object
+    }));
+
+    res.json(employeesWithMeetingCount);
   } catch (error) {
     next(error);
   }

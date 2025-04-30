@@ -17,6 +17,7 @@ type Employee = {
   userId: number
   createdAt: string
   updatedAt: string
+  meetingCount?: number;
   team?: {
     name: string
     department: string
@@ -139,10 +140,9 @@ const EmployeeRow = memo(({
     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
       {formatDate(employee.startDate)}
     </td>
-    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-      {/* TODO: Add actual interview count data */}
+    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
       <span className="inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-        0 
+        {employee.meetingCount ?? 0}
       </span>
     </td>
     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -178,8 +178,8 @@ const TableHeader = memo(() => (
       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
         Start Date
       </th>
-      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-        Interviews
+      <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 tracking-wider">
+        Meetings
       </th>
       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
         Actions

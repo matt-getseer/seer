@@ -98,10 +98,37 @@ const MeetingsPage: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{meeting.platform || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                         {/* Basic status badge - can be enhanced */}
-                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${ meeting.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : meeting.status.startsWith('ERROR') ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800' }`}>
-                           {meeting.status}
-                         </span>
+                        {(() => {
+                          const status = meeting.status;
+                          if (status === 'GENERATING_INSIGHTS' || status === 'CALL_ENDED') { // Add CALL_ENDED if it's a possible status
+                            return (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2"></div>
+                                {'PROCESSING...'.toUpperCase()}
+                              </span>
+                            );
+                          } else if (status === 'COMPLETED') {
+                            return (
+                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                {'COMPLETED'.toUpperCase()}
+                              </span>
+                            );
+                          } else if (status.startsWith('ERROR')) {
+                            return (
+                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                {'ERROR'.toUpperCase()}
+                              </span>
+                            );
+                          } else {
+                            // Default: Show other statuses (e.g., SCHEDULED, BOT_INVITED) with a neutral badge
+                            // You might want to format these further (e.g., replace underscores)
+                            return (
+                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                {status.toUpperCase()}
+                              </span>
+                            );
+                          }
+                        })()}
                       </td>
                     </tr>
                   ))
