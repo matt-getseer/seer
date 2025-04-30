@@ -99,7 +99,7 @@ const EmployeeRow = memo(({
   onScheduleClick: (employee: Employee) => void,
   formatDate: (dateString: string | null) => string
 }) => (
-  <tr key={employee.id}>
+  <tr key={employee.id} className="hover:bg-gray-50">
     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
       <button 
         onClick={() => onEmployeeClick(employee.id)}
