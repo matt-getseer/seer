@@ -59,17 +59,31 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
     if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-    
+
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
-      select: userSelectFields
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        clerkId: true,
+        createdAt: true,
+        updatedAt: true,
+        googleRefreshToken: true,
+      } as any,
     });
-    
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
-    res.json(user);
+
+    const userData = {
+      ...user,
+      hasGoogleAuth: !!(user as any).googleRefreshToken
+    };
+    delete (userData as any).googleRefreshToken;
+
+    res.json(userData);
   } catch (error) {
     next(error);
   }

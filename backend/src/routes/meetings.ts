@@ -2,6 +2,8 @@ import express, { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
 import { inviteBotToMeeting } from '../services/meetingBaasService';
+import { getAuthenticatedGoogleClient } from '../services/googleAuthService';
+import { createCalendarEvent } from '../services/googleCalendarService';
 import axios from 'axios';
 
 const router = express.Router();
@@ -12,6 +14,16 @@ interface RecordMeetingRequestBody {
   title?: string;
   employeeId: number;
   // managerId will be derived from the authenticated user token
+}
+
+// New interface for scheduling
+interface ScheduleMeetingRequestBody {
+  employeeId: number;
+  title: string;
+  description?: string;
+  startDateTime: string; // Expect ISO 8601 format string
+  endDateTime: string;   // Expect ISO 8601 format string
+  timeZone: string;      // Added timezone
 }
 
 // POST /api/meetings/record - Invite bot and create meeting record
@@ -96,6 +108,159 @@ router.post('/record', authenticate, extractUserInfo, async (req: RequestWithUse
     } else if (error instanceof Error) {
       errorMessage = error.message;
     }
+
+    res.status(statusCode).json({ message: errorMessage });
+  }
+});
+
+// POST /api/meetings/schedule - Schedule via Google Calendar and invite bot
+router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithUser, res: Response) => {
+  const { employeeId, title, description, startDateTime, endDateTime, timeZone } = req.body as ScheduleMeetingRequestBody;
+  const managerId = req.user?.userId;
+
+  if (!employeeId || !title || !startDateTime || !endDateTime || !timeZone || !managerId) {
+    return res.status(400).json({ message: 'Missing required fields: employeeId, title, startDateTime, endDateTime, timeZone, or managerId could not be determined.' });
+  }
+
+  let meetingRecord; // Define meetingRecord in outer scope for error handling
+  let googleEvent;   // To store created event details temporarily
+  let meetingBaasId: string | undefined = undefined; // For bot invite response
+
+  try {
+    // 1. Get Manager and Employee emails
+    const manager = await prisma.user.findUnique({ where: { id: managerId }, select: { email: true } });
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { email: true } });
+
+    if (!manager || !manager.email) {
+      return res.status(404).json({ message: `Manager with ID ${managerId} not found or missing email.` });
+    }
+    if (!employee || !employee.email) {
+      return res.status(404).json({ message: `Employee with ID ${employeeId} not found or missing email.` });
+    }
+
+    const attendees = [manager.email, employee.email];
+
+    // 2. Get authenticated Google Client for the manager
+    console.log(`Getting authenticated Google client for manager ID: ${managerId}`);
+    const authClient = await getAuthenticatedGoogleClient(managerId);
+    console.log(`Successfully obtained authenticated Google client for manager ${managerId}`);
+
+    // 3. Create Google Calendar Event (pass timezone)
+    console.log(`Attempting to schedule meeting: "${title}" for manager ${managerId} and employee ${employeeId} in timezone ${timeZone}`);
+    googleEvent = await createCalendarEvent(
+      authClient,
+      title,
+      description || '',
+      startDateTime,
+      endDateTime,
+      attendees,
+      timeZone // Pass timezone
+    );
+
+    if (!googleEvent?.hangoutLink) {
+      console.error('Google Calendar event created, but hangoutLink (Meet URL) is missing.', googleEvent);
+      throw new Error('Failed to retrieve Google Meet link after creating calendar event.');
+    }
+    const googleMeetUrl = googleEvent.hangoutLink;
+    console.log(`Google Meet URL created: ${googleMeetUrl}`);
+
+    // 4. Create initial Meeting Record in DB
+    // Store the Google Meet URL, perhaps in the 'platform' field or a dedicated one if added later
+    // scheduledTime should come from the request body now
+    console.log(`Creating meeting record in DB for manager ${managerId}, employee ${employeeId}`);
+    meetingRecord = await prisma.meeting.create({
+      data: {
+        title: title,
+        scheduledTime: new Date(startDateTime), // Use startDateTime from request
+        // durationMinutes: calculateDuration(startDateTime, endDateTime), // Optional: calculate duration
+        platform: 'Google Meet', // Identify platform
+        meetingUrl: googleMeetUrl, // Store the Google Meet URL
+        status: 'PENDING_BOT_INVITE',
+        managerId: managerId,
+        employeeId: employeeId,
+        googleCalendarEventId: googleEvent.id, // Store Google Event ID if needed later
+      },
+    });
+    console.log(`Meeting record created with ID: ${meetingRecord.id}`);
+
+
+    // 5. Invite Meeting BaaS Bot using the Google Meet URL
+    console.log(`Inviting Meeting BaaS bot to ${googleMeetUrl} for meeting ID: ${meetingRecord.id}`);
+    const botInviteResponse = await inviteBotToMeeting({ meetingUrl: googleMeetUrl });
+
+    meetingBaasId = (botInviteResponse as any)?.bot_id; // Extract BaaS ID
+    if (!meetingBaasId) {
+      console.warn(`Meeting BaaS invite response did not contain expected ID field (e.g., bot_id) for meeting ${meetingRecord.id}`);
+      // Proceed but log warning, might need manual check
+    } else {
+       console.log(`Meeting BaaS Bot ID received: ${meetingBaasId}`);
+    }
+
+    // 6. Update Meeting Status and BaaS ID
+    await prisma.meeting.update({
+      where: { id: meetingRecord.id },
+      data: {
+        status: 'BOT_INVITED',
+        meetingBaasId: meetingBaasId // Save the ID
+      },
+    });
+
+    console.log(`Meeting ${meetingRecord.id} successfully scheduled and bot invited.`);
+    res.status(201).json({
+      message: 'Meeting scheduled successfully via Google Calendar and bot invited.',
+      meetingId: meetingRecord.id,
+      googleMeetUrl: googleMeetUrl,
+      googleEventId: googleEvent.id,
+      meetingBaasId: meetingBaasId,
+    });
+
+  } catch (error: any) {
+    console.error(`Error during meeting scheduling process for manager ${managerId}, employee ${employeeId}:`, error);
+
+    // Determine error stage and set appropriate status
+    let errorStatus = 'ERROR_SCHEDULING'; // Default scheduling error
+    if (error.message.includes('Google authentication required')) {
+       errorStatus = 'ERROR_GOOGLE_AUTH';
+    } else if (error.message.includes('Failed to create Google Calendar event')) {
+        errorStatus = 'ERROR_CALENDAR_EVENT';
+    } else if (error.message.includes('Failed to retrieve Google Meet link')) {
+        errorStatus = 'ERROR_CALENDAR_LINK';
+    } else if (meetingRecord && !meetingBaasId) { // If meeting record created but bot invite failed
+        errorStatus = 'ERROR_BOT_INVITE';
+    }
+
+    // Attempt to update status if meeting record was created
+    if (meetingRecord) {
+      try {
+        await prisma.meeting.update({
+          where: { id: meetingRecord.id },
+          data: {
+             status: errorStatus,
+             meetingBaasId: meetingBaasId // Store BaaS ID even if update fails later
+           },
+        });
+      } catch (updateError) {
+        console.error(`Failed to update meeting ${meetingRecord.id} status to ${errorStatus}:`, updateError);
+      }
+    } else if (googleEvent?.id) {
+       // If calendar event was created but DB record failed, maybe try to delete calendar event? (Complex rollback)
+       console.warn(`DB record creation failed for Google Event ${googleEvent.id}. Consider manual cleanup.`);
+    }
+
+    // Respond with appropriate error
+    let errorMessage = error.message || 'Failed to schedule meeting.';
+    let statusCode = 500;
+
+    if (error.message.includes('Google authentication required')) {
+        statusCode = 401; // Or 403? User needs to re-auth
+    } else if (typeof error === 'object' && error !== null && 'isAxiosError' in error && error.isAxiosError && error.response) {
+       // Handle potential Axios errors from Meeting BaaS service
+       errorMessage = error.response.data?.message || error.message;
+       statusCode = error.response.status || 500;
+    } else if (error instanceof Error) {
+       errorMessage = error.message;
+    }
+
 
     res.status(statusCode).json({ message: errorMessage });
   }

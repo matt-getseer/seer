@@ -4,7 +4,7 @@ import { MagnifyingGlass } from '@phosphor-icons/react'
 import EmployeeProfile from '../components/EmployeeProfile'
 import Flag from 'react-world-flags'
 import { useEmployees } from '../hooks/useQueryHooks'
-import RecordMeetingModal from '../components/RecordMeetingModal'
+import ScheduleMeetingModal from '../components/ScheduleMeetingModal'
 
 type Employee = {
   id: number
@@ -96,12 +96,12 @@ const EmptyState = memo(({ searchTerm, hasEmployees }: { searchTerm: string, has
 const EmployeeRow = memo(({ 
   employee, 
   onEmployeeClick,
-  onRecordClick,
+  onScheduleClick,
   formatDate
 }: { 
   employee: Employee, 
   onEmployeeClick: (id: number) => void,
-  onRecordClick: (employee: Employee) => void,
+  onScheduleClick: (employee: Employee) => void,
   formatDate: (dateString: string | null) => string
 }) => (
   <tr key={employee.id}>
@@ -152,10 +152,10 @@ const EmployeeRow = memo(({
     </td>
     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
        <button 
-         onClick={() => onRecordClick(employee)}
+         onClick={() => onScheduleClick(employee)}
          className="text-indigo-600 hover:text-indigo-900 focus:outline-none text-sm font-medium"
        >
-         Record
+         Schedule
        </button>
     </td>
   </tr>
@@ -219,8 +219,8 @@ const Employees = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const navigate = useNavigate()
   const { id: employeeId } = useParams<{ id?: string }>()
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedEmployeeForModal, setSelectedEmployeeForModal] = useState<Employee | null>(null);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [selectedEmployeeForScheduling, setSelectedEmployeeForScheduling] = useState<Employee | null>(null);
   
   const selectedEmployeeId = employeeId ? parseInt(employeeId, 10) : null
   const { data: employees = [], isLoading, error } = useEmployees();
@@ -272,10 +272,16 @@ const Employees = () => {
     setSearchTerm(e.target.value);
   }, []);
 
-  // Handler for the Record button click
-  const handleRecordClick = useCallback((employee: Employee) => {
-    setSelectedEmployeeForModal(employee);
-    setIsModalOpen(true);
+  // Handler to open the schedule modal
+  const handleScheduleClick = useCallback((employee: Employee) => {
+    setSelectedEmployeeForScheduling(employee);
+    setIsScheduleModalOpen(true);
+  }, []);
+
+  // Handler to close the modal
+  const handleCloseModal = useCallback(() => {
+    setIsScheduleModalOpen(false);
+    setSelectedEmployeeForScheduling(null);
   }, []);
 
   // If an employee is selected, render the EmployeeProfile component
@@ -322,7 +328,7 @@ const Employees = () => {
                         key={employee.id} 
                         employee={employee} 
                         onEmployeeClick={handleEmployeeClick}
-                        onRecordClick={handleRecordClick}
+                        onScheduleClick={handleScheduleClick}
                         formatDate={formatDate} 
                       />
                     ))}
@@ -334,15 +340,12 @@ const Employees = () => {
         </div>
       )}
 
-      {selectedEmployeeForModal && (
-        <RecordMeetingModal 
-          employeeId={selectedEmployeeForModal.id}
-          employeeName={selectedEmployeeForModal.name}
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setSelectedEmployeeForModal(null);
-          }}
+      {selectedEmployeeForScheduling && (
+        <ScheduleMeetingModal 
+          isOpen={isScheduleModalOpen}
+          onClose={handleCloseModal}
+          employeeId={selectedEmployeeForScheduling.id}
+          employeeName={selectedEmployeeForScheduling.name}
         />
       )}
     </div>

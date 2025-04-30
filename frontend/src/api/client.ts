@@ -231,6 +231,16 @@ export const invalidateCache = (endpoint: string) => {
 };
 
 // API Services
+
+// User Service (NEW)
+export const userService = {
+  getMe: async (skipCache = false) => {
+    console.log('Fetching current user info, skipCache:', skipCache);
+    // Cache user info for a shorter duration, e.g., 1 minute
+    return await apiClient.get('/users/me', { params: { skipCache } }); 
+  }
+};
+
 export const authService = {
   logout: () => {
     // No local token to remove with Clerk
@@ -333,7 +343,16 @@ export const employeeService = {
   }
 };
 
-// Meeting Service
+// Meeting Service Data Transfer Object for scheduling
+interface ScheduleMeetingDTO {
+  employeeId: number;
+  title: string;
+  description?: string;
+  startDateTime: string; // ISO string
+  endDateTime: string;   // ISO string
+  timeZone: string;      // Added timezone
+}
+
 export const meetingService = {
   // Fetch all meetings for the logged-in user
   getAllMeetings: async (skipCache = false) => {
@@ -351,9 +370,17 @@ export const meetingService = {
   recordMeeting: async (data: { meetingUrl: string; employeeId: number; title?: string }) => {
     console.log('Sending request to record meeting:', data.meetingUrl);
     // Invalidate meeting list cache after requesting a new recording
-    invalidateCache('/meetings'); 
+    invalidateCache('/meetings');
     return await apiClient.post('/meetings/record', data);
   },
+
+  // Schedule a meeting via Google Calendar and invite bot
+  scheduleMeeting: async (data: ScheduleMeetingDTO) => {
+    console.log('Sending request to schedule meeting:', data.title);
+    // Invalidate meeting list cache after scheduling a new meeting
+    invalidateCache('/meetings');
+    return await apiClient.post('/meetings/schedule', data);
+  }
 };
 
 export default apiClient;
