@@ -96,11 +96,12 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
     <aside className={`bg-[#f4f4f5] fixed h-screen flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16' : 'w-sidebar'}`}>
       <div className={`h-16 flex items-center transition-all duration-300 ease-in-out ${isCollapsed ? 'justify-center' : 'px-4 justify-between'}`}>
         {!isCollapsed && (
-          <Link to="/" className="flex items-center space-x-2 transition-opacity duration-300 ease-in-out">
-            <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-semibold">S</span>
-            </div>
-            <span className="text-lg font-semibold text-gray-900">Seer</span>
+          <Link to="/" className="flex items-center space-x-2 transition-opacity duration-300 ease-in-out pl-2 pt-4">
+            <img 
+              src="/seer_logo_black.svg" 
+              alt="Seer Logo" 
+              className="h-8 w-auto"
+            />
           </Link>
         )}
         <button
@@ -138,6 +139,14 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
           )}
           
           <NavLinkItem 
+            to="/meetings"
+            title="Meetings"
+            isCollapsed={isCollapsed}
+            icon={ChatCircle}
+            label="Meetings"
+          />
+
+          <NavLinkItem 
             to="/employees"
             title="Employees"
             isCollapsed={isCollapsed}
@@ -151,14 +160,6 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
             isCollapsed={isCollapsed}
             icon={UsersThree}
             label="Teams"
-          />
-          
-          <NavLinkItem 
-            to="/meetings"
-            title="Meetings"
-            isCollapsed={isCollapsed}
-            icon={ChatCircle}
-            label="Meetings"
           />
           
           <NavLinkItem 

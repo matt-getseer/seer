@@ -22,11 +22,61 @@ const Settings = () => {
 
   // Fetch user data including Google Auth status
   const { data: userData, isLoading: isLoadingUser, error: userError } = useQuery<UserData, Error>({
-    queryKey: ['currentUser'], // Correct: queryKey property
-    queryFn: () => userService.getMe().then(res => res.data), // Correct: queryFn property
+    queryKey: ['currentUser'], 
+    queryFn: async () => { 
+      try {
+        const response = await userService.getMe(); // Assuming this returns AxiosResponse
+
+        // Explicit status check remains useful
+        if (!response || response.status < 200 || response.status >= 300) { 
+           console.error("Error fetching user data, status:", response?.status, response); 
+           let detail = 'No error body';
+           // Check if response.data exists and is an object before accessing properties
+           if (response?.data && typeof response.data === 'object') {
+              detail = (response.data as any).message || (response.data as any).detail || JSON.stringify(response.data);
+           }
+           throw new Error(`Failed to fetch user data. Status: ${response?.status || 'unknown'}. Detail: ${detail}`);
+        }
+
+        // Check if response.data exists 
+        if (typeof response.data === 'undefined') { 
+           console.error("Error fetching user data: No data property in response", response);
+           throw new Error("No data received in user response.");
+        }
+
+        return response.data; 
+
+      } catch (err: any) { 
+         console.error("Caught error within queryFn for currentUser:", err);
+         
+         // Handle AxiosError specifically 
+         if (err.isAxiosError) {
+            const axiosError = err as import('axios').AxiosError;
+            const status = axiosError.response?.status || 'Axios Error (No Response Status)';
+            let detail = axiosError.message; // Default to Axios error message
+            // Check if response.data exists and is an object before accessing properties
+            if (axiosError.response?.data && typeof axiosError.response.data === 'object') {
+                const errorData = axiosError.response.data as any; // Cast to any to access potential properties
+                detail = errorData.message || errorData.detail || JSON.stringify(errorData);
+            } else if (axiosError.response?.data) {
+                // If data exists but isn't an object, stringify it
+                detail = String(axiosError.response.data);
+            }
+            throw new Error(`Failed to fetch user data. Status: ${status}. Detail: ${detail}`);
+         } 
+         // Handle errors previously thrown by our status/data checks
+         else if (err instanceof Error) {
+             throw err;
+         } 
+         // Handle other unexpected errors
+         else {
+             throw new Error(String(err || 'An unknown error occurred'));
+         }
+      }
+    },
     staleTime: 60 * 1000, 
     retry: 1, 
-  }); // Correct useQuery structure with options object
+  }); 
 
   useEffect(() => {
     const success = searchParams.get('google_auth_success');
