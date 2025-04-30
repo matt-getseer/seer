@@ -1,5 +1,5 @@
 import express, { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, MeetingType } from '@prisma/client';
 import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
 import { inviteBotToMeeting } from '../services/meetingBaasService';
 import { getAuthenticatedGoogleClient } from '../services/googleAuthService';
@@ -24,6 +24,7 @@ interface ScheduleMeetingRequestBody {
   startDateTime: string; // Expect ISO 8601 format string
   endDateTime: string;   // Expect ISO 8601 format string
   timeZone: string;      // Added timezone
+  meetingType: MeetingType; // Added meeting type
 }
 
 // POST /api/meetings/record - Invite bot and create meeting record
@@ -115,11 +116,11 @@ router.post('/record', authenticate, extractUserInfo, async (req: RequestWithUse
 
 // POST /api/meetings/schedule - Schedule via Google Calendar and invite bot
 router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithUser, res: Response) => {
-  const { employeeId, title, description, startDateTime, endDateTime, timeZone } = req.body as ScheduleMeetingRequestBody;
+  const { employeeId, title, description, startDateTime, endDateTime, timeZone, meetingType } = req.body as ScheduleMeetingRequestBody;
   const managerId = req.user?.userId;
 
-  if (!employeeId || !title || !startDateTime || !endDateTime || !timeZone || !managerId) {
-    return res.status(400).json({ message: 'Missing required fields: employeeId, title, startDateTime, endDateTime, timeZone, or managerId could not be determined.' });
+  if (!employeeId || !title || !startDateTime || !endDateTime || !timeZone || !meetingType || !managerId) {
+    return res.status(400).json({ message: 'Missing required fields: employeeId, title, startDateTime, endDateTime, timeZone, meetingType, or managerId could not be determined.' });
   }
 
   let meetingRecord; // Define meetingRecord in outer scope for error handling
@@ -176,6 +177,7 @@ router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithU
         platform: 'Google Meet', // Identify platform
         meetingUrl: googleMeetUrl, // Store the Google Meet URL
         status: 'PENDING_BOT_INVITE',
+        meetingType: meetingType, // Added meetingType
         managerId: managerId,
         employeeId: employeeId,
         googleCalendarEventId: googleEvent.id, // Store Google Event ID if needed later

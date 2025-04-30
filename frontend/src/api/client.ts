@@ -305,6 +305,7 @@ interface ScheduleMeetingDTO {
   startDateTime: string; // ISO string
   endDateTime: string;   // ISO string
   timeZone: string;      // Added timezone
+  meetingType: 'ONE_ON_ONE' | 'SIX_MONTH_REVIEW' | 'TWELVE_MONTH_REVIEW'; // Added meeting type
 }
 
 export const meetingService = {

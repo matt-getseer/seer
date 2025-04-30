@@ -3,6 +3,16 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css'; // Import date picker CSS
 import { meetingService } from '../api/client';
 
+// Define MeetingType locally for frontend usage
+type MeetingType = 'ONE_ON_ONE' | 'SIX_MONTH_REVIEW' | 'TWELVE_MONTH_REVIEW';
+
+// Optional: For display names in the dropdown
+const meetingTypeDisplayNames: Record<MeetingType, string> = {
+  ONE_ON_ONE: '1-on-1',
+  SIX_MONTH_REVIEW: '6 Month Review',
+  TWELVE_MONTH_REVIEW: '12 Month Review',
+};
+
 interface ScheduleMeetingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -26,6 +36,7 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
   //   return date;
   // });
   const [durationMinutes, setDurationMinutes] = useState<number>(30); // Default duration
+  const [meetingType, setMeetingType] = useState<MeetingType>('ONE_ON_ONE'); // Added meeting type state
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +53,7 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
       setStartDate(now);
       // setEndDate(oneHourLater);
       setDurationMinutes(30); // Reset duration
+      setMeetingType('ONE_ON_ONE'); // Reset meeting type
       setError(null);
       setSuccessMessage(null);
       setIsLoading(false);
@@ -80,6 +92,7 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
         startDateTime: startDateTimeISO,
         endDateTime: endDateTimeISO, // Send calculated end time
         timeZone: userTimeZone, // Include timezone
+        meetingType: meetingType, // Include meeting type
       });
 
       const response = await meetingService.scheduleMeeting({
@@ -89,6 +102,7 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
         startDateTime: startDateTimeISO,
         endDateTime: endDateTimeISO, // Send calculated end time
         timeZone: userTimeZone, // Pass timezone
+        meetingType: meetingType, // Pass meeting type
       });
 
       setSuccessMessage(`Meeting scheduled successfully! (ID: ${response.data.meetingId}). Bot invite pending.`);
@@ -189,6 +203,25 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               disabled={isLoading}
             />
+          </div>
+
+          {/* Meeting Type Dropdown */}
+          <div>
+            <label htmlFor="meetingType" className="block text-sm font-medium text-gray-700 mb-1">
+              Meeting Type <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="meetingType"
+              value={meetingType}
+              onChange={(e) => setMeetingType(e.target.value as MeetingType)}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+              disabled={isLoading}
+              required
+            >
+              {Object.entries(meetingTypeDisplayNames).map(([key, displayName]) => (
+                <option key={key} value={key}>{displayName}</option>
+              ))}
+            </select>
           </div>
 
           {/* Start Date/Time Picker & Duration Dropdown */}

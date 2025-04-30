@@ -1,7 +1,9 @@
 import express, { Request, Response } from 'express';
-import { PrismaClient, MeetingInsight, Prisma } from '@prisma/client';
-import { generateMeetingInsights } from '../services/nlpService';
+import { PrismaClient, MeetingInsight, Prisma, MeetingType } from '@prisma/client';
 import { sendNotificationEmail } from '../services/emailService';
+import { InsightData } from '../meeting-processing/types';
+import { processOneOnOneMeeting } from '../meeting-processing/oneOnOneProcessor';
+import { processReviewMeeting } from '../meeting-processing/reviewProcessor';
 import dotenv from 'dotenv';
 
 // Load .env file
@@ -147,50 +149,40 @@ router.post('/meetingbaas', async (req: Request, res: Response) => {
           });
           console.log(`Meeting ${meeting.id} status updated to GENERATING_INSIGHTS`);
 
-          // --- Trigger NLP processing --- 
-          console.log(`Starting NLP processing for meeting ${meeting.id}`);
-          const insights = await generateMeetingInsights(transcriptRecord.content);
-
-          if (insights) {
-             console.log(`Successfully generated insights for meeting ${meeting.id}`);
-            // --- Prepare insights for DB insertion --- 
-            const insightsToCreate: Prisma.MeetingInsightCreateManyInput[] = [];
-
-            // Add summary
-            if (insights.summary) {
-                insightsToCreate.push({ 
-                    meetingId: meeting.id, 
-                    type: 'SUMMARY', 
-                    content: insights.summary, 
-                });
+          // --- Trigger NLP processing (Dispatch based on Meeting Type) --- 
+          console.log(`Dispatching NLP processing for meeting ${meeting.id} based on type: ${meeting.meetingType}`);
+          
+          let generatedInsights: InsightData[] = [];
+          try {
+            switch (meeting.meetingType) {
+              case MeetingType.ONE_ON_ONE:
+                generatedInsights = await processOneOnOneMeeting(transcriptRecord.content, meeting);
+                break;
+              case MeetingType.SIX_MONTH_REVIEW:
+              case MeetingType.TWELVE_MONTH_REVIEW:
+                generatedInsights = await processReviewMeeting(transcriptRecord.content, meeting);
+                break;
+              default:
+                console.warn(`Unhandled meeting type ${meeting.meetingType} for meeting ${meeting.id}. No specific insights generated.`);
+                // Optionally, implement a default processor here
+                break;
             }
-            // Add action items
-            insights.actionItems?.forEach(item => {
-                insightsToCreate.push({ 
-                    meetingId: meeting.id, 
-                    type: 'ACTION_ITEM', 
-                    content: item, 
-                });
-            });
-             // Add key topics
-            insights.keyTopics?.forEach(topic => {
-                insightsToCreate.push({ 
-                    meetingId: meeting.id, 
-                    type: 'KEY_TOPIC', 
-                    content: topic, 
-                });
-            });
+          } catch (processingError) {
+            console.error(`Error during specialized NLP processing for meeting ${meeting.id}:`, processingError);
+            // Keep generatedInsights empty, error status will be set below
+          }
+
+          // Check if insights were successfully generated
+          if (generatedInsights.length > 0) {
+             console.log(`Successfully generated ${generatedInsights.length} insights for meeting ${meeting.id}`);
 
             // --- Save insights to DB --- 
-            if (insightsToCreate.length > 0) {
-                const creationResult = await prisma.meetingInsight.createMany({
-                    data: insightsToCreate,
-                });
-                console.log(`Saved ${creationResult.count} insights for meeting ${meeting.id}`);
-            } else {
-                 console.log(`No insights generated or parsed for meeting ${meeting.id}`);
-            }
-
+            // Use the generatedInsights array directly
+            const creationResult = await prisma.meetingInsight.createMany({
+                data: generatedInsights, // Pass the array conforming to InsightData/Prisma.MeetingInsightCreateManyInput
+            });
+            console.log(`Saved ${creationResult.count} insights for meeting ${meeting.id}`);
+           
             // --- Update final meeting status --- 
             await prisma.meeting.update({
               where: { id: meeting.id },
@@ -235,8 +227,9 @@ router.post('/meetingbaas', async (req: Request, res: Response) => {
             // --- End Email Notification --- 
 
           } else {
-             console.error(`NLP processing failed for meeting ${meeting.id}`);
-             // Update status to reflect NLP error
+             // This block is reached if processors return empty array OR if an error occurred during processing
+             console.error(`NLP processing finished with no insights generated for meeting ${meeting.id}. Check logs above for errors.`);
+             // Update status to reflect NLP error or lack of insights
              await prisma.meeting.update({
                where: { id: meeting.id },
                data: { status: 'ERROR_NLP' },

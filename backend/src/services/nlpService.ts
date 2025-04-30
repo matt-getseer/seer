@@ -5,7 +5,8 @@ const anthropic = new Anthropic({
 });
 
 // Define the structure we expect the AI to return
-interface MeetingInsights {
+// Exporting this so processors can potentially use it for type safety
+export interface MeetingInsights {
   summary: string;
   actionItems: string[];
   keyTopics: string[];
@@ -14,22 +15,21 @@ interface MeetingInsights {
 const MAX_RETRIES = 3;
 const INITIAL_DELAY_MS = 1000;
 
-async function generateMeetingInsightsWithRetry(transcriptText: string): Promise<MeetingInsights | null> {
+// Renamed function and added systemPrompt parameter
+async function callClaudeWithRetry(
+  transcriptText: string, 
+  systemPrompt: string // Added systemPrompt parameter
+): Promise<MeetingInsights | null> {
   let attempts = 0;
   let delay = INITIAL_DELAY_MS;
 
-  const systemPrompt = `You are a helpful meeting assistant. Analyze the following meeting transcript and provide a concise summary, a list of action items, and a list of key topics discussed. Please format your response as a valid JSON object with the following structure: { "summary": "string", "actionItems": ["string"], "keyTopics": ["string"] }. Only output the JSON object.`;
-
   while (attempts < MAX_RETRIES) {
     try {
-      console.log(`Attempt ${attempts + 1} to generate insights from transcript.`);
+      console.log(`Attempt ${attempts + 1} to generate insights using provided prompt.`);
       const msg = await anthropic.messages.create({
-        // model: "claude-3-haiku-20240307", // Faster, cheaper option
-        // model: "claude-3-sonnet-20240229", // Old model
-        // model: "claude-3-opus-20240229", // Using Opus for potentially better quality
-        model: "claude-3-7-sonnet-20250219", // Set model exactly as requested by user
+        model: "claude-3-7-sonnet-20250219", 
         max_tokens: 1024,
-        system: systemPrompt,
+        system: systemPrompt, // Use the passed systemPrompt
         messages: [
           {
             role: "user",
@@ -91,4 +91,5 @@ async function generateMeetingInsightsWithRetry(transcriptText: string): Promise
   return null; // Should not be reached if MAX_RETRIES > 0, but included for safety
 }
 
-export { generateMeetingInsightsWithRetry as generateMeetingInsights }; 
+// Updated export
+export { callClaudeWithRetry }; 
