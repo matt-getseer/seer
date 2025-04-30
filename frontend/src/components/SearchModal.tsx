@@ -1,8 +1,8 @@
 import { useState, useEffect, Fragment, useRef, useCallback, useMemo, memo } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { MagnifyingGlass, X } from '@phosphor-icons/react'
+import { MagnifyingGlass, X, CalendarBlank } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
-import { useEmployees, useTeams } from '../hooks/useQueryHooks'
+import { useEmployees, useTeams, useMeetings } from '../hooks/useQueryHooks'
 import useDebounce from '@/hooks/useDebounce'
 
 // Define types for the data models
@@ -30,12 +30,25 @@ type Team = {
   userId: number
 }
 
+// Add Meeting type (based on MeetingsPage.tsx usage)
+interface Meeting {
+  id: number;
+  title: string | null;
+  scheduledTime: string; // ISO string
+  platform: string | null;
+  status: string;
+  employee: {
+    id: number;
+    name: string | null;
+  };
+}
+
 // Define types for search results
 type SearchResult = {
   id: string | number
   title: string
   subtitle?: string
-  type: 'employee' | 'team'
+  type: 'employee' | 'team' | 'meeting' // Added 'meeting'
   url: string
 }
 
@@ -58,6 +71,7 @@ const searchDataCache = {
 const TypeIcons = {
   employee: memo(() => <div className="p-1.5 bg-blue-100 rounded text-blue-700"><MagnifyingGlass weight="bold" size={16} /></div>),
   team: memo(() => <div className="p-1.5 bg-green-100 rounded text-green-700"><MagnifyingGlass weight="bold" size={16} /></div>),
+  meeting: memo(() => <div className="p-1.5 bg-purple-100 rounded text-purple-700"><CalendarBlank weight="bold" size={16} /></div>), // Added meeting icon
   default: memo(() => <div className="p-1.5 bg-gray-100 rounded text-gray-700"><MagnifyingGlass weight="bold" size={16} /></div>)
 };
 
@@ -140,11 +154,12 @@ const SearchModal: React.FC<SearchModalProps> = memo(({ onOpen, isOpen: controll
   const debouncedQuery = useDebounce(query, 800) // Increased to 800ms for better performance
   
   // Use React Query hooks for data fetching - only enable when modal is open
-  const { data: employees = [], isLoading: isLoadingEmployees } = useEmployees({ enabled: controlledIsOpen });
-  const { data: teams = [], isLoading: isLoadingTeams } = useTeams({ enabled: controlledIsOpen });
+  const { data: employees = [], isLoading: isLoadingEmployees } = useEmployees<Employee[]>({ enabled: controlledIsOpen });
+  const { data: teams = [], isLoading: isLoadingTeams } = useTeams<Team[]>({ enabled: controlledIsOpen });
+  const { data: meetings = [], isLoading: isLoadingMeetings } = useMeetings<Meeting[]>({ enabled: controlledIsOpen }); // Added meetings hook
   
   // Check if any data is still loading
-  const isLoading = isLoadingEmployees || isLoadingTeams;
+  const isLoading = isLoadingEmployees || isLoadingTeams || isLoadingMeetings; // Added meetings loading state
 
   // Open modal with CMD+K shortcut - memoized event handler
   useEffect(() => {
@@ -201,14 +216,30 @@ const SearchModal: React.FC<SearchModalProps> = memo(({ onOpen, isOpen: controll
         url: `/teams/${team.id}`
       }));
     
+    // Search meetings
+    const meetingResults = meetings
+      .filter((meeting: Meeting) => 
+        // Check title (case-insensitive, handle null)
+        (meeting.title && meeting.title.toLowerCase().includes(lowerQuery)) ||
+        // Check employee name (case-insensitive, handle null)
+        (meeting.employee?.name && meeting.employee.name.toLowerCase().includes(lowerQuery)) 
+      )
+      .map((meeting: Meeting) => ({
+        id: meeting.id,
+        title: meeting.title || 'Untitled Meeting',
+        subtitle: `Employee: ${meeting.employee?.name || 'N/A'}`,
+        type: 'meeting' as const,
+        url: `/meetings/${meeting.id}`
+      }));
+    
     // Combine results
-    searchResults = [...employeeResults, ...teamResults];
+    searchResults = [...employeeResults, ...teamResults, ...meetingResults];
     
     // Sort results (optional, e.g., by type or title)
     searchResults.sort((a, b) => a.title.localeCompare(b.title));
 
     return searchResults;
-  }, [debouncedQuery, employees, teams]);
+  }, [debouncedQuery, employees, teams, meetings]);
 
   // Reset active index when results change
   useEffect(() => {
@@ -242,17 +273,10 @@ const SearchModal: React.FC<SearchModalProps> = memo(({ onOpen, isOpen: controll
     setQuery('');
   }, [setIsOpen]);
 
-  // Focus input when modal opens
-  useEffect(() => {
-    if (controlledIsOpen && searchInputRef.current) {
-      const timer = setTimeout(() => {
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-        }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [controlledIsOpen]);
+  // Function to focus the input, called after transition ends
+  const focusInput = useCallback(() => {
+      searchInputRef.current?.focus();
+  }, []); // No dependencies needed
 
   // Determine what content to show based on query and results state
   const searchContent = useMemo(() => {
@@ -281,6 +305,7 @@ const SearchModal: React.FC<SearchModalProps> = memo(({ onOpen, isOpen: controll
   return (
     <Transition appear show={controlledIsOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={closeModal}>
+        {/* Overlay Transition */}
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -295,6 +320,7 @@ const SearchModal: React.FC<SearchModalProps> = memo(({ onOpen, isOpen: controll
 
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
+            {/* Panel Transition - Add afterEnter here */}
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
@@ -303,6 +329,7 @@ const SearchModal: React.FC<SearchModalProps> = memo(({ onOpen, isOpen: controll
               leave="ease-in duration-200"
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
+              afterEnter={focusInput} // Call focusInput after enter transition
             >
               <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-lg bg-white text-left align-middle shadow-xl transition-all">
                 <div className="relative">
@@ -311,7 +338,7 @@ const SearchModal: React.FC<SearchModalProps> = memo(({ onOpen, isOpen: controll
                     <input
                       ref={searchInputRef}
                       type="text"
-                      placeholder="Search employees, teams, interviews..."
+                      placeholder="Search employees, teams, meetings..."
                       className="w-full border-none outline-none pl-3 pr-8 py-1 text-gray-800 placeholder-gray-400"
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}

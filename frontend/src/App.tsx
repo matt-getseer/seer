@@ -45,7 +45,7 @@ const NavigationSetup = memo(({ children }: { children: React.ReactNode }) => {
     };
 
     setTokenGetter(stableTokenGetter);
-  }, [isLoaded]); // Only depend on isLoaded, not getToken
+  }, [isLoaded, getToken]);
 
   return <>{children}</>
 });

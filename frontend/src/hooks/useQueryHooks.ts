@@ -46,7 +46,7 @@ async function processApiResponse<TData>(response: any, resourceName: string): P
 // Define a generic type for the options to make it cleaner
 type QueryHookOptions<TData = unknown, TError = unknown> = Omit<
   UseQueryOptions<TData, TError>,
-  'queryKey' | 'queryFn' | 'enabled'
+  'queryKey' | 'queryFn'
 >;
 
 // Employee hooks

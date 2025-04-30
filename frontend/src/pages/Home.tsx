@@ -63,6 +63,8 @@ const radarData = [
 // Colors for charts
 const COLORS = ['#8349F0', '#A57CF8', '#BFA4FC', '#D9D4FF']
 const SENTIMENT_COLORS = ['#4CAF50', '#9E9E9E', '#F44336']
+const PRIMARY_CHART_COLOR = "#8884d8"; // Color from EmployeeProfile
+const SECONDARY_CHART_COLOR = "#4CAF50"; // Existing secondary color for comparison
 
 type ChartType = 'line' | 'bar' | 'area'
 
@@ -178,45 +180,45 @@ const ChartTypeDropdown = ({
 }
 
 const Home = () => {
-  const [performanceChartType, setPerformanceChartType] = useState<ChartType>('line')
-  const [competencyChartType, setCompetencyChartType] = useState<ChartType>('bar')
+  const [performanceChartType, setPerformanceChartType] = useState<ChartType>('area')
+  const [competencyChartType, setCompetencyChartType] = useState<ChartType>('area')
 
   const renderPerformanceChart = (data: ChartDataPoint[], type: ChartType) => {
     switch (type) {
       case 'line':
         return (
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-            <XAxis dataKey="month" stroke="#6B7280" />
-            <YAxis yAxisId="left" orientation="left" stroke="#8349F0" />
-            <YAxis yAxisId="right" orientation="right" stroke="#4CAF50" />
+          <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
+            <YAxis yAxisId="left" orientation="left" stroke={PRIMARY_CHART_COLOR} fontSize={12} />
+            <YAxis yAxisId="right" orientation="right" stroke={SECONDARY_CHART_COLOR} fontSize={12} />
             <Tooltip />
-            <Line yAxisId="left" type="monotone" dataKey="avgScore" name="Performance Score" stroke="#8349F0" strokeWidth={2} />
-            <Line yAxisId="right" type="monotone" dataKey="engagement" name="Engagement %" stroke="#4CAF50" strokeWidth={2} />
+            <Line yAxisId="left" type="monotone" dataKey="avgScore" name="Performance Score" stroke={PRIMARY_CHART_COLOR} strokeWidth={2} dot={false} />
+            <Line yAxisId="right" type="monotone" dataKey="engagement" name="Engagement %" stroke={SECONDARY_CHART_COLOR} strokeWidth={2} dot={false} />
           </LineChart>
         )
       case 'bar':
         return (
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-            <XAxis dataKey="month" stroke="#6B7280" />
-            <YAxis yAxisId="left" orientation="left" stroke="#8349F0" />
-            <YAxis yAxisId="right" orientation="right" stroke="#4CAF50" />
+          <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
+            <YAxis yAxisId="left" orientation="left" stroke={PRIMARY_CHART_COLOR} fontSize={12} />
+            <YAxis yAxisId="right" orientation="right" stroke={SECONDARY_CHART_COLOR} fontSize={12} />
             <Tooltip />
-            <Bar yAxisId="left" dataKey="avgScore" name="Performance Score" fill="#8349F0" />
-            <Bar yAxisId="right" dataKey="engagement" name="Engagement %" fill="#4CAF50" />
+            <Bar yAxisId="left" dataKey="avgScore" name="Performance Score" fill={PRIMARY_CHART_COLOR} />
+            <Bar yAxisId="right" dataKey="engagement" name="Engagement %" fill={SECONDARY_CHART_COLOR} />
           </BarChart>
         )
       case 'area':
         return (
-          <AreaChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-            <XAxis dataKey="month" stroke="#6B7280" />
-            <YAxis yAxisId="left" orientation="left" stroke="#8349F0" />
-            <YAxis yAxisId="right" orientation="right" stroke="#4CAF50" />
+          <AreaChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
+            <YAxis yAxisId="left" orientation="left" stroke={PRIMARY_CHART_COLOR} fontSize={12} />
+            <YAxis yAxisId="right" orientation="right" stroke={SECONDARY_CHART_COLOR} fontSize={12} />
             <Tooltip />
-            <Area yAxisId="left" type="monotone" dataKey="avgScore" name="Performance Score" fill="#8349F0" fillOpacity={0.2} stroke="#8349F0" strokeWidth={2} />
-            <Area yAxisId="right" type="monotone" dataKey="engagement" name="Engagement %" fill="#4CAF50" fillOpacity={0.2} stroke="#4CAF50" strokeWidth={2} />
+            <Area yAxisId="left" type="monotone" dataKey="avgScore" name="Performance Score" fill={PRIMARY_CHART_COLOR} fillOpacity={0.3} stroke={PRIMARY_CHART_COLOR} strokeWidth={2} />
+            <Area yAxisId="right" type="monotone" dataKey="engagement" name="Engagement %" fill={SECONDARY_CHART_COLOR} fillOpacity={0.2} stroke={SECONDARY_CHART_COLOR} strokeWidth={2} />
           </AreaChart>
         )
     }
@@ -226,32 +228,32 @@ const Home = () => {
     switch (type) {
       case 'bar':
         return (
-          <BarChart data={data} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-            <XAxis type="number" stroke="#6B7280" />
-            <YAxis dataKey="name" type="category" stroke="#6B7280" width={100} />
+          <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis type="number" stroke="#6B7280" fontSize={12} />
+            <YAxis dataKey="name" type="category" stroke="#6B7280" width={100} fontSize={12} />
             <Tooltip />
-            <Bar dataKey="value" fill="#8349F0" />
+            <Bar dataKey="value" fill={PRIMARY_CHART_COLOR} />
           </BarChart>
         )
       case 'line':
         return (
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-            <XAxis dataKey="name" stroke="#6B7280" />
-            <YAxis stroke="#6B7280" />
+          <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" stroke="#6B7280" fontSize={12} />
+            <YAxis stroke="#6B7280" fontSize={12} />
             <Tooltip />
-            <Line type="monotone" dataKey="value" stroke="#8349F0" strokeWidth={2} />
+            <Line type="monotone" dataKey="value" stroke={PRIMARY_CHART_COLOR} strokeWidth={2} dot={false}/>
           </LineChart>
         )
       case 'area':
         return (
-          <AreaChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-            <XAxis dataKey="name" stroke="#6B7280" />
-            <YAxis stroke="#6B7280" />
+          <AreaChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" stroke="#6B7280" fontSize={12} />
+            <YAxis stroke="#6B7280" fontSize={12} />
             <Tooltip />
-            <Area type="monotone" dataKey="value" fill="#8349F0" fillOpacity={0.2} stroke="#8349F0" strokeWidth={2} />
+            <Area type="monotone" dataKey="value" fill={PRIMARY_CHART_COLOR} fillOpacity={0.3} stroke={PRIMARY_CHART_COLOR} strokeWidth={2}/>
           </AreaChart>
         )
     }
@@ -390,8 +392,8 @@ const Home = () => {
                  <PolarGrid />
                  <PolarAngleAxis dataKey="subject" />
                  <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                 <Radar name="Current Quarter" dataKey="A" stroke="#8349F0" fill="#8349F0" fillOpacity={0.5} />
-                 <Radar name="Previous Quarter" dataKey="B" stroke="#A57CF8" fill="#A57CF8" fillOpacity={0.3} />
+                 <Radar name="Current Quarter" dataKey="A" stroke={PRIMARY_CHART_COLOR} fill={PRIMARY_CHART_COLOR} fillOpacity={0.5} />
+                 <Radar name="Previous Quarter" dataKey="B" stroke={SECONDARY_CHART_COLOR} fill={SECONDARY_CHART_COLOR} fillOpacity={0.3} />
                  <Tooltip />
                </RadarChart>
              </ResponsiveContainer>
