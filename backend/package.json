@@ -22,6 +22,7 @@
     "@clerk/clerk-sdk-node": "^4.13.23",
     "@googleapis/calendar": "^9.8.0",
     "@prisma/client": "^6.7.0",
+    "@sendgrid/mail": "^8.1.5",
     "@types/axios": "^0.9.36",
     "axios": "^1.9.0",
     "bcrypt": "^5.1.1",

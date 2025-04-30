@@ -1,9 +1,17 @@
 import express, { Request, Response } from 'express';
 import { PrismaClient, MeetingInsight, Prisma } from '@prisma/client';
 import { generateMeetingInsights } from '../services/nlpService';
+import { sendNotificationEmail } from '../services/emailService';
+import dotenv from 'dotenv';
+
+// Load .env file
+dotenv.config();
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// Placeholder for the frontend URL - Add to .env later
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'; 
 
 // Define structure for a single word in the transcript
 interface TranscriptWord {
@@ -189,6 +197,42 @@ router.post('/meetingbaas', async (req: Request, res: Response) => {
               data: { status: 'COMPLETED' }, // Mark as fully completed
             });
             console.log(`Meeting ${meeting.id} status updated to COMPLETED`);
+
+            // --- Send Email Notification --- 
+            try {
+              // Fetch the manager's email
+              const manager = await prisma.user.findUnique({
+                where: { id: meeting.managerId },
+                select: { email: true },
+              });
+
+              if (manager && manager.email) {
+                const meetingTitle = meeting.title || `Meeting on ${meeting.scheduledTime.toLocaleDateString()}`;
+                const subject = `✅ Insights Ready: ${meetingTitle}`;
+                const meetingUrl = `${FRONTEND_URL}/meetings/${meeting.id}`;
+                const htmlBody = `
+                  <p>Good news!</p>
+                  <p>The analysis for your meeting "<b>${meetingTitle}</b>" is complete.</p>
+                  <p>You can view the insights, transcript, and recording here:</p>
+                  <p><a href="${meetingUrl}" target="_blank">${meetingUrl}</a></p>
+                  <br>
+                  <p>Best regards,</p>
+                  <p>The Seer Team</p>
+                `;
+
+                await sendNotificationEmail({
+                  to: manager.email,
+                  subject: subject,
+                  html: htmlBody,
+                });
+              } else {
+                console.error(`Could not find manager email for managerId ${meeting.managerId} to send notification.`);
+              }
+            } catch (emailError) {
+              console.error(`Failed to send completion notification email for meeting ${meeting.id}:`, emailError);
+              // Don't block the webhook response due to email failure
+            }
+            // --- End Email Notification --- 
 
           } else {
              console.error(`NLP processing failed for meeting ${meeting.id}`);
