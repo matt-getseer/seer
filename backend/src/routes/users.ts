@@ -62,6 +62,7 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
 
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
+      // Select necessary fields including tokens to check auth status
       select: {
         id: true,
         email: true,
@@ -69,19 +70,28 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
         clerkId: true,
         createdAt: true,
         updatedAt: true,
-        googleRefreshToken: true,
-      } as any,
+        googleRefreshToken: true, // For Google Auth check
+        zoomRefreshToken: true,   // For Zoom Auth check
+      } as any, // Use 'as any' carefully or define a more specific type
     });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Determine auth statuses based on token presence
     const userData = {
-      ...user,
-      hasGoogleAuth: !!(user as any).googleRefreshToken
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      clerkId: user.clerkId,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      hasGoogleAuth: !!user.googleRefreshToken,
+      hasZoomAuth: !!user.zoomRefreshToken, // Check for Zoom token presence
     };
-    delete (userData as any).googleRefreshToken;
+    // Note: We don't need to explicitly delete the tokens here 
+    // because they are not included in the final userData object structure.
 
     res.json(userData);
   } catch (error) {

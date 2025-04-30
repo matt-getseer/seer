@@ -13,6 +13,7 @@ interface Meeting {
   scheduledTime: string;
   platform: string | null;
   status: string;
+  durationMinutes?: number | null; // Add duration
   employee: {
     id: number;
     name: string | null;
@@ -181,7 +182,34 @@ const MeetingsPage: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {(() => {
                           const status = meeting.status;
-                          if (status === 'GENERATING_INSIGHTS' || status === 'CALL_ENDED') { // Add CALL_ENDED if it's a possible status
+                          const scheduledTime = new Date(meeting.scheduledTime);
+                          const now = new Date();
+                          const durationMs = (meeting.durationMinutes || 0) * 60 * 1000; // Duration in milliseconds, default 0
+                          const endTime = new Date(scheduledTime.getTime() + durationMs);
+                          
+                          // Refined check: If status is IN_WAITING_ROOM and current time is past the calculated end time
+                          if (status === 'IN_WAITING_ROOM' && now > endTime) {
+                            return (
+                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">
+                                {'DID NOT HAPPEN'.toUpperCase()}
+                              </span>
+                            );
+                          }
+                          
+                          // Existing status logic (keep SCHEDULED etc. handling for cases before IN_WAITING_ROOM or if duration check fails)
+                          const initialStatuses = ['SCHEDULED', 'PENDING_BOT_INVITE', 'BOT_INVITED'];
+                          if (initialStatuses.includes(status) && now > scheduledTime && !(status === 'IN_WAITING_ROOM' && now > endTime)) {
+                             // Show scheduled if time passed but not yet 'DID NOT HAPPEN' based on duration logic
+                             // Or handle other initial states if needed.
+                             // Keep default gray badge for these? Or hide? Let's keep default for now.
+                            return (
+                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                {status.toUpperCase()}
+                              </span>
+                            );
+                          }
+                          
+                          if (status === 'GENERATING_INSIGHTS' || status === 'CALL_ENDED') {
                             return (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2"></div>
@@ -198,14 +226,6 @@ const MeetingsPage: React.FC = () => {
                             return (
                               <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
                                 {'ERROR'.toUpperCase()}
-                              </span>
-                            );
-                          } else {
-                            // Default: Show other statuses (e.g., SCHEDULED, BOT_INVITED) with a neutral badge
-                            // You might want to format these further (e.g., replace underscores)
-                            return (
-                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                                {status.toUpperCase()}
                               </span>
                             );
                           }

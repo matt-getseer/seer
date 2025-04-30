@@ -15,13 +15,13 @@ import employeeRouter from './routes/employees';
 import teamRouter from './routes/teams';
 import meetingsRouter from './routes/meetings';
 import webhooksRouter from './routes/webhooks';
-import googleAuthRouter from './routes/googleAuth'; // Import the new router
+import authRouter from './routes/auth'; // Import the correct auth router
 // import notificationRouter from './routes/notifications'; // Remove this import
 
 // Load environment variables
 console.log('Loading environment variables...');
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
-// console.log('Environment variables loaded:', process.env); // Optional: Log loaded vars
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+console.log('DEBUG: Environment variables loaded:', process.env); // Uncommented log
 
 const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
 if (!CLERK_SECRET_KEY) {
@@ -46,7 +46,8 @@ app.use(
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
         'script-src': [
           "'self'",
-          'https://together-honeybee-3.clerk.accounts.dev' // Allow Clerk scripts
+          'https://together-honeybee-3.clerk.accounts.dev', // Allow Clerk scripts
+          "'unsafe-inline'" // Allow inline scripts (temporary fix for CSP error)
         ],
         'connect-src': [
           "'self'",
@@ -94,7 +95,7 @@ app.use('/api/employees', employeeRouter);
 app.use('/api/teams', teamRouter);
 app.use('/api/meetings', meetingsRouter);
 app.use('/api/webhooks', webhooksRouter); // Note: Webhooks might need raw body, check Clerk/Stripe docs
-app.use('/api/auth', googleAuthRouter);
+app.use('/api/auth', authRouter); // Mount the correct auth router
 // app.use('/api/notifications', notificationRouter); // Remove this line
 
 // Health check route

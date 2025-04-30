@@ -28,6 +28,9 @@ model User {
   googleAccessToken   String?
   googleRefreshToken  String?
   googleTokenExpiry   DateTime?
+  zoomAccessToken         String?
+  zoomRefreshToken        String?
+  zoomTokenExpiry         DateTime?
 }
 
 model Team {

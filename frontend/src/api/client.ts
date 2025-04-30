@@ -297,15 +297,15 @@ export const employeeService = {
   },
 };
 
-// Meeting Service Data Transfer Object for scheduling
+// Updated DTO for scheduling a meeting
 interface ScheduleMeetingDTO {
   employeeId: number;
-  title: string;
   description?: string;
   startDateTime: string; // ISO string
   endDateTime: string;   // ISO string
-  timeZone: string;      // Added timezone
-  meetingType: 'ONE_ON_ONE' | 'SIX_MONTH_REVIEW' | 'TWELVE_MONTH_REVIEW'; // Added meeting type
+  timeZone: string;
+  meetingType: 'ONE_ON_ONE' | 'SIX_MONTH_REVIEW' | 'TWELVE_MONTH_REVIEW';
+  platform?: 'Google Meet' | 'Zoom'; // Added optional platform
 }
 
 export const meetingService = {
@@ -329,12 +329,14 @@ export const meetingService = {
     return await apiClient.post('/meetings/record', data);
   },
 
-  // Schedule a meeting via Google Calendar and invite bot
+  // Schedule a meeting via selected platform and invite bot
   scheduleMeeting: async (data: ScheduleMeetingDTO) => {
-    console.log('Sending request to schedule meeting:', data.title);
-    // Invalidate meeting list cache after scheduling a new meeting
-    invalidateCache('/meetings');
-    invalidateCache('/employees'); // Invalidate employee meetings too?
+    console.log(`Sending request to schedule meeting via platform: ${data.platform || 'Google Meet (default)'}`);
+    // Invalidate relevant caches
+    invalidateCache('/meetings'); // Invalidate general meeting list
+    invalidateCache(`/employees/${data.employeeId}/meetings`); // Invalidate employee-specific list
+    // Consider invalidating /users/me if meeting counts/etc. are shown there
+    // invalidateCache('/users/me'); 
     return await apiClient.post('/meetings/schedule', data);
   },
 
@@ -342,7 +344,8 @@ export const meetingService = {
   getMeetingsByEmployeeId: async (employeeId: number, skipCache = false) => {
     console.log(`Fetching meetings for employee ID: ${employeeId}, skipCache: ${skipCache}`);
     // Note: Cache key includes employeeId to avoid conflicts
-    return await apiClient.get(`/employees/${employeeId}/meetings`, { params: { skipCache } });
+    const cacheKey = `/employees/${employeeId}/meetings`; // Make cache key more specific
+    return await apiClient.get(cacheKey, { params: { skipCache } });
   }
 };
 
