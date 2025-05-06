@@ -37,11 +37,11 @@ model Team {
   department     String
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
-  userId         Int
+  userId         Int?
   organizationId String       @db.Uuid
   employees      Employee[]
   Organization   Organization @relation(fields: [organizationId], references: [id])
-  user           User         @relation(fields: [userId], references: [id])
+  user           User?        @relation(fields: [userId], references: [id])
 
   @@unique([name, organizationId])
   @@index([organizationId])

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
 import { Link as LinkIcon, CheckCircle, WarningCircle, X } from '@phosphor-icons/react'; // Example icon, Added X
 import { userService } from '../api/client'; // Keep named import for userService
 import apiClient from '../api/client'; // Add default import for apiClient
-import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import QueryClient
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'; // Import QueryClient and useMutation
 import { useAuth } from '@clerk/clerk-react'; // Import useAuth
 import { Dialog, Transition } from '@headlessui/react'; // Added Dialog and Transition
 
@@ -33,6 +33,14 @@ interface ManagedTeamData {
   department: string;
 }
 
+// Define selectable team data shape (all teams available for assignment)
+interface SelectableTeamData {
+  id: number;
+  name: string;
+  department: string;
+  userId: number | null; // ID of the user currently managing this team, or null
+}
+
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -50,9 +58,13 @@ const Settings = () => {
   const [isManagerListLoading, setIsManagerListLoading] = useState(false);
   const [managerListError, setManagerListError] = useState<string | null>(null);
 
-  // State for Manager Teams Modal
-  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
-  const [selectedManagerForModal, setSelectedManagerForModal] = useState<ManagerData | null>(null);
+  // NEW State for the new "Assign Manager to Team" Modal
+  const [isAssignManagerModalOpen, setIsAssignManagerModalOpen] = useState(false);
+  const [selectedTeamForAssignment, setSelectedTeamForAssignment] = useState<SelectableTeamData | null>(null);
+  const [managerToAssign, setManagerToAssign] = useState<number | null>(null); // Stores the ID of the manager to assign, or null for "Assign to me"
+  const [assignManagerModalSaveLoading, setAssignManagerModalSaveLoading] = useState(false);
+  const [assignManagerModalSaveError, setAssignManagerModalSaveError] = useState<string | null>(null);
+  const [assignManagerModalSuccessMessage, setAssignManagerModalSuccessMessage] = useState<string | null>(null);
 
   const queryClient = useQueryClient(); // Get query client instance
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth(); // Get isSignedIn and isLoaded from useAuth
@@ -162,53 +174,28 @@ const Settings = () => {
     retry: 1,
   });
 
-  // Fetch teams for the selected manager (enabled when modal is open and manager is selected)
+  // Fetch all selectable teams (for the new "All Teams" list card)
   const { 
-    data: managedTeamsData, 
-    isLoading: isLoadingManagedTeams, 
-    error: managedTeamsError,
-  } = useQuery<ManagedTeamData[], Error>({
-    queryKey: ['managedTeams', selectedManagerForModal?.id], // Include manager ID in queryKey
+    data: allTeamsForList, // Renamed from allSelectableTeams to avoid confusion with modal-specific data
+    isLoading: isLoadingAllTeamsForList, 
+    error: allTeamsForListError,
+    refetch: refetchAllTeamsForList // Destructure refetch here
+  } = useQuery<SelectableTeamData[], Error>({
+    queryKey: ['allTeamsForList'], // Changed queryKey for clarity
     queryFn: async () => {
-      if (!selectedManagerForModal) {
-        throw new Error("No manager selected to fetch teams.");
-      }
       try {
-        const response = await apiClient.get(`/teams/managed-by/${selectedManagerForModal.id}`);
+        const response = await apiClient.get('/teams/selectable'); // Endpoint provides all teams
         if (!response || response.status < 200 || response.status >= 300) {
-          let detail = 'No error body';
-          if (response?.data && typeof response.data === 'object') {
-            detail = (response.data as any).message || (response.data as any).detail || JSON.stringify(response.data);
-          }
-          throw new Error(`Failed to fetch managed teams. Status: ${response?.status || 'unknown'}. Detail: ${detail}`);
-        }
-        if (typeof response.data === 'undefined') {
-          throw new Error("No data received in managed teams response.");
+          throw new Error(`Failed to fetch all teams list. Status: ${response?.status || 'unknown'}`);
         }
         return response.data;
       } catch (err: any) {
-        console.error("Caught error within queryFn for managedTeams:", err);
-        if (err.isAxiosError) {
-          const axiosError = err as import('axios').AxiosError;
-          const status = axiosError.response?.status || 'Axios Error (No Response Status)';
-          let detail = axiosError.message;
-          if (axiosError.response?.data && typeof axiosError.response.data === 'object') {
-            const errorData = axiosError.response.data as any;
-            detail = errorData.message || errorData.detail || JSON.stringify(errorData);
-          } else if (axiosError.response?.data) {
-            detail = String(axiosError.response.data);
-          }
-          throw new Error(`Failed to fetch managed teams. Status: ${status}. Detail: ${detail}`);
-        } else if (err instanceof Error) {
-          throw err;
-        } else {
-          throw new Error(String(err || 'An unknown error occurred while fetching managed teams'));
-        }
+        throw new Error(err.message || 'An unknown error occurred while fetching all teams list');
       }
     },
-    enabled: !!selectedManagerForModal && isTeamModalOpen, // Only enable if modal is open and manager is selected
+    // This query can be enabled once the user (ADMIN) is loaded, as it's for a primary list view
+    enabled: !!userData && userData.role === 'ADMIN', 
     staleTime: 5 * 60 * 1000,
-    retry: 1,
   });
 
   useEffect(() => {
@@ -260,20 +247,74 @@ const Settings = () => {
     }
   }, [isLoadingManagers, managersError]);
 
-  // Modal handlers
-  const openTeamModal = (manager: ManagerData) => {
-    setSelectedManagerForModal(manager);
-    setIsTeamModalOpen(true);
-    // queryClient.invalidateQueries({ queryKey: ['managedTeams', manager.id] }); // Invalidate if data might be stale from a previous open
-    // No, let enabled and queryKey change handle refetch
+  // Modal handlers for the NEW "Assign Manager to Team" modal
+  const openAssignManagerModal = (team: SelectableTeamData) => {
+    setSelectedTeamForAssignment(team);
+    setManagerToAssign(team.userId); // Pre-select current manager or null if unassigned/admin-assigned
+    setIsAssignManagerModalOpen(true);
+    setAssignManagerModalSaveError(null);
+    setAssignManagerModalSuccessMessage(null);
   };
 
-  const closeTeamModal = () => {
-    setIsTeamModalOpen(false);
-    setSelectedManagerForModal(null); // Clear selected manager
-    // Optionally reset or clear the managedTeamsData if desired upon close
-    // queryClient.resetQueries({ queryKey: ['managedTeams'] }); // Resets query to initial state
+  const closeAssignManagerModal = () => {
+    setIsAssignManagerModalOpen(false);
+    setSelectedTeamForAssignment(null);
+    setManagerToAssign(null);
+    // queryClient.resetQueries({ queryKey: ['assignManagerModalManagers'] }); // If we had a separate query for managers in modal
   };
+  
+  // Handler for saving changes in the NEW "Assign Manager to Team" Modal
+  const handleAssignManagerSave = () => {
+    if (!selectedTeamForAssignment) return;
+
+    // The actual API call will be done via a useMutation hook
+    assignManagerMutation.mutate({
+        teamId: selectedTeamForAssignment.id,
+        managerIdToAssign: managerToAssign
+    });
+  };
+
+  // NEW Mutation for assigning a manager to a team
+  const assignManagerMutation = useMutation<
+    any, // Response type from backend
+    Error, // Error type
+    { teamId: number; managerIdToAssign: number | null } // Variables type
+  >({
+    mutationFn: async ({ teamId, managerIdToAssign }) => {
+      setAssignManagerModalSaveLoading(true);
+      setAssignManagerModalSaveError(null);
+      setAssignManagerModalSuccessMessage(null);
+      try {
+        const response = await apiClient.put(`/teams/${teamId}/assign-manager`, { managerIdToAssign });
+        if (!response || response.status < 200 || response.status >= 300) {
+          const errorData = response?.data as any;
+          throw new Error(errorData?.message || `Failed to assign manager. Status: ${response?.status}`);
+        }
+        return response.data;
+      } catch (err: any) {
+        throw new Error(err.message || 'An unknown error occurred while assigning manager');
+      }
+    },
+    onSuccess: async (data) => {
+      setAssignManagerModalSaveLoading(false);
+      setAssignManagerModalSuccessMessage(data.message || "Manager assigned successfully!");
+      try {
+        await refetchAllTeamsForList(); // Explicitly await the refetch
+      } catch (error) {
+        console.error("Failed to refetch all teams list after assignment:", error);
+        // Optionally, you could set a specific error message here if refetch fails
+        // but the main operation (assignment) was successful.
+      }
+      // Close modal after a short delay to show success message AND after refetch
+      setTimeout(() => {
+        closeAssignManagerModal();
+      }, 1500); 
+    },
+    onError: (error) => {
+      setAssignManagerModalSaveLoading(false);
+      setAssignManagerModalSaveError(error.message);
+    },
+  });
 
   const handleConnectGoogle = async () => {
     console.log('[SettingsPage] handleConnectGoogle called.');
@@ -572,60 +613,83 @@ const Settings = () => {
       </div>
       {/* End of Upload Data Card */}
 
-      {/* Manager List Card - ADMINS ONLY */}
+      {/* === NEW "All Teams" List Card - ADMINS ONLY === */}
       {userData && userData.role === 'ADMIN' && (
         <div className="mt-8 bg-white shadow sm:rounded-lg">
           <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg font-semibold text-gray-800">Managers</h3>
+            <h3 className="text-lg font-semibold text-gray-800">All Teams</h3>
             <p className="mt-1 text-sm text-gray-600">
-              View and manage users with the manager role.
+              View all teams and assign managers.
             </p>
             
-            {isManagerListLoading && (
-              <div className="mt-4 text-sm text-gray-500">Loading managers...</div>
+            {isLoadingAllTeamsForList && (
+              <div className="mt-4 text-sm text-gray-500">Loading all teams...</div>
             )}
-            {managerListError && (
+            {allTeamsForListError && (
               <div className="mt-4 text-sm text-red-600">
                 <WarningCircle size={20} className="inline mr-2" />
-                Error loading managers: {managerListError}
+                Error loading teams: {allTeamsForListError.message}
               </div>
             )}
-            {!isManagerListLoading && !managerListError && managersData && managersData.length > 0 && (
+            {!isLoadingAllTeamsForList && !allTeamsForListError && allTeamsForList && (
               <div className="mt-4 flow-root">
-                <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-                  <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-                    <table className="min-w-full divide-y divide-gray-300">
-                      <thead>
-                        <tr>
-                          <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">Name</th>
-                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Email</th>
-                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Role</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {managersData.map((manager) => (
-                          <tr key={manager.id} onClick={() => openTeamModal(manager)} className="hover:bg-gray-50 cursor-pointer">
-                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-0">{manager.name || 'N/A'}</td>
-                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{manager.email}</td>
-                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{manager.role}</td>
+                {allTeamsForList.length === 0 ? (
+                  <p className="text-sm text-gray-500">No teams found in the system.</p>
+                ) : (
+                  <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+                    <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+                      <table className="min-w-full divide-y divide-gray-300">
+                        <thead>
+                          <tr>
+                            <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">Team Name</th>
+                            <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Department</th>
+                            <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Current Manager</th>
+                            <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-0">
+                              <span className="sr-only">Assign</span>
+                            </th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {allTeamsForList.map((team) => {
+                            // Find the manager's name from managersData if team.userId exists
+                            const managerName = team.userId 
+                              ? managersData?.find(m => m.id === team.userId)?.name 
+                              : null;
+                            const displayManager = managerName 
+                              ? managerName 
+                              : (team.userId === userData?.id ? `${userData.name} (Admin)` : 'Unassigned');
+
+                            return (
+                              <tr key={team.id} className="hover:bg-gray-50">
+                                <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-0">{team.name}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{team.department}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{displayManager}</td>
+                                <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
+                                  <button
+                                    onClick={() => openAssignManagerModal(team)}
+                                    className="text-indigo-600 hover:text-indigo-900"
+                                  >
+                                    Assign Manager<span className="sr-only">, {team.name}</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-            )}
-            {!isManagerListLoading && !managerListError && managersData && managersData.length === 0 && (
-               <div className="mt-4 text-sm text-gray-500">No users with the manager role found.</div>
             )}
           </div>
         </div>
       )}
+      {/* === END "All Teams" List Card === */}
 
-      {/* Manager's Teams Modal */}
-      <Transition appear show={isTeamModalOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-10" onClose={closeTeamModal}>
+      {/* === NEW "Assign Manager to Team" Modal === */}
+      <Transition appear show={isAssignManagerModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-10" onClose={closeAssignManagerModal}>
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -649,51 +713,102 @@ const Settings = () => {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-lg transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
                   <Dialog.Title
                     as="h3"
                     className="text-lg font-medium leading-6 text-gray-900 flex justify-between items-center"
                   >
-                    <span>Teams Managed by {selectedManagerForModal?.name || 'Manager'}</span>
+                    <span>Assign Manager for: {selectedTeamForAssignment?.name || 'Team'}</span>
                     <button
                       type="button"
                       className="text-gray-400 hover:text-gray-500"
-                      onClick={closeTeamModal}
+                      onClick={closeAssignManagerModal}
                     >
                       <X size={24} />
                     </button>
                   </Dialog.Title>
                   <div className="mt-4">
-                    {isLoadingManagedTeams && (
-                      <p className="text-sm text-gray-500">Loading teams...</p>
+                    {isLoadingManagers && (
+                      <p className="text-sm text-gray-500">Loading managers list...</p>
                     )}
-                    {managedTeamsError && (
+                    {managersError && (
                       <div className="text-sm text-red-600">
-                        <WarningCircle size={20} className="inline mr-1" /> Error: {managedTeamsError.message}
+                        <WarningCircle size={20} className="inline mr-1" /> Error loading managers: {managersError.message}
                       </div>
                     )}
-                    {!isLoadingManagedTeams && !managedTeamsError && managedTeamsData && managedTeamsData.length > 0 && (
-                      <ul className="space-y-2">
-                        {managedTeamsData.map(team => (
-                          <li key={team.id} className="p-2 border rounded-md">
-                            <p className="font-semibold">{team.name}</p>
-                            <p className="text-sm text-gray-600">{team.department}</p>
-                          </li>
+                    {!isLoadingManagers && !managersError && managersData && (
+                      <fieldset className="space-y-3">
+                        <legend className="sr-only">Select a Manager</legend>
+                        {/* Option to assign to current admin */}                       
+                        <div>
+                          <label htmlFor="assign-to-me-admin" className="flex items-center text-sm">
+                            <input
+                              id="assign-to-me-admin"
+                              name="manager-assignment"
+                              type="radio"
+                              className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                              checked={managerToAssign === null || managerToAssign === userData?.id} // Check if unassigned or assigned to current admin
+                              onChange={() => setManagerToAssign(null)} // Null signifies assigning to current admin in backend
+                            />
+                            <span className="ml-2 text-gray-700">Assign to me ({userData?.name || 'Admin'})</span>
+                          </label>
+                        </div>
+
+                        {/* List of other managers */} 
+                        {managersData.filter(m => m.id !== userData?.id).map(manager => (
+                          <div key={manager.id}>
+                            <label htmlFor={`manager-${manager.id}`} className="flex items-center text-sm">
+                              <input
+                                id={`manager-${manager.id}`}
+                                name="manager-assignment"
+                                type="radio"
+                                className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                                checked={managerToAssign === manager.id}
+                                onChange={() => setManagerToAssign(manager.id)}
+                              />
+                              <span className="ml-2 text-gray-700">{manager.name} ({manager.email})</span>
+                            </label>
+                          </div>
                         ))}
-                      </ul>
+                        {managersData.filter(m => m.id !== userData?.id).length === 0 && (
+                            <p className="text-sm text-gray-500">No other managers available to assign.</p>
+                        )}
+                      </fieldset>
                     )}
-                    {!isLoadingManagedTeams && !managedTeamsError && (!managedTeamsData || managedTeamsData.length === 0) && (
-                      <p className="text-sm text-gray-500">This manager is not currently managing any teams.</p>
+                    {!isLoadingManagers && !managersError && !managersData && (
+                        <p className="text-sm text-gray-500">No managers found to assign.</p>
                     )}
+
+                    {/* Modal Save/Error/Success Messages */}
+                    {assignManagerModalSaveLoading && <p className="mt-3 text-sm text-blue-600">Saving changes...</p>}
+                    {assignManagerModalSaveError && 
+                      <div className="mt-3 p-2 bg-red-50 text-red-700 text-sm rounded-md">
+                        <WarningCircle size={16} className="inline mr-1" /> {assignManagerModalSaveError}
+                      </div>
+                    }
+                    {assignManagerModalSuccessMessage && 
+                      <div className="mt-3 p-2 bg-green-50 text-green-700 text-sm rounded-md">
+                        <CheckCircle size={16} className="inline mr-1" /> {assignManagerModalSuccessMessage}
+                      </div>
+                    }
                   </div>
 
-                  <div className="mt-6 flex justify-end">
+                  <div className="mt-6 flex justify-end space-x-3">
                     <button
                       type="button"
-                      className="inline-flex justify-center rounded-md border border-transparent bg-indigo-100 px-4 py-2 text-sm font-medium text-indigo-900 hover:bg-indigo-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-                      onClick={closeTeamModal}
+                      className="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                      onClick={closeAssignManagerModal}
+                      disabled={assignManagerModalSaveLoading}
                     >
-                      Close
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-gray-400"
+                      onClick={handleAssignManagerSave}
+                      disabled={isLoadingManagers || assignManagerModalSaveLoading}
+                    >
+                      {assignManagerModalSaveLoading ? 'Saving...' : 'Save Assignment'}
                     </button>
                   </div>
                 </Dialog.Panel>
@@ -702,6 +817,7 @@ const Settings = () => {
           </div>
         </Dialog>
       </Transition>
+      {/* === END "Assign Manager to Team" Modal === */}
 
     </div>
   );
