@@ -533,40 +533,38 @@ const Settings = () => {
                     </div>
                   )}
                   {!isLoadingManagers && !managersError && managersData && managersData.length > 0 && (
-                    <div className="mt-4 flow-root">
-                      <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-                        <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                                  Name
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                                  Email
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                                  Role
-                                </th>
+                    <div className="mt-4 rounded-lg overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                Name
+                              </th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                Email
+                              </th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                Role
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {managersData.map((manager) => (
+                              <tr key={manager.id} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {manager.name || 'N/A'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {manager.email}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {manager.role}
+                                </td>
                               </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                              {managersData.map((manager) => (
-                                <tr key={manager.id} className="hover:bg-gray-50">
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {manager.name || 'N/A'}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {manager.email}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {manager.role}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   )}
@@ -595,63 +593,61 @@ const Settings = () => {
                     </div>
                   )}
                   {!isLoadingAllTeamsForList && !allTeamsForListError && allTeamsForList && (
-                    <div className="mt-4 flow-root">
+                    <div className="mt-4 rounded-lg overflow-hidden">
                       {allTeamsForList.length === 0 ? (
-                        <p className="text-sm text-gray-500">No teams found in the system.</p>
+                        <p className="px-6 py-4 text-sm text-gray-500">No teams found in the system.</p>
                       ) : (
-                        <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-                          <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-                            <table className="min-w-full divide-y divide-gray-200">
-                              <thead className="bg-gray-50">
-                                <tr>
-                                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                                    Team
-                                  </th>
-                                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                                    Department
-                                  </th>
-                                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                                    Manager
-                                  </th>
-                                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                                    <span className="sr-only">Assign Manager</span>
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white divide-y divide-gray-200">
-                                {allTeamsForList.map((team) => {
-                                  const managerDetails = team.userId ? managersData?.find(m => m.id === team.userId) : null;
-                                  let displayManager = 'Unassigned';
-                                  if (managerDetails) {
-                                      displayManager = managerDetails.name || managerDetails.email;
-                                  } else if (team.userId && team.userId === userData?.id) {
-                                      displayManager = `${userData.name || 'You'} (Admin)`;
-                                  }
-                                  return (
-                                    <tr key={team.id} className="hover:bg-gray-50">
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {team.name}
-                                      </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {team.department}
-                                      </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {displayManager}
-                                      </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <button 
-                                          onClick={() => openAssignManagerModal(team)} 
-                                          className="text-indigo-600 hover:text-indigo-900"
-                                        >
-                                          Assign Manager<span className="sr-only">, {team.name}</span>
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                  Team
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                  Department
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                  Manager
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                  <span className="sr-only">Assign Manager</span>
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {allTeamsForList.map((team) => {
+                                const managerDetails = team.userId ? managersData?.find(m => m.id === team.userId) : null;
+                                let displayManager = 'Unassigned';
+                                if (managerDetails) {
+                                    displayManager = managerDetails.name || managerDetails.email;
+                                } else if (team.userId && team.userId === userData?.id) {
+                                    displayManager = `${userData.name || 'You'} (Admin)`;
+                                }
+                                return (
+                                  <tr key={team.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                      {team.name}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {team.department}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {displayManager}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                      <button 
+                                        onClick={() => openAssignManagerModal(team)} 
+                                        className="text-indigo-600 hover:text-indigo-900"
+                                      >
+                                        Assign Manager<span className="sr-only">, {team.name}</span>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       )}
                     </div>
@@ -667,50 +663,50 @@ const Settings = () => {
             {/* Integrations Card - Remove card shell styling and inner padding */}
             <div className=""> 
               <div className=""> {/* Removed p-6 space-y-6 */}
-                {/* Google Calendar Integration */}
-                <div className="border-t border-gray-200 pt-4">
-                   <div className="flex justify-between items-center">
-                      <div>
-                        <h3 className="text-md font-medium text-gray-700">Google Calendar</h3>
-                        <p className="text-sm text-gray-500 mt-1">
-                          Connect your Google Calendar to schedule meetings and check availability.
-                        </p>
-                        <div className={`mt-2 text-sm flex items-center ${isGoogleConnected ? 'text-green-600' : 'text-yellow-600'}`}>
+          {/* Google Calendar Integration */}
+          <div className="border-t border-gray-200 pt-4">
+             <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-md font-medium text-gray-700">Google Calendar</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Connect your Google Calendar to schedule meetings and check availability.
+                  </p>
+                  <div className={`mt-2 text-sm flex items-center ${isGoogleConnected ? 'text-green-600' : 'text-yellow-600'}`}>
                            {isLoadingUser ? (<span className="text-gray-500">Loading status...</span>) 
                             : isGoogleConnected ? (<><CheckCircle size={16} className="mr-1" /> {googleConnectionStatusText}</>) 
                             : (<><WarningCircle size={16} className="mr-1" /> {googleConnectionStatusText}</>)
                            }
-                        </div>
-                      </div>
+                  </div>
+                </div>
                       <button onClick={handleConnectGoogle} disabled={isLoadingUser || isGoogleLoading} 
                               className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white ${isGoogleConnected ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' : 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500'} focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50`}>
-                        <LinkIcon size={18} className="mr-2 -ml-1" />
-                        {isLoadingUser ? 'Loading...' : isGoogleLoading ? 'Connecting...' : googleButtonText}
-                      </button>
-                   </div>
-                </div>
+                  <LinkIcon size={18} className="mr-2 -ml-1" />
+                  {isLoadingUser ? 'Loading...' : isGoogleLoading ? 'Connecting...' : googleButtonText}
+                </button>
+             </div>
+          </div>
                 {/* Zoom Integration */}
-                <div className="border-t border-gray-200 pt-4">
-                   <div className="flex justify-between items-center">
-                      <div>
-                        <h3 className="text-md font-medium text-gray-700">Zoom</h3>
+          <div className="border-t border-gray-200 pt-4">
+             <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-md font-medium text-gray-700">Zoom</h3>
                         <p className="text-sm text-gray-500 mt-1">Connect your Zoom account to schedule meetings directly.</p>
-                        <div className={`mt-2 text-sm flex items-center ${isZoomConnected ? 'text-green-600' : 'text-yellow-600'}`}>
+                  <div className={`mt-2 text-sm flex items-center ${isZoomConnected ? 'text-green-600' : 'text-yellow-600'}`}>
                            {isLoadingUser ? (<span className="text-gray-500">Loading status...</span>) 
                             : isZoomConnected ? (<><CheckCircle size={16} className="mr-1" /> {zoomConnectionStatusText}</>) 
                             : (<><WarningCircle size={16} className="mr-1" /> {zoomConnectionStatusText}</>)
                            }
-                        </div>
-                      </div>
+                  </div>
+                </div>
                       <button onClick={handleConnectZoom} disabled={isLoadingUser || isZoomLoading} 
                               className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white ${isZoomConnected ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' : 'bg-cyan-600 hover:bg-cyan-700 focus:ring-cyan-500'} focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50`}>
-                        <LinkIcon size={18} className="mr-2 -ml-1" />
-                        {isLoadingUser ? 'Loading...' : isZoomLoading ? 'Connecting...' : zoomButtonText}
-                      </button>
-                   </div>
-                </div>
+                  <LinkIcon size={18} className="mr-2 -ml-1" />
+                  {isLoadingUser ? 'Loading...' : isZoomLoading ? 'Connecting...' : zoomButtonText}
+                </button>
+             </div>
+          </div>
               </div>
-            </div>
+              </div>
           </>
         )}
 
@@ -723,32 +719,32 @@ const Settings = () => {
                 <p className="text-sm text-gray-500 mt-1">Upload a CSV file to add multiple employees.</p>
                 {csvSuccessMessage && (<div className="mt-3 mb-3 p-3 bg-green-100 text-green-700 text-sm rounded-md">{csvSuccessMessage}</div>)}
                 {csvErrorMessage && (<div className="mt-3 mb-3 p-3 bg-red-100 text-red-700 text-sm rounded-md">{csvErrorMessage}</div>)}
-                <div className="mt-4">
-                  <label htmlFor="csvFileInput" className="sr-only">Choose CSV file</label>
+            <div className="mt-4">
+              <label htmlFor="csvFileInput" className="sr-only">Choose CSV file</label>
                   <input type="file" id="csvFileInput" name="csvFileInput" accept=".csv" onChange={handleFileChange} 
                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"/>
-                </div>
-                {selectedFile && (
-                  <div className="mt-4 flex items-center space-x-3">
+            </div>
+            {selectedFile && (
+              <div className="mt-4 flex items-center space-x-3">
                     <button type="button" onClick={handleUploadCsv} disabled={isCsvUploading || !selectedFile} 
                             className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">
-                      {isCsvUploading ? 'Uploading...' : `Upload ${selectedFile.name}`}
-                    </button>
-                    {isCsvUploading && (
-                       <svg className="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                       </svg>
-                    )}
-                  </div>
+                  {isCsvUploading ? 'Uploading...' : `Upload ${selectedFile.name}`}
+                </button>
+                {isCsvUploading && (
+                   <svg className="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                   </svg>
                 )}
-                <div className="mt-3">
+              </div>
+            )}
+            <div className="mt-3">
                     <a href="/employee_upload_template.csv" download="employee_upload_template.csv" className="text-sm text-blue-600 hover:text-blue-800 hover:underline">Download CSV template</a>
                     <p className="text-xs text-gray-400 mt-1">Make sure the date format for `employee_start_date` is YYYY-MM-DD.</p>
                 </div>
               </div>
             </div>
-          </div>
+        </div>
         )}
       </div>
       
