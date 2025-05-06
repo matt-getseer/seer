@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
-import { Link as LinkIcon, CheckCircle, WarningCircle } from '@phosphor-icons/react'; // Example icon
+import { Link as LinkIcon, CheckCircle, WarningCircle, X } from '@phosphor-icons/react'; // Example icon, Added X
 import { userService } from '../api/client'; // Keep named import for userService
 import apiClient from '../api/client'; // Add default import for apiClient
 import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import QueryClient
 import { useAuth } from '@clerk/clerk-react'; // Import useAuth
+import { Dialog, Transition } from '@headlessui/react'; // Added Dialog and Transition
 
 // Define expected user data shape
 interface UserData {
@@ -25,6 +26,13 @@ interface ManagerData {
   role: string;
 }
 
+// Define managed team data shape
+interface ManagedTeamData {
+  id: number;
+  name: string;
+  department: string;
+}
+
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -41,6 +49,10 @@ const Settings = () => {
   // State for Manager List
   const [isManagerListLoading, setIsManagerListLoading] = useState(false);
   const [managerListError, setManagerListError] = useState<string | null>(null);
+
+  // State for Manager Teams Modal
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const [selectedManagerForModal, setSelectedManagerForModal] = useState<ManagerData | null>(null);
 
   const queryClient = useQueryClient(); // Get query client instance
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth(); // Get isSignedIn and isLoaded from useAuth
@@ -150,6 +162,55 @@ const Settings = () => {
     retry: 1,
   });
 
+  // Fetch teams for the selected manager (enabled when modal is open and manager is selected)
+  const { 
+    data: managedTeamsData, 
+    isLoading: isLoadingManagedTeams, 
+    error: managedTeamsError,
+  } = useQuery<ManagedTeamData[], Error>({
+    queryKey: ['managedTeams', selectedManagerForModal?.id], // Include manager ID in queryKey
+    queryFn: async () => {
+      if (!selectedManagerForModal) {
+        throw new Error("No manager selected to fetch teams.");
+      }
+      try {
+        const response = await apiClient.get(`/teams/managed-by/${selectedManagerForModal.id}`);
+        if (!response || response.status < 200 || response.status >= 300) {
+          let detail = 'No error body';
+          if (response?.data && typeof response.data === 'object') {
+            detail = (response.data as any).message || (response.data as any).detail || JSON.stringify(response.data);
+          }
+          throw new Error(`Failed to fetch managed teams. Status: ${response?.status || 'unknown'}. Detail: ${detail}`);
+        }
+        if (typeof response.data === 'undefined') {
+          throw new Error("No data received in managed teams response.");
+        }
+        return response.data;
+      } catch (err: any) {
+        console.error("Caught error within queryFn for managedTeams:", err);
+        if (err.isAxiosError) {
+          const axiosError = err as import('axios').AxiosError;
+          const status = axiosError.response?.status || 'Axios Error (No Response Status)';
+          let detail = axiosError.message;
+          if (axiosError.response?.data && typeof axiosError.response.data === 'object') {
+            const errorData = axiosError.response.data as any;
+            detail = errorData.message || errorData.detail || JSON.stringify(errorData);
+          } else if (axiosError.response?.data) {
+            detail = String(axiosError.response.data);
+          }
+          throw new Error(`Failed to fetch managed teams. Status: ${status}. Detail: ${detail}`);
+        } else if (err instanceof Error) {
+          throw err;
+        } else {
+          throw new Error(String(err || 'An unknown error occurred while fetching managed teams'));
+        }
+      }
+    },
+    enabled: !!selectedManagerForModal && isTeamModalOpen, // Only enable if modal is open and manager is selected
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+
   useEffect(() => {
     const googleSuccess = searchParams.get('google_auth_success');
     const googleError = searchParams.get('google_auth_error');
@@ -198,6 +259,21 @@ const Settings = () => {
       setManagerListError(null);
     }
   }, [isLoadingManagers, managersError]);
+
+  // Modal handlers
+  const openTeamModal = (manager: ManagerData) => {
+    setSelectedManagerForModal(manager);
+    setIsTeamModalOpen(true);
+    // queryClient.invalidateQueries({ queryKey: ['managedTeams', manager.id] }); // Invalidate if data might be stale from a previous open
+    // No, let enabled and queryKey change handle refetch
+  };
+
+  const closeTeamModal = () => {
+    setIsTeamModalOpen(false);
+    setSelectedManagerForModal(null); // Clear selected manager
+    // Optionally reset or clear the managedTeamsData if desired upon close
+    // queryClient.resetQueries({ queryKey: ['managedTeams'] }); // Resets query to initial state
+  };
 
   const handleConnectGoogle = async () => {
     console.log('[SettingsPage] handleConnectGoogle called.');
@@ -528,7 +604,7 @@ const Settings = () => {
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {managersData.map((manager) => (
-                          <tr key={manager.id}>
+                          <tr key={manager.id} onClick={() => openTeamModal(manager)} className="hover:bg-gray-50 cursor-pointer">
                             <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-0">{manager.name || 'N/A'}</td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{manager.email}</td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{manager.role}</td>
@@ -546,6 +622,86 @@ const Settings = () => {
           </div>
         </div>
       )}
+
+      {/* Manager's Teams Modal */}
+      <Transition appear show={isTeamModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-10" onClose={closeTeamModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black bg-opacity-25" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+                  <Dialog.Title
+                    as="h3"
+                    className="text-lg font-medium leading-6 text-gray-900 flex justify-between items-center"
+                  >
+                    <span>Teams Managed by {selectedManagerForModal?.name || 'Manager'}</span>
+                    <button
+                      type="button"
+                      className="text-gray-400 hover:text-gray-500"
+                      onClick={closeTeamModal}
+                    >
+                      <X size={24} />
+                    </button>
+                  </Dialog.Title>
+                  <div className="mt-4">
+                    {isLoadingManagedTeams && (
+                      <p className="text-sm text-gray-500">Loading teams...</p>
+                    )}
+                    {managedTeamsError && (
+                      <div className="text-sm text-red-600">
+                        <WarningCircle size={20} className="inline mr-1" /> Error: {managedTeamsError.message}
+                      </div>
+                    )}
+                    {!isLoadingManagedTeams && !managedTeamsError && managedTeamsData && managedTeamsData.length > 0 && (
+                      <ul className="space-y-2">
+                        {managedTeamsData.map(team => (
+                          <li key={team.id} className="p-2 border rounded-md">
+                            <p className="font-semibold">{team.name}</p>
+                            <p className="text-sm text-gray-600">{team.department}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {!isLoadingManagedTeams && !managedTeamsError && (!managedTeamsData || managedTeamsData.length === 0) && (
+                      <p className="text-sm text-gray-500">This manager is not currently managing any teams.</p>
+                    )}
+                  </div>
+
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      type="button"
+                      className="inline-flex justify-center rounded-md border border-transparent bg-indigo-100 px-4 py-2 text-sm font-medium text-indigo-900 hover:bg-indigo-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                      onClick={closeTeamModal}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
 
     </div>
   );

@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { PrismaClient, Prisma, User } from '@prisma/client';
+import { PrismaClient, Prisma, User, UserRole } from '@prisma/client';
 import { authenticate, extractUserInfo } from '../middleware/auth';
 import { getAccessibleTeams } from '../../src/services/accessControlService';
 
@@ -225,9 +225,78 @@ const deleteTeam = async (req: AuthenticatedRequest, res: Response): Promise<voi
   }
 };
 
+// Get teams managed by a specific manager ID (Admin only)
+const getTeamsByManagerId = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user?.userId) {
+      res.status(401).json({ error: 'User not authenticated properly' });
+      return;
+    }
+
+    // Fetch the current user from DB to check their role
+    const currentUser = await typedPrismaClient.user.findUnique({
+      where: { id: req.user.userId },
+      select: { role: true }
+    });
+
+    if (!currentUser) {
+      res.status(404).json({ error: 'Authenticated user not found' });
+      return;
+    }
+
+    // Check if the current user is an ADMIN
+    if (currentUser.role !== UserRole.ADMIN) {
+      res.status(403).json({ error: 'Forbidden: Only admins can access this resource.' });
+      return;
+    }
+
+    const { managerId } = req.params;
+    if (!managerId || isNaN(parseInt(managerId))) {
+      res.status(400).json({ error: 'Invalid manager ID provided.' });
+      return;
+    }
+
+    const teams = await typedPrismaClient.team.findMany({
+      where: {
+        userId: parseInt(managerId) // Assuming Team.userId is the manager of the team
+      },
+      select: {
+        id: true,
+        name: true,
+        department: true,
+        // Add other team fields you might want to display in the modal
+      }
+    });
+
+    if (!teams) {
+      // findMany returns an array, so it will be an empty array if no teams are found, not null/undefined.
+      // This check might be redundant if an empty array is an acceptable response.
+      res.status(404).json({ error: 'No teams found for this manager or manager does not exist.' });
+      return;
+    }
+
+    res.json(teams);
+  } catch (error) {
+    console.error('Error in getTeamsByManagerId:', error);
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        error: 'Failed to fetch teams for manager',
+        message: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    } else {
+      res.status(500).json({ error: 'An unknown error occurred' });
+    }
+  } finally {
+    // Disconnecting the client might not be necessary here if it's managed globally
+    // await typedPrismaClient.$disconnect(); 
+  }
+};
+
 // Register routes
 router.get('/debug', debugHandler);
 router.get('/', authenticate, extractUserInfo, getAllTeams);
+router.get('/managed-by/:managerId', authenticate, extractUserInfo, getTeamsByManagerId);
 router.get('/:id', authenticate, extractUserInfo, getTeamById);
 router.put('/:id', authenticate, extractUserInfo, updateTeam);
 router.delete('/:id', authenticate, extractUserInfo, deleteTeam);
