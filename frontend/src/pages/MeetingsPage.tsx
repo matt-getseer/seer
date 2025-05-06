@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { meetingService } from '../api/client'; // Keep for potential mutations
 import { format } from 'date-fns'; // For date formatting
 import { useMeetings } from '../hooks/useQueryHooks'; // Import the custom hook
 import { AxiosError } from 'axios'; // Import AxiosError
-import { ArrowUp, ArrowDown } from 'phosphor-react'; // Import Phosphor icons
+import { ArrowUp, ArrowDown, MagnifyingGlass } from 'phosphor-react'; // Import Phosphor icons, added MagnifyingGlass
 
 // Define the expected structure of a meeting object from the API
 interface Meeting {
@@ -31,7 +31,7 @@ const MeetingsPage: React.FC = () => {
   // Use the custom hook for data fetching, loading, and error state
   const { data: meetingsData = [], isLoading, error: queryError } = useMeetings<Meeting[]>();
 
-  // Add state for sorting
+  const [searchTerm, setSearchTerm] = useState(''); // Added searchTerm state
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
 
   // Keep navigation state
@@ -55,9 +55,24 @@ const MeetingsPage: React.FC = () => {
     navigate(`/meetings/${meetingId}`);
   };
 
-  // Memoized sorting logic
+  // Memoized filtering logic
+  const filteredMeetings = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return meetingsData;
+    }
+    const searchLower = searchTerm.toLowerCase();
+    return meetingsData.filter((meeting: Meeting) => {
+      const titleMatch = meeting.title?.toLowerCase().includes(searchLower);
+      const employeeNameMatch = meeting.employee?.name?.toLowerCase().includes(searchLower);
+      const platformMatch = meeting.platform?.toLowerCase().includes(searchLower);
+      const statusMatch = meeting.status?.toLowerCase().includes(searchLower);
+      return titleMatch || employeeNameMatch || platformMatch || statusMatch;
+    });
+  }, [meetingsData, searchTerm]);
+
+  // Memoized sorting logic - now uses filteredMeetings
   const sortedMeetings = useMemo(() => {
-    let sortableItems = [...meetingsData];
+    let sortableItems = [...filteredMeetings]; // Changed from meetingsData
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         let aValue: any;
@@ -92,8 +107,11 @@ const MeetingsPage: React.FC = () => {
       });
     }
     return sortableItems;
-  }, [meetingsData, sortConfig]);
+  }, [filteredMeetings, sortConfig]); // Changed from meetingsData
 
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
 
   // Function to request sorting
   const requestSort = (key: keyof Meeting | 'employeeName') => {
@@ -140,7 +158,19 @@ const MeetingsPage: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-6">
          <h1 className="text-2xl font-semibold text-gray-900">Meetings</h1>
-         {/* TODO: Add button to trigger recording? */}
+         {/* Search Bar Added Here */}
+         <div className="relative rounded-md w-1/3">
+            <input
+              type="text"
+              placeholder="Search meetings..."
+              value={searchTerm}
+              onChange={handleSearchChange}
+              className="block w-full rounded-md border border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm pl-3 pr-10 py-2"
+            />
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+              <MagnifyingGlass size={20} className="text-gray-400" />
+            </div>
+          </div>
       </div>
      
       <div className="bg-white overflow-hidden border border-gray-200 sm:rounded-lg">
@@ -168,7 +198,9 @@ const MeetingsPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {sortedMeetings.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">No meetings found.</td>
+                    <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                      {searchTerm ? `No meetings found matching "${searchTerm}"` : 'No meetings found.'}
+                    </td>
                   </tr>
                 ) : (
                   sortedMeetings.map((meeting) => (

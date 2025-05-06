@@ -85,17 +85,6 @@ const ErrorState = memo(({ message }: { message: string }) => (
   </div>
 ));
 
-// Empty state component
-const EmptyState = memo(({ searchTerm, hasEmployees }: { searchTerm: string, hasEmployees: boolean }) => (
-  <div className="bg-white rounded-lg shadow p-6 text-center">
-    {hasEmployees ? (
-      <p className="text-gray-600">No matches found for "{searchTerm}".</p>
-    ) : (
-      <p className="text-gray-600">No employees found.</p>
-    )}
-  </div>
-));
-
 // Memoized EmployeeRow component to prevent re-rendering all rows when one changes
 const EmployeeRow = memo(({ 
   employee, 
@@ -207,13 +196,13 @@ const SearchBar = memo(({
   searchTerm: string, 
   onSearchChange: (e: React.ChangeEvent<HTMLInputElement>) => void 
 }) => (
-  <div className="relative rounded-md shadow-sm w-1/3">
+  <div className="relative rounded-md w-1/3">
     <input
       type="text"
       placeholder="Search employees..."
       value={searchTerm}
       onChange={onSearchChange}
-      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm pl-3 pr-10 py-2"
+      className="block w-full rounded-md border border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm pl-3 pr-10 py-2"
     />
     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
       <MagnifyingGlass size={20} className="text-gray-400" />
@@ -387,9 +376,7 @@ const Employees = () => {
       {isLoading ? (
         <LoadingState />
       ) : error ? (
-        <ErrorState message={`Error loading employees: ${(error as Error).message}`} />
-      ) : sortedAndFilteredEmployees.length === 0 ? (
-        <EmptyState searchTerm={searchTerm} hasEmployees={employeesData.length > 0} />
+        <ErrorState message={errorMessage || 'An unexpected error occurred.'} />
       ) : (
         <div className="flex flex-col mt-4">
           <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
@@ -398,15 +385,23 @@ const Employees = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <TableHeader requestSort={requestSort} getSortIcon={getSortIcon} />
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {sortedAndFilteredEmployees.map((employee: Employee) => (
-                      <EmployeeRow 
-                        key={employee.id} 
-                        employee={employee} 
-                        onEmployeeClick={handleEmployeeClick}
-                        onScheduleClick={handleScheduleClick}
-                        formatDate={formatDate} 
-                      />
-                    ))}
+                    {sortedAndFilteredEmployees.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                          No employees found.
+                        </td>
+                      </tr>
+                    ) : (
+                      sortedAndFilteredEmployees.map((employee: Employee) => (
+                        <EmployeeRow 
+                          key={employee.id} 
+                          employee={employee} 
+                          onEmployeeClick={handleEmployeeClick}
+                          onScheduleClick={handleScheduleClick}
+                          formatDate={formatDate} 
+                        />
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
