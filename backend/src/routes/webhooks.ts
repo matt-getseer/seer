@@ -5,7 +5,7 @@ import { InsightData } from '../meeting-processing/types';
 import { processOneOnOneMeeting } from '../meeting-processing/oneOnOneProcessor';
 import { processReviewMeeting } from '../meeting-processing/reviewProcessor';
 import dotenv from 'dotenv';
-import { WebhookEvent, UserJSON, OrganizationJSON, OrganizationMembershipJSON } from '@clerk/clerk-sdk-node';
+import { WebhookEvent, UserJSON, OrganizationJSON, OrganizationMembershipJSON, DeletedObjectJSON } from '@clerk/clerk-sdk-node';
 import { Webhook } from 'svix';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -496,28 +496,53 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
         // }
         break;
 
-      // Add other event types as needed (e.g., organization.deleted, organizationMembership.deleted)
-      // case 'organization.deleted':
-      //   const orgDeletedData = evt.data;
-      //   await prisma.organization.deleteMany({
-      //     where: { clerkOrganizationId: orgDeletedData.id },
-      //   });
-      //   console.log(`Organization deleted from DB: ${orgDeletedData.id}`);
-      //   // Note: You might need to nullify organizationId on related Users or handle cascades.
-      //   break;
+      case 'organization.deleted':
+        // Use the more specific type for deletion events, likely DeletedObjectJSON or similar
+        // This type typically only contains { id: string, object: string, deleted: boolean }
+        const orgDeletedData = evt.data as DeletedObjectJSON; 
 
-      // case 'organizationMembership.deleted':
-      //   const membershipDeletedData = evt.data;
-      //   const clerkUserIdForDeletion = membershipDeletedData.public_user_data?.user_id || membershipDeletedData.user_id;
-      //   // Find user and set organizationId to null
-      //   if (clerkUserIdForDeletion) {
-      //       await prisma.user.updateMany({
-      //           where: { clerkId: clerkUserIdForDeletion }, 
-      //           data: { organizationId: null }
-      //       });
-      //       console.log(`User ${clerkUserIdForDeletion} unlinked from organization via webhook.`);
-      //   }
-      //   break;
+        if (!orgDeletedData || !orgDeletedData.id) { // Check if orgDeletedData itself is valid
+          console.error('Invalid organization.deleted payload (missing data or ID):', orgDeletedData);
+          return res.status(400).json({ error: 'Invalid payload for organization.deleted' });
+        }
+        try {
+          // We use orgDeletedData.id which is the clerkOrganizationId
+          const clerkOrgIdToDelete = orgDeletedData.id;
+
+          const orgToDeleteLocally = await prisma.organization.findUnique({
+            where: { clerkOrganizationId: clerkOrgIdToDelete }, // Find by Clerk's ID
+            select: { id: true } // Select only the local DB ID for subsequent operations
+          });
+
+          if (orgToDeleteLocally) {
+            console.log(`Processing deletion for organization - Clerk ID: ${clerkOrgIdToDelete}, Local DB ID: ${orgToDeleteLocally.id}`);
+
+            // Step 1: Unlink users from this organization
+            const updatedUserCount = await prisma.user.updateMany({
+              where: { organizationId: orgToDeleteLocally.id },
+              data: { organizationId: null },
+            });
+            console.log(`Unlinked ${updatedUserCount.count} users from organization ID ${orgToDeleteLocally.id}`);
+
+            // Step 2: Delete teams associated with this organization
+            const deletedTeamCount = await prisma.team.deleteMany({
+              where: { organizationId: orgToDeleteLocally.id },
+            });
+            console.log(`Deleted ${deletedTeamCount.count} teams from organization ID ${orgToDeleteLocally.id}`);
+            
+            // Step 3: Delete the organization itself from your local database
+            await prisma.organization.delete({
+              where: { id: orgToDeleteLocally.id }, // Use the local DB ID for deletion
+            });
+            console.log(`Organization with Clerk ID ${clerkOrgIdToDelete} (Local DB ID: ${orgToDeleteLocally.id}) deleted from local database.`);
+          } else {
+            console.warn(`Organization with Clerk ID ${clerkOrgIdToDelete} not found in local database during organization.deleted event. Already processed or never existed locally?`);
+          }
+        } catch (error) {
+          console.error(`Error processing organization.deleted event for Clerk ID ${orgDeletedData.id}:`, error);
+          return res.status(500).json({ error: 'Failed to process organization.deleted event.' });
+        }
+        break;
 
       default:
         console.log(`Received unhandled Clerk event type: ${eventType}`);
