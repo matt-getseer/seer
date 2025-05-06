@@ -72,7 +72,24 @@ const Settings = () => {
   const queryClient = useQueryClient(); // Get query client instance
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth(); // Get isSignedIn and isLoaded from useAuth
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('Users'); // Explicitly type activeTab
+  // Update tabItems to be defined before being used in isValidTab and state init
+  const tabItems = [
+    { id: 'Users' as SettingsTab, label: 'Users' },
+    { id: 'Teams' as SettingsTab, label: 'Teams' },
+    { id: 'Integrations' as SettingsTab, label: 'Integrations' },
+    { id: 'Employees' as SettingsTab, label: 'Employee Data' },
+  ];
+
+  // Helper function to check if a string is a valid SettingsTab ID
+  const isValidTab = (tabId: string | null): tabId is SettingsTab => {
+    return tabItems.some(tab => tab.id === tabId);
+  };
+
+  // Initialize activeTab from URL search parameter or default to 'Users'
+  const initialTabFromUrl = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    isValidTab(initialTabFromUrl) ? initialTabFromUrl : 'Users'
+  );
 
   // Fetch user data including Google & Zoom Auth status
   const { data: userData, isLoading: isLoadingUser, error: userError, refetch: refetchUserData } = useQuery<UserData, Error>({
@@ -203,44 +220,64 @@ const Settings = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Function to handle tab click and update URL search parameter
+  const handleTabClick = (tabId: SettingsTab) => {
+    setActiveTab(tabId);
+    setSearchParams(prevParams => {
+      prevParams.set('tab', tabId);
+      return prevParams;
+    }, { replace: true }); // Use replace to avoid bloating browser history
+  };
+
+  // Effect to sync activeTab if URL changes from external navigation (e.g., back/forward button)
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (isValidTab(tabFromUrl) && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+    // This effect should only run when searchParams changes from external sources,
+    // not when we internally set it with handleTabClick. 
+    // However, a simple dependency on searchParams is usually fine.
+  }, [searchParams, activeTab]); // Removed isValidTab from deps as it depends on tabItems defined in component scope
+
   useEffect(() => {
     const googleSuccess = searchParams.get('google_auth_success');
     const googleError = searchParams.get('google_auth_error');
-    const zoomSuccess = searchParams.get('zoom_auth_success'); // Check for Zoom success
-    const zoomError = searchParams.get('zoom_auth_error'); // Check for Zoom error
-
-    let needsRefetch = false;
+    const zoomSuccess = searchParams.get('zoom_auth_success');
+    const zoomError = searchParams.get('zoom_auth_error');
+    let needsUserRefetch = false;
+    // Create a new SearchParams object to modify, to avoid issues with stale closures if only searchParams is modified directly.
+    const newSearchParams = new URLSearchParams(searchParams.toString());
 
     if (googleSuccess) {
       setSuccessMessage('Google Calendar connected successfully!');
-      searchParams.delete('google_auth_success');
-      needsRefetch = true;
+      newSearchParams.delete('google_auth_success');
+      needsUserRefetch = true;
     } else if (googleError) {
       const decodedError = decodeURIComponent(googleError);
       setErrorMessage(`Failed to connect Google Calendar: ${decodedError || 'Unknown error'}. Please try again.`);
-      searchParams.delete('google_auth_error');
+      newSearchParams.delete('google_auth_error');
     }
 
-    if (zoomSuccess) { // Handle Zoom success
-      setSuccessMessage('Zoom account connected successfully!'); // Update message
-      searchParams.delete('zoom_auth_success');
-      needsRefetch = true;
-    } else if (zoomError) { // Handle Zoom error
+    if (zoomSuccess) {
+      setSuccessMessage('Zoom account connected successfully!');
+      newSearchParams.delete('zoom_auth_success');
+      needsUserRefetch = true;
+    } else if (zoomError) {
       const decodedError = decodeURIComponent(zoomError);
-      setErrorMessage(`Failed to connect Zoom account: ${decodedError || 'Unknown error'}. Please try again.`); // Update message
-      searchParams.delete('zoom_auth_error');
+      setErrorMessage(`Failed to connect Zoom account: ${decodedError || 'Unknown error'}. Please try again.`);
+      newSearchParams.delete('zoom_auth_error');
     }
 
-    // Update search params in URL (only if changed)
-    setSearchParams(searchParams, { replace: true });
+    // Only update search params if they have actually changed.
+    if (searchParams.toString() !== newSearchParams.toString()) {
+        setSearchParams(newSearchParams, { replace: true });
+    }
 
-    // Refetch user data if an auth flow succeeded to update status immediately
-    if (needsRefetch) {
+    if (needsUserRefetch) {
       queryClient.invalidateQueries({ queryKey: ['currentUser'] });
-      // Optionally use refetchUserData();
     }
-
-  }, [searchParams, setSearchParams, queryClient]); // Add queryClient dependency
+  }, [searchParams, setSearchParams, queryClient]); // queryClient is stable, setSearchParams is stable
 
   // Update local state based on managers query
   useEffect(() => {
@@ -449,13 +486,6 @@ const Settings = () => {
     }
   };
 
-  const tabItems = [
-    { id: 'Users', label: 'Users' },
-    { id: 'Teams', label: 'Teams' },
-    { id: 'Integrations', label: 'Integrations' },
-    { id: 'Employees', label: 'Employee Data' },
-  ];
-
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Settings</h1>
@@ -466,7 +496,7 @@ const Settings = () => {
           {tabItems.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as SettingsTab)}
+              onClick={() => handleTabClick(tab.id)}
               className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm 
                 ${activeTab === tab.id
                   ? 'border-indigo-500 text-indigo-600'
