@@ -1,11 +1,12 @@
 import express, { Response } from 'express';
-import { PrismaClient, MeetingType } from '@prisma/client';
+import { PrismaClient, MeetingType, User } from '@prisma/client';
 import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
 import { inviteBotToMeeting } from '../services/meetingBaasService';
 import { getAuthenticatedGoogleClient } from '../services/googleAuthService';
 import { createCalendarEvent } from '../services/googleCalendarService';
 import { createZoomMeeting } from '../services/zoomAuthService';
 import axios from 'axios';
+import { getAccessibleMeetings } from '../services/accessControlService';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -429,6 +430,38 @@ router.get('/:id', authenticate, extractUserInfo, async (req: RequestWithUser, r
     res.status(500).json({ message: 'Failed to retrieve meeting details.' });
   }
 });
+
+// Function to get all meetings accessible by the current user
+const getAllAccessibleMeetings = async (req: RequestWithUser, res: Response) => {
+  const managerId = req.user?.userId; // Assuming userId from token is the managerId or current user ID
+
+  if (!managerId) {
+    return res.status(401).json({ message: 'User not authenticated or userId not found in token' });
+  }
+
+  try {
+    const currentUser = await prisma.user.findUnique({
+      where: { id: managerId },
+    });
+
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found in database' });
+    }
+
+    const meetings = await getAccessibleMeetings(currentUser);
+    res.json(meetings);
+  } catch (error) {
+    console.error('Error fetching accessible meetings:', error);
+    let errorMessage = 'Failed to fetch meetings.';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    res.status(500).json({ message: errorMessage });
+  }
+};
+
+// Register the new GET route for all accessible meetings
+router.get('/', authenticate, extractUserInfo, getAllAccessibleMeetings);
 
 // TODO: Add Webhook endpoint for Meeting BaaS notifications
 

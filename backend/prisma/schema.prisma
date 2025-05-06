@@ -26,6 +26,7 @@ model User {
   meetings           Meeting[]     @relation("ManagerMeetings")
   teams              Team[]
   Organization       Organization? @relation(fields: [organizationId], references: [id])
+  role               UserRole      @default(USER)
 
   @@index([organizationId])
 }
@@ -142,4 +143,10 @@ enum MeetingType {
   ONE_ON_ONE
   SIX_MONTH_REVIEW
   TWELVE_MONTH_REVIEW
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  USER
 }

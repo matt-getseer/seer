@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { PrismaClient, Employee as PrismaEmployee, Prisma, Team } from '@prisma/client';
+import { PrismaClient, Employee as PrismaEmployee, Prisma, Team, User } from '@prisma/client';
 import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
+import { getAccessibleEmployees } from '../services/accessControlService';
 import multer, { Multer } from 'multer';
 import { parse } from 'csv-parse';
 import { Readable } from 'stream';
@@ -173,52 +174,52 @@ const deleteEmployee = async (req: AuthenticatedRequest, res: Response, next: Ne
 // Get an employee by id
 const getEmployeeById = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { id } = req.params;
+    const targetEmployeeId = parseInt(req.params.id);
 
     if (!req.user?.userId) {
       res.status(401).json({ error: 'User not authenticated' });
       return;
     }
 
-    const employee = await prisma.employee.findFirst({
-      where: {
-        id: parseInt(id),
-        userId: req.user.userId
-      },
-      include: {
-        team: {
-          select: {
-            id: true,
-            name: true,
-            department: true
-          }
-        }
-      }
+    // 1. Get the current user object (needed for accessControlService)
+    const currentUser = await prisma.user.findUnique({
+      where: { id: req.user.userId }
     });
 
-    if (!employee) {
-      res.status(404).json({ error: 'Employee not found or unauthorized' });
+    if (!currentUser) {
+      // This case should ideally not happen if authenticate middleware works
+      res.status(401).json({ error: 'Authenticated user not found in database' });
       return;
     }
 
-    // Fetch related interviews count
-    // const interviewCount = await prisma.interview.count({
-    //   where: {
-    //     employeeId: parseInt(id),
-    //     // We might need to confirm if interviews are directly linked via employeeId
-    //     // or if we need to link through user ID and potentially employee name?
-    //     // Assuming direct link for now:
-    //     // userId: req.user.userId 
-    //   }
-    // });
+    // 2. Get all employees accessible to this user using the existing service function
+    const accessibleEmployees = await getAccessibleEmployees(currentUser);
 
-    // Include the interview count in the response
-    res.json({ 
-      ...employee,
-      // interviewCount: interviewCount
-     });
+    // 3. Check if the targetEmployeeId is in the list of accessible employees
+    //    The `getAccessibleEmployees` function already includes the necessary details like `team`.
+    const targetEmployee = accessibleEmployees.find(emp => emp.id === targetEmployeeId);
+
+    if (!targetEmployee) {
+      // To provide a more specific error, we can check if the employee exists at all.
+      const employeeExists = await prisma.employee.findUnique({
+        where: { id: targetEmployeeId }
+      });
+      if (!employeeExists) {
+        res.status(404).json({ error: 'Employee not found' });
+      } else {
+        res.status(403).json({ error: 'Unauthorized to view this employee' });
+      }
+      return;
+    }
+
+    // 4. If found and accessible, return it.
+    //    `targetEmployee` from `getAccessibleEmployees` should have the required structure.
+    res.json(targetEmployee);
+
   } catch (error) {
-    next(error);
+    // Log the error for server-side inspection
+    console.error(`Error in getEmployeeById for ID ${req.params.id}:`, error);
+    next(error); // Pass to global error handler
   }
 };
 
@@ -230,36 +231,19 @@ const getAllEmployees = async (req: AuthenticatedRequest, res: Response, next: N
       return;
     }
 
-    // Fetch employees with includes
-    const employees = await prisma.employee.findMany({
-      where: {
-        userId: req.user.userId
-      },
-      include: {
-        team: {
-          select: {
-            id: true,
-            name: true,
-            department: true
-          }
-        },
-        _count: {
-          select: { meetings: true }
-        }
-      }
+    const currentUser = await prisma.user.findUnique({
+      where: { id: req.user.userId }
     });
 
-    // Define the type inline for the map parameter
-    const employeesWithMeetingCount = employees.map((emp: (PrismaEmployee & {
-      team: { id: number; name: string; department: string; } | null;
-      _count: { meetings: number; };
-    })) => ({
-      ...emp,
-      meetingCount: emp._count?.meetings ?? 0,
-      _count: undefined // Remove the internal _count object
-    }));
+    if (!currentUser) {
+      res.status(404).json({ error: 'User not found for access control' });
+      return;
+    }
 
-    res.json(employeesWithMeetingCount);
+    // Fetch employees using the access control service
+    const employees = await getAccessibleEmployees(currentUser);
+
+    res.json(employees);
   } catch (error) {
     next(error);
   }

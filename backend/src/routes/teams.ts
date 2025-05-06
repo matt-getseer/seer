@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, User } from '@prisma/client';
 import { authenticate, extractUserInfo } from '../middleware/auth';
+import { getAccessibleTeams } from '../../src/services/accessControlService';
 
 // Define AuthenticatedRequest interface
 interface AuthenticatedRequest extends Request {
@@ -55,7 +56,18 @@ const getAllTeams = async (req: AuthenticatedRequest, res: Response): Promise<vo
       return;
     }
     
-    console.log(`Looking for teams for user ID: ${req.user.userId}`);
+    console.log(`Fetching full user object for ID: ${req.user.userId}`);
+    const currentUser = await typedPrismaClient.user.findUnique({
+      where: { id: req.user.userId }
+    });
+
+    if (!currentUser) {
+      console.log(`User with ID ${req.user.userId} not found in database`);
+      res.status(404).json({ error: 'User not found for access control' });
+      return;
+    }
+    
+    console.log(`Fetching teams for user ID: ${currentUser.id} with role: ${currentUser.role}`);
     
     // Test database connection
     try {
@@ -82,24 +94,9 @@ const getAllTeams = async (req: AuthenticatedRequest, res: Response): Promise<vo
 
     console.log(`Found user: ${user.email}`);
     
-    const teams = await typedPrismaClient.team.findMany({
-      where: {
-        userId: req.user.userId
-      },
-      include: {
-        employees: {
-          select: {
-            id: true,
-            name: true,
-            title: true,
-            email: true,
-            startDate: true
-          }
-        }
-      }
-    });
+    const teams = await getAccessibleTeams(currentUser);
     
-    console.log(`Found ${teams.length} teams for user ${req.user.userId}`);
+    console.log(`Found ${teams.length} teams for user ${currentUser.id} via access control service`);
     res.json(teams);
   } catch (error) {
     console.error('Error in getAllTeams:', error);

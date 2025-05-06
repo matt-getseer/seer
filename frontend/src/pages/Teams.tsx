@@ -77,7 +77,8 @@ const Teams = () => {
       const teamMatches = team.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           team.department.toLowerCase().includes(searchTerm.toLowerCase())
       
-      const employeeMatches = team.employees.some(employee => 
+      const employeesArray = team.employees || [];
+      const employeeMatches = employeesArray.some(employee => 
         employee.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
         employee.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         employee.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -162,7 +163,7 @@ const Teams = () => {
       ) : (
         <div className="space-y-8">
           {filteredTeams.map((team) => (
-            team.employees.length > 0 && (
+            (team.employees || []).length > 0 && (
               <div key={team.id} className="bg-white rounded-lg overflow-hidden border border-gray-200">
                 <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
                   <div className="flex justify-between items-center">
@@ -171,7 +172,7 @@ const Teams = () => {
                       <p className="text-sm text-gray-500">{team.department}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-gray-500">{team.employees.length} employees</p>
+                      <p className="text-sm text-gray-500">{(team.employees || []).length} employees</p>
                     </div>
                   </div>
                 </div>
@@ -198,7 +199,7 @@ const Teams = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {sortEmployees(team.employees).map((employee) => (
+                        {sortEmployees(team.employees || []).map((employee) => (
                           <tr key={employee.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                               <button 
