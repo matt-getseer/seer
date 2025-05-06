@@ -41,6 +41,9 @@ interface SelectableTeamData {
   userId: number | null; // ID of the user currently managing this team, or null
 }
 
+// Define possible tab values
+type SettingsTab = 'Users' | 'Teams' | 'Integrations' | 'Employees';
+
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -69,7 +72,7 @@ const Settings = () => {
   const queryClient = useQueryClient(); // Get query client instance
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth(); // Get isSignedIn and isLoaded from useAuth
 
-  const [activeTab, setActiveTab] = useState('Users'); // Default to Users tab
+  const [activeTab, setActiveTab] = useState<SettingsTab>('Users'); // Explicitly type activeTab
 
   // Fetch user data including Google & Zoom Auth status
   const { data: userData, isLoading: isLoadingUser, error: userError, refetch: refetchUserData } = useQuery<UserData, Error>({
@@ -463,7 +466,7 @@ const Settings = () => {
           {tabItems.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => setActiveTab(tab.id as SettingsTab)}
               className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm 
                 ${activeTab === tab.id
                   ? 'border-indigo-500 text-indigo-600'
@@ -488,12 +491,8 @@ const Settings = () => {
           <>
             {/* Managers List Card - ADMINS ONLY */}
             {userData && userData.role === 'ADMIN' && (
-              <div className="bg-white shadow sm:rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <h3 className="text-lg font-semibold text-gray-800">Managers</h3>
-                  <p className="mt-1 text-sm text-gray-600">
-                    List of users with the manager role.
-                  </p>
+              <div className="">
+                <div className="">
                   {isLoadingManagers && (
                     <div className="mt-4 text-sm text-gray-500">Loading managers...</div>
                   )}
@@ -506,21 +505,33 @@ const Settings = () => {
                   {!isLoadingManagers && !managersError && managersData && managersData.length > 0 && (
                     <div className="mt-4 flow-root">
                       <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-                        <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:-px-8">
-                          <table className="min-w-full divide-y divide-gray-300">
-                            <thead>
+                        <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
                               <tr>
-                                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">Name</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Email</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Role</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                  Name
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                  Email
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                  Role
+                                </th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-200">
+                            <tbody className="bg-white divide-y divide-gray-200">
                               {managersData.map((manager) => (
                                 <tr key={manager.id} className="hover:bg-gray-50">
-                                  <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-0">{manager.name || 'N/A'}</td>
-                                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{manager.email}</td>
-                                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{manager.role}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    {manager.name || 'N/A'}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {manager.email}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {manager.role}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -542,12 +553,8 @@ const Settings = () => {
           <>
             {/* === "All Teams" List Card - ADMINS ONLY === */}
             {userData && userData.role === 'ADMIN' && (
-              <div className="bg-white shadow sm:rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <h3 className="text-lg font-semibold text-gray-800">All Teams</h3>
-                  <p className="mt-1 text-sm text-gray-600">
-                    View all teams and assign managers.
-                  </p>
+              <div className="">
+                <div className="">
                   {isLoadingAllTeamsForList && (
                     <div className="mt-4 text-sm text-gray-500">Loading all teams...</div>
                   )}
@@ -564,18 +571,24 @@ const Settings = () => {
                       ) : (
                         <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
                           <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-                            <table className="min-w-full divide-y divide-gray-300">
-                              <thead>
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
                                 <tr>
-                                  <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">Team</th>
-                                  <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Department</th>
-                                  <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Manager</th>
-                                  <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-0">
-                                    <span className="sr-only">Assign</span>
+                                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                    Team
+                                  </th>
+                                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                    Department
+                                  </th>
+                                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                    Manager
+                                  </th>
+                                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                                    <span className="sr-only">Assign Manager</span>
                                   </th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-gray-200">
+                              <tbody className="bg-white divide-y divide-gray-200">
                                 {allTeamsForList.map((team) => {
                                   const managerDetails = team.userId ? managersData?.find(m => m.id === team.userId) : null;
                                   let displayManager = 'Unassigned';
@@ -586,11 +599,20 @@ const Settings = () => {
                                   }
                                   return (
                                     <tr key={team.id} className="hover:bg-gray-50">
-                                      <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-0">{team.name}</td>
-                                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{team.department}</td>
-                                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{displayManager}</td>
-                                      <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
-                                        <button onClick={() => openAssignManagerModal(team)} className="text-indigo-600 hover:text-indigo-900">
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        {team.name}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {team.department}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {displayManager}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <button 
+                                          onClick={() => openAssignManagerModal(team)} 
+                                          className="text-indigo-600 hover:text-indigo-900"
+                                        >
                                           Assign Manager<span className="sr-only">, {team.name}</span>
                                         </button>
                                       </td>
@@ -612,10 +634,9 @@ const Settings = () => {
 
         {activeTab === 'Integrations' && (
           <>
-            {/* Integrations Card */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="p-6 space-y-6"> 
-                <h2 className="text-lg font-medium text-gray-900">Integrations</h2>
+            {/* Integrations Card - Remove card shell styling and inner padding */}
+            <div className=""> 
+              <div className=""> {/* Removed p-6 space-y-6 */}
                 {/* Google Calendar Integration */}
                 <div className="border-t border-gray-200 pt-4">
                    <div className="flex justify-between items-center">
@@ -664,11 +685,10 @@ const Settings = () => {
         )}
 
         {activeTab === 'Employees' && (
-          <>
-            {/* Upload Data Card */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="p-6">
-                <h2 className="text-lg font-medium text-gray-900 mb-4">Upload Data</h2>
+          <div className="employee-data-tab-content">
+            {/* Upload Data Card - Remove card shell styling and inner padding */}
+            <div className=""> 
+              <div className=""> {/* Removed p-6 */}
                 <h3 className="text-md font-medium text-gray-700">Import Employees via CSV</h3>
                 <p className="text-sm text-gray-500 mt-1">Upload a CSV file to add multiple employees.</p>
                 {csvSuccessMessage && (<div className="mt-3 mb-3 p-3 bg-green-100 text-green-700 text-sm rounded-md">{csvSuccessMessage}</div>)}
@@ -698,7 +718,7 @@ const Settings = () => {
                 </div>
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
       
