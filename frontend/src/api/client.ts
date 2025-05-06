@@ -85,6 +85,7 @@ apiClient.interceptors.request.use(async (config) => {
     const cachedData = apiCache.get(cacheKey);
     
     if (cachedData) {
+      console.log(`[API Client] Cache hit for ${config.url}`);
       // Return early with cached data
       return {
         ...config,
@@ -102,25 +103,28 @@ apiClient.interceptors.request.use(async (config) => {
     }
   }
 
+  console.log(`[API Client] Interceptor for ${config.method?.toUpperCase()} ${config.url}`);
   try {
-    // Directly call the getter function, relying on Clerk's internal caching/refresh
     if (!tokenGetter) {
-        console.error('Token getter not initialized before request.');
+        console.error('[API Client] Token getter not initialized before request to:', config.url);
         throw new Error('Token getter not initialized');
     }
-    const token = await tokenGetter(); // Direct call
+    console.log('[API Client] Calling tokenGetter...');
+    const token = await tokenGetter();
     
     if (token) {
+      console.log('[API Client] Token successfully retrieved. Setting Authorization header for:', config.url);
       config.headers.Authorization = `Bearer ${token}`;
     } else {
-      // If no token available, DO NOT redirect here.
-      console.error('No authentication token available for request');
-      return Promise.reject(new Error('No authentication token available')); 
+      console.warn('[API Client] No authentication token available from tokenGetter for request to:', config.url);
+      // If no token available, DO NOT redirect here. Request will proceed without Auth header.
+      // Backend will handle if auth is required.
+      // return Promise.reject(new Error('No authentication token available')); 
     }
   } catch (error) {
-    console.error('Error getting token for request:', error);
+    console.error('[API Client] Error getting token for request to:', config.url, error);
     // DO NOT redirect here.
-    return Promise.reject(error); 
+    // return Promise.reject(error); 
   }
   
   return config;

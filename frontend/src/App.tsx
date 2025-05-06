@@ -29,23 +29,39 @@ const MeetingDetailPage = lazy(() => import('./pages/MeetingDetailPage'))
 
 // Navigation setup component
 const NavigationSetup = memo(({ children }: { children: React.ReactNode }) => {
-  const { isLoaded, getToken } = useAuth()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded) {
+      console.log('[NavigationSetup] Clerk not loaded yet.');
+      return;
+    }
+    console.log(`[NavigationSetup] Clerk loaded. isSignedIn: ${isSignedIn}`);
 
     // Create a stable token getter function that doesn't change on re-renders
     const stableTokenGetter = async () => {
+      console.log('[stableTokenGetter] Attempting to get token...');
+      if (!isSignedIn) {
+        console.log('[stableTokenGetter] Not signed in according to useAuth, returning null.');
+        return null;
+      }
       try {
-        return await getToken();
+        const token = await getToken();
+        if (token) {
+          console.log('[stableTokenGetter] Token retrieved successfully (first 15 chars):', token.substring(0, 15) + '...');
+        } else {
+          console.log('[stableTokenGetter] getToken() returned null or undefined.');
+        }
+        return token;
       } catch (error) {
-        console.error('Error in token getter:', error);
+        console.error('[stableTokenGetter] Error calling getToken():', error);
         return null;
       }
     };
 
     setTokenGetter(stableTokenGetter);
-  }, [isLoaded, getToken]);
+    console.log('[NavigationSetup] Token getter has been set.');
+  }, [isLoaded, isSignedIn, getToken]);
 
   return <>{children}</>
 });

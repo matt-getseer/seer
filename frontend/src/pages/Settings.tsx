@@ -4,6 +4,7 @@ import { Link as LinkIcon, CheckCircle, WarningCircle } from '@phosphor-icons/re
 import { userService } from '../api/client'; // Keep named import for userService
 import apiClient from '../api/client'; // Add default import for apiClient
 import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import QueryClient
+import { useAuth } from '@clerk/clerk-react'; // Import useAuth
 
 // Define expected user data shape
 interface UserData {
@@ -22,6 +23,7 @@ const Settings = () => {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false); // Specific loading state for Google
   const [isZoomLoading, setIsZoomLoading] = useState(false); // Specific loading state for Zoom
   const queryClient = useQueryClient(); // Get query client instance
+  const { isSignedIn, isLoaded: isAuthLoaded } = useAuth(); // Get isSignedIn and isLoaded from useAuth
 
   // Fetch user data including Google & Zoom Auth status
   const { data: userData, isLoading: isLoadingUser, error: userError, refetch: refetchUserData } = useQuery<UserData, Error>({
@@ -124,7 +126,19 @@ const Settings = () => {
   }, [searchParams, setSearchParams, queryClient]); // Add queryClient dependency
 
   const handleConnectGoogle = async () => {
-    setIsGoogleLoading(true); // Use specific loading state
+    console.log('[SettingsPage] handleConnectGoogle called.');
+    if (!isAuthLoaded) {
+      console.log('[SettingsPage] Clerk auth not loaded yet. Aborting Google connection attempt.');
+      setErrorMessage('Authentication system is still loading. Please try again in a moment.');
+      return;
+    }
+    if (!isSignedIn) {
+      console.log('[SettingsPage] User is not signed in. Aborting Google connection attempt.');
+      setErrorMessage('You must be signed in to connect your Google Calendar. Please sign in and try again.');
+      return;
+    }
+
+    setIsGoogleLoading(true);
     setErrorMessage(null);
     setSuccessMessage(null); // Clear previous messages
 
@@ -147,7 +161,19 @@ const Settings = () => {
 
   // New handler for Zoom connection
   const handleConnectZoom = async () => {
-    setIsZoomLoading(true); // Use specific loading state
+    console.log('[SettingsPage] handleConnectZoom called.');
+    if (!isAuthLoaded) {
+      console.log('[SettingsPage] Clerk auth not loaded yet. Aborting Zoom connection attempt.');
+      setErrorMessage('Authentication system is still loading. Please try again in a moment.');
+      return;
+    }
+    if (!isSignedIn) {
+      console.log('[SettingsPage] User is not signed in. Aborting Zoom connection attempt.');
+      setErrorMessage('You must be signed in to connect your Zoom account. Please sign in and try again.');
+      return;
+    }
+
+    setIsZoomLoading(true);
     setErrorMessage(null);
     setSuccessMessage(null); // Clear previous messages
 

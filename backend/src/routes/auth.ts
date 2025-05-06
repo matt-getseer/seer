@@ -29,11 +29,11 @@ router.get('/google', authenticate, extractUserInfo, (req: RequestWithUser, res:
     res.json({ authUrl }); // Send URL to frontend for redirection
 });
 
-router.get('/google/callback', authenticate, extractUserInfo, async (req: RequestWithUser, res: Response) => {
+router.get('/google/callback', async (req: Request, res: Response) => {
     const code = req.query.code as string;
     const error = req.query.error as string;
     const state = req.query.state as string; // Assuming state contains { userId }
-    const requestUserId = req.user?.userId; // User ID from JWT/session
+    // const requestUserId = req.user?.userId; // User ID from JWT/session - NO LONGER AVAILABLE DIRECTLY
 
     // --- State Validation (Example) ---
     let stateUserId: number | null = null;
@@ -67,12 +67,12 @@ router.get('/google/callback', authenticate, extractUserInfo, async (req: Reques
 
      // --- User ID Verification ---
      // Make sure the logged-in user matches the user who started the flow (if state was used)
-     if (!requestUserId) {
-         console.error('User ID not found in authenticated request during Google callback');
-         const redirectUrl = new URL(`${FRONTEND_URL}/settings`);
-         redirectUrl.searchParams.set('google_auth_error', 'User authentication context lost');
-         return res.redirect(redirectUrl.toString());
-     }
+     // if (!requestUserId) { // NO LONGER VALID TO CHECK requestUserId here
+     //     console.error('User ID not found in authenticated request during Google callback');
+     //     const redirectUrl = new URL(`${FRONTEND_URL}/settings`);
+     //     redirectUrl.searchParams.set('google_auth_error', 'User authentication context lost');
+     //     return res.redirect(redirectUrl.toString());
+     // }
      // if (stateUserId && stateUserId !== requestUserId) {
      //     console.error(`State user ID (${stateUserId}) does not match authenticated user ID (${requestUserId})`);
      //     const redirectUrl = new URL(`${FRONTEND_URL}/settings`);
@@ -80,8 +80,15 @@ router.get('/google/callback', authenticate, extractUserInfo, async (req: Reques
      //     return res.redirect(redirectUrl.toString());
      // }
      // Use requestUserId as the definitive ID after checks pass
-     const userId = requestUserId;
+     // const userId = requestUserId; // THIS NEEDS TO BE REPLACED WITH stateUserId
 
+     if (!stateUserId) {
+        console.error('User ID not found in state parameter during Google callback');
+        const redirectUrl = new URL(`${FRONTEND_URL}/settings`);
+        redirectUrl.searchParams.set('google_auth_error', 'User context missing from state');
+        return res.redirect(redirectUrl.toString());
+    }
+    const userId = stateUserId; // Use userId from state
 
     // --- Token Exchange and Saving (kept within the route) ---
     try {
