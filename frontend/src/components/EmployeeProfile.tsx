@@ -250,14 +250,21 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
             
             <div className="sm:col-span-1">
               <dt className="text-sm font-medium text-gray-500 flex items-center">
-                {employee.country && getCountryCode(employee.country) ? (
-                   <Flag code={getCountryCode(employee.country)} className="mr-2" height="14" />
-                ) : (
-                   <MapPin className="mr-2 text-gray-400" size={18} /> 
-                )}
+                <MapPin className="mr-2 text-gray-400" size={18} />
                 Country
               </dt>
-              <dd className="mt-1 text-sm text-gray-900">{employee.country || 'Not provided'}</dd>
+              <dd className="mt-1 text-sm text-gray-900">
+                {employee.country ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="flex-shrink-0 h-10 w-10 overflow-hidden rounded-full border border-gray-200">
+                      <Flag code={getCountryCode(employee.country)} className="h-full w-full" />
+                    </div>
+                    <span className="truncate">{employee.country}</span>
+                  </div>
+                ) : (
+                  'Not provided'
+                )}
+              </dd>
             </div>
             
             <div className="sm:col-span-1">
