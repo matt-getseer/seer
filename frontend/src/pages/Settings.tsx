@@ -22,6 +22,13 @@ const Settings = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false); // Specific loading state for Google
   const [isZoomLoading, setIsZoomLoading] = useState(false); // Specific loading state for Zoom
+
+  // State for CSV Upload
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isCsvUploading, setIsCsvUploading] = useState(false);
+  const [csvSuccessMessage, setCsvSuccessMessage] = useState<string | null>(null);
+  const [csvErrorMessage, setCsvErrorMessage] = useState<string | null>(null);
+
   const queryClient = useQueryClient(); // Get query client instance
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth(); // Get isSignedIn and isLoaded from useAuth
 
@@ -203,6 +210,52 @@ const Settings = () => {
   const zoomConnectionStatusText = isZoomConnected ? 'Connected' : 'Not Connected';
   const zoomButtonText = isZoomConnected ? 'Reconnect Zoom Account' : 'Connect Zoom Account';
 
+  // Handler for CSV file selection
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setSelectedFile(event.target.files[0]);
+      setCsvErrorMessage(null); // Clear previous errors
+      setCsvSuccessMessage(null); // Clear previous success messages
+    } else {
+      setSelectedFile(null);
+    }
+  };
+
+  // Handler for CSV upload
+  const handleUploadCsv = async () => {
+    if (!selectedFile) {
+      setCsvErrorMessage('Please select a CSV file to upload.');
+      return;
+    }
+
+    setIsCsvUploading(true);
+    setCsvErrorMessage(null);
+    setCsvSuccessMessage(null);
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      // Replace '/api/employees/upload-csv' with your actual backend endpoint
+      const response = await apiClient.post('/employees/upload-csv', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      // Assuming the backend responds with a success message or relevant data
+      setCsvSuccessMessage(response.data.message || 'Employees uploaded successfully!');
+      setSelectedFile(null); // Clear the selected file
+      // Optionally, refetch employee list or other relevant data
+      // queryClient.invalidateQueries(['employees']); 
+    } catch (error: any) {
+      console.error('Failed to upload CSV:', error);
+      setCsvErrorMessage(error.response?.data?.message || error.message || 'Failed to upload CSV. Please check the file format and try again.');
+    } finally {
+      setIsCsvUploading(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Settings</h1>
@@ -225,8 +278,9 @@ const Settings = () => {
          </div>
       )}
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-6 space-y-6"> {/* Added space-y-6 for spacing between sections */}
+      {/* Integrations Card */}
+      <div className="bg-white rounded-lg shadow overflow-hidden mb-6"> {/* Added mb-6 for spacing below this card */}
+        <div className="p-6 space-y-6"> 
           <h2 className="text-lg font-medium text-gray-900">Integrations</h2>
 
           {/* Google Calendar Integration */}
@@ -290,12 +344,87 @@ const Settings = () => {
                 </button>
              </div>
           </div>
-
-          {/* Placeholder for Teams Integration */}
-          {/* <div className="border-t border-gray-200 pt-4"> ... Teams section ... </div> */}
-
+          {/* End of Zoom Integration */}
         </div>
       </div>
+      {/* End of Integrations Card */}
+
+      {/* Upload Data Card */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Upload Data</h2>
+          
+          {/* Bulk Employee Upload Section - Content of the card */}
+          {/* No border-t needed here as it's the start of a new card's content */}
+            <h3 className="text-md font-medium text-gray-700">Import Employees via CSV</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Upload a CSV file to add multiple employees.
+            </p>
+            {/* Display upload-specific feedback messages */}
+            {csvSuccessMessage && (
+              <div className="mt-3 mb-3 p-3 bg-green-100 text-green-700 text-sm rounded-md">
+                {csvSuccessMessage}
+              </div>
+            )}
+            {csvErrorMessage && (
+              <div className="mt-3 mb-3 p-3 bg-red-100 text-red-700 text-sm rounded-md">
+                {csvErrorMessage}
+              </div>
+            )}
+
+            <div className="mt-4">
+              <label htmlFor="csvFileInput" className="sr-only">Choose CSV file</label>
+              <input
+                type="file"
+                id="csvFileInput"
+                name="csvFileInput"
+                accept=".csv"
+                onChange={handleFileChange}
+                className="block w-full text-sm text-gray-500
+                           file:mr-4 file:py-2 file:px-4
+                           file:rounded-md file:border-0
+                           file:text-sm file:font-semibold
+                           file:bg-blue-50 file:text-blue-700
+                           hover:file:bg-blue-100
+                           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {selectedFile && (
+              <div className="mt-4 flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={handleUploadCsv}
+                  disabled={isCsvUploading || !selectedFile}
+                  className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                >
+                  {isCsvUploading ? 'Uploading...' : `Upload ${selectedFile.name}`}
+                </button>
+                {isCsvUploading && (
+                   <svg className="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                   </svg>
+                )}
+              </div>
+            )}
+            <div className="mt-3">
+                <a
+                  href="/employee_upload_template.csv" // Note: Create this template file in your public directory
+                  download="employee_upload_template.csv"
+                  className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  Download CSV template
+                </a>
+                <p className="text-xs text-gray-400 mt-1">
+                  Make sure the date format for `employee_start_date` is YYYY-MM-DD.
+                </p>
+            </div>
+          {/* End of Bulk Employee Upload Section Content */}
+        </div>
+      </div>
+      {/* End of Upload Data Card */}
+
     </div>
   );
 };

@@ -1,36 +1,40 @@
-import express from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+
+// --- DOTENV CONFIG FIRST --- 
+console.log('Loading environment variables...');
+// Ensure the path is correct if your .env file is in `backend/.env` and index.ts is in `backend/src/index.ts`
+dotenv.config({ path: path.resolve(__dirname, '../.env') }); 
+// More targeted debug log, check this when server starts
+console.log('DEBUG: After dotenv.config(), CLERK_SECRET_KEY is:', process.env.CLERK_SECRET_KEY); 
+
+// --- THEN OTHER IMPORTS ---
+import express from 'express';
+import cors from 'cors';
 import fs from 'fs';
 import { PrismaClient } from '@prisma/client';
 import helmet from 'helmet';
-import * as clerk from '@clerk/clerk-sdk-node';
-// Don't import clerk yet, we'll do it after setting the environment variable
-// FIX: Import the necessary Clerk middleware
-import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node';
+
+// Import Clerk SDK AFTER dotenv has run
+// You only need to import what you use. If `ClerkExpressRequireAuth` is what you need for middleware,
+// and `users` (from the SDK) is used in `clerkUserHandler`, those are the key parts.
+// The `import * as clerk` might not be necessary if you use named imports.
+import { ClerkExpressRequireAuth, users } from '@clerk/clerk-sdk-node';
 
 import { userRouter } from './routes/users';
 import employeeRouter from './routes/employees';
 import teamRouter from './routes/teams';
 import meetingsRouter from './routes/meetings';
-import webhooksRouter from './routes/webhooks';
-import authRouter from './routes/auth'; // Import the correct auth router
-// import notificationRouter from './routes/notifications'; // Remove this import
+import webhooksRouter, { handleClerkWebhook } from './routes/webhooks'; // handleClerkWebhook is already imported here
+import authRouter from './routes/auth';
 
-// Load environment variables
-console.log('Loading environment variables...');
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-console.log('DEBUG: Environment variables loaded:', process.env); // Uncommented log
-
-const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
-if (!CLERK_SECRET_KEY) {
-  console.error("CLERK_SECRET_KEY is not defined in the environment variables.");
+// Check CLERK_SECRET_KEY after dotenv.config() and before SDK usage that might depend on it implicitly
+const CLERK_SECRET_KEY_FROM_ENV = process.env.CLERK_SECRET_KEY;
+if (!CLERK_SECRET_KEY_FROM_ENV) {
+  console.error("FATAL ERROR: CLERK_SECRET_KEY is not defined in process.env after dotenv.config(). Check .env file and path.");
   process.exit(1); // Exit if Clerk secret key is not set
 }
-// Set the secret key AFTER loading from .env
-process.env.CLERK_SECRET_KEY = CLERK_SECRET_KEY;
-console.log('Clerk Secret Key is set.');
+console.log('Clerk Secret Key is confirmed in process.env.');
 
 // Initialize Prisma Client
 const prisma = new PrismaClient();
@@ -86,7 +90,11 @@ app.use(cors({
   credentials: true, // Allow cookies
 }));
 
-// Body parsing middleware
+// Clerk Webhook route - needs raw body, so it's defined before express.json()
+// The actual handler function 'handleClerkWebhook' will be in 'webhooks.ts'
+app.post('/api/webhooks/clerk', express.raw({type: 'application/json'}), handleClerkWebhook);
+
+// Body parsing middleware - now applied after the Clerk webhook route
 app.use(express.json());
 
 // Define API routes (Consider prefixing all with /api)
@@ -96,7 +104,6 @@ app.use('/api/teams', teamRouter);
 app.use('/api/meetings', meetingsRouter);
 app.use('/api/webhooks', webhooksRouter); // Note: Webhooks might need raw body, check Clerk/Stripe docs
 app.use('/api/auth', authRouter); // Mount the correct auth router
-// app.use('/api/notifications', notificationRouter); // Remove this line
 
 // Health check route
 app.get('/health', (req, res) => {

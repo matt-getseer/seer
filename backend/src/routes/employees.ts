@@ -1,6 +1,20 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { PrismaClient, Employee as PrismaEmployee, Prisma } from '@prisma/client';
+import { PrismaClient, Employee as PrismaEmployee, Prisma, Team } from '@prisma/client';
 import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
+import multer, { Multer } from 'multer';
+import { parse } from 'csv-parse';
+import { Readable } from 'stream';
+
+// Define a type for our CSV Row structure for better type safety
+interface EmployeeCsvRow {
+  employee_name: string;
+  employee_title: string;
+  employee_email: string;
+  team_name: string;
+  team_department: string;
+  employee_start_date?: string; // Optional
+  employee_country?: string;    // Optional
+}
 
 // Typed prisma client
 interface TypedPrismaClient extends PrismaClient {
@@ -307,11 +321,196 @@ const getEmployeeMeetings = async (req: AuthenticatedRequest, res: Response, nex
 
 // Route handlers
 router.get('/', authenticate, extractUserInfo, getAllEmployees);
-router.get('/team/:teamId', authenticate, extractUserInfo, getTeamEmployees);
+router.get('/team/:teamId', authenticate, extractUserInfo, getTeamEmployees as any);
 router.get('/:id', authenticate, extractUserInfo, getEmployeeById);
 router.get('/:employeeId/meetings', authenticate, extractUserInfo, getEmployeeMeetings);
 router.post('/', authenticate, extractUserInfo, createEmployee);
 router.put('/:id', authenticate, extractUserInfo, updateEmployee);
 router.delete('/:id', authenticate, extractUserInfo, deleteEmployee);
+
+// Configure multer for CSV file uploads
+const storage = multer.memoryStorage(); // Store file in memory
+const upload: Multer = multer({
+  storage: storage,
+  fileFilter: (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(null, false); // Reject file
+      // Optionally, pass an error to cb if you want to stop the request flow with an error
+      // cb(new Error('Only .csv files are allowed!')); 
+    }
+  },
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB file size limit
+});
+
+// Extend Express Request type to include `file` from multer
+interface RequestWithFile extends RequestWithUser {
+  file?: Express.Multer.File;
+}
+
+// New endpoint for CSV upload
+router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'), async (req: RequestWithFile, res: Response, next: NextFunction) => {
+  if (!req.file) {
+    // This check is important. If fileFilter rejects, req.file might be undefined.
+    // The error from fileFilter (if an Error object was passed to cb) would typically be handled by an Express error handler.
+    // If cb(null, false) was used, req.file is undefined, and we send a 400.
+    return res.status(400).json({ message: 'No CSV file uploaded or file type was not accepted. Only .csv files are allowed.' });
+  }
+  if (!req.user?.userId) {
+    return res.status(401).json({ error: 'User not authenticated.' });
+  }
+
+  const currentUserId = req.user.userId;
+  const fileBuffer = req.file.buffer;
+
+  // Convert buffer to a readable stream for the parser
+  const stream = Readable.from(fileBuffer);
+
+  const records: EmployeeCsvRow[] = [];
+  const errors: { row: number; message: string; data: any }[] = [];
+  let processedCount = 0;
+  let successCount = 0;
+  let rowNumber = 0; // For error reporting (1-indexed for CSV rows, excluding header)
+
+  const parser = stream.pipe(parse({
+    columns: true, // Use the first row as column headers
+    skip_empty_lines: true,
+    trim: true,
+    cast: (value, context) => {
+      // Keep original values for now, specific casting done during processing
+      // For employee_start_date, ensure it's treated as a string initially
+      if (context.column === 'employee_start_date') {
+        return value;
+      }
+      return value;
+    }
+  }));
+
+  try {
+    for await (const record of parser) {
+      rowNumber++;
+      processedCount++;
+
+      const {
+        employee_name,
+        employee_title,
+        employee_email,
+        team_name,
+        team_department,
+        employee_start_date,
+        employee_country
+      } = record as Partial<EmployeeCsvRow>; // Cast to partial to handle potentially missing optional fields
+
+      // Basic validation for required fields
+      if (!employee_name || !employee_title || !employee_email || !team_name || !team_department) {
+        errors.push({ row: rowNumber, message: 'Missing required fields (employee_name, employee_title, employee_email, team_name, team_department).', data: record });
+        continue;
+      }
+      
+      // Email validation (basic)
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(employee_email)) {
+        errors.push({ row: rowNumber, message: 'Invalid employee_email format.', data: record });
+        continue;
+      }
+
+      // Start date validation (if provided)
+      let validStartDate: Date | undefined = undefined;
+      if (employee_start_date) {
+        console.log(`Validating employee_start_date: '${employee_start_date}' (Length: ${employee_start_date.length})`); // DEBUGGING LINE
+        if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(employee_start_date)) {
+             errors.push({ row: rowNumber, message: 'Invalid employee_start_date format. Expected YYYY-MM-DD.', data: record });
+             continue;
+        }
+        const parsedDate = new Date(employee_start_date);
+        if (isNaN(parsedDate.getTime())) {
+          errors.push({ row: rowNumber, message: 'Invalid employee_start_date value.', data: record });
+          continue;
+        }
+        validStartDate = parsedDate;
+      }
+
+
+      try {
+        // Find or create Team
+        let team = await prisma.team.findFirst({
+          where: {
+            name: team_name,
+            userId: currentUserId,
+          },
+        });
+
+        if (!team) {
+          team = await prisma.team.create({
+            data: {
+              name: team_name,
+              department: team_department, // Department from CSV
+              userId: currentUserId,
+            },
+          });
+        }
+
+        // Create Employee
+        await prisma.employee.create({
+          data: {
+            name: employee_name,
+            title: employee_title,
+            email: employee_email,
+            startDate: validStartDate,
+            country: employee_country || null, // Handle optional country
+            teamId: team.id,
+            userId: currentUserId,
+          },
+        });
+        successCount++;
+      } catch (dbError: any) {
+        let errorMessage = 'Database error while processing row.';
+        if (dbError instanceof Prisma.PrismaClientKnownRequestError) {
+          if (dbError.code === 'P2002') { // Unique constraint violation
+            // Example: Unique constraint failed on the fields: (`email`)
+            const target = dbError.meta?.target as string[] | undefined;
+            if (target && target.includes('email')) {
+                 errorMessage = `Employee with email '${employee_email}' already exists.`;
+            } else {
+                 errorMessage = `Database unique constraint violation: ${dbError.message}`;
+            }
+          } else {
+            errorMessage = `Database error: ${dbError.message}`;
+          }
+        } else if (dbError instanceof Error) {
+          errorMessage = dbError.message;
+        }
+        errors.push({ row: rowNumber, message: errorMessage, data: record });
+      }
+    }
+
+    if (processedCount === 0 && req.file.buffer.length > 0) {
+        // This might happen if the CSV is empty after headers or headers are missing/malformed.
+        return res.status(400).json({ 
+            message: 'No valid data rows found in the CSV. Please ensure the CSV is not empty and has correct headers: employee_name, employee_title, employee_email, team_name, team_department, employee_start_date (optional, YYYY-MM-DD), employee_country (optional).',
+            errors: [] 
+        });
+    }
+    
+    let message = `CSV processing complete. Successfully imported ${successCount} of ${processedCount} employees.`;
+    if (errors.length > 0) {
+      message += ` ${errors.length} rows had errors.`;
+    }
+
+    return res.status(errors.length > 0 && successCount === 0 ? 400 : 200).json({
+      message,
+      successCount,
+      errorCount: errors.length,
+      errors,
+    });
+
+  } catch (error: any) {
+    console.error('Error processing CSV file:', error);
+    // if (error.message.includes('Only .csv files are allowed!')) { // This specific check might be redundant if multer handles it
+    //     return res.status(400).json({ message: 'Invalid file type. Only .csv files are allowed.' });
+    // }
+    return res.status(500).json({ message: 'Failed to process CSV file.', error: error.message });
+  }
+});
 
 export default router; 
