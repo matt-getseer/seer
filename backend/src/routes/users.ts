@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction, RequestHandler } from 'express';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, UserRole } from '@prisma/client';
 import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
 
 const router = express.Router();
@@ -12,7 +12,8 @@ const userSelectFields = {
   name: true,
   clerkId: true,
   createdAt: true,
-  updatedAt: true
+  updatedAt: true,
+  role: true
 } as const;
 
 // Get all users
@@ -72,6 +73,7 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
         updatedAt: true,
         googleRefreshToken: true, // For Google Auth check
         zoomRefreshToken: true,   // For Zoom Auth check
+        role: true
       } as any, // Use 'as any' carefully or define a more specific type
     });
 
@@ -89,6 +91,7 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
       updatedAt: user.updatedAt,
       hasGoogleAuth: !!user.googleRefreshToken,
       hasZoomAuth: !!user.zoomRefreshToken, // Check for Zoom token presence
+      role: user.role
     };
     // Note: We don't need to explicitly delete the tokens here 
     // because they are not included in the final userData object structure.
@@ -99,8 +102,51 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
   }
 };
 
+// New handler to get all managers (Admin only)
+const getAllManagers: RequestHandler = async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  try {
+    // Ensure user is authenticated and user info is extracted
+    if (!req.user?.userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    // Fetch the current user from DB to check their role
+    const currentUser = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { role: true }
+    });
+
+    if (!currentUser) {
+      // This should ideally not happen if authentication middleware is effective
+      return res.status(404).json({ error: 'Authenticated user not found' });
+    }
+
+    // Check if the current user is an ADMIN
+    if (currentUser.role !== UserRole.ADMIN) {
+      return res.status(403).json({ error: 'Forbidden: Only admins can access the list of managers.' });
+    }
+
+    // Fetch users with the MANAGER role
+    const managers = await prisma.user.findMany({
+      where: {
+        role: UserRole.MANAGER
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true
+      }
+    });
+    res.json(managers);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Route handlers - protected by Clerk authentication
 router.get('/me', authenticate, extractUserInfo, getCurrentUser);
+router.get('/managers', authenticate, extractUserInfo, getAllManagers);
 router.get('/:id', authenticate, extractUserInfo, getUserById);
 // Admin-only endpoint
 router.get('/', authenticate, extractUserInfo, getAllUsers);

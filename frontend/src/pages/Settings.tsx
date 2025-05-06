@@ -13,7 +13,16 @@ interface UserData {
   name: string | null;
   hasGoogleAuth: boolean;
   hasZoomAuth: boolean; // Add Zoom auth status
+  role: string; // Ensure role is part of UserData
   // Add other fields if returned by /users/me
+}
+
+// Define manager data shape
+interface ManagerData {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
 }
 
 const Settings = () => {
@@ -28,6 +37,10 @@ const Settings = () => {
   const [isCsvUploading, setIsCsvUploading] = useState(false);
   const [csvSuccessMessage, setCsvSuccessMessage] = useState<string | null>(null);
   const [csvErrorMessage, setCsvErrorMessage] = useState<string | null>(null);
+
+  // State for Manager List
+  const [isManagerListLoading, setIsManagerListLoading] = useState(false);
+  const [managerListError, setManagerListError] = useState<string | null>(null);
 
   const queryClient = useQueryClient(); // Get query client instance
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth(); // Get isSignedIn and isLoaded from useAuth
@@ -93,6 +106,50 @@ const Settings = () => {
     retry: 1,
   });
 
+  // Fetch managers list (only if user is admin)
+  const { data: managersData, isLoading: isLoadingManagers, error: managersError } = useQuery<ManagerData[], Error>({
+    queryKey: ['managersList'],
+    queryFn: async () => {
+      try {
+        // userService.getManagers() should be defined in your api client
+        // For now, using apiClient directly as an example
+        const response = await apiClient.get('/users/managers');
+        if (!response || response.status < 200 || response.status >= 300) {
+          let detail = 'No error body';
+          if (response?.data && typeof response.data === 'object') {
+            detail = (response.data as any).message || (response.data as any).detail || JSON.stringify(response.data);
+          }
+          throw new Error(`Failed to fetch managers. Status: ${response?.status || 'unknown'}. Detail: ${detail}`);
+        }
+        if (typeof response.data === 'undefined') {
+          throw new Error("No data received in managers response.");
+        }
+        return response.data;
+      } catch (err: any) {
+        console.error("Caught error within queryFn for managersList:", err);
+        if (err.isAxiosError) {
+          const axiosError = err as import('axios').AxiosError;
+          const status = axiosError.response?.status || 'Axios Error (No Response Status)';
+          let detail = axiosError.message;
+          if (axiosError.response?.data && typeof axiosError.response.data === 'object') {
+            const errorData = axiosError.response.data as any;
+            detail = errorData.message || errorData.detail || JSON.stringify(errorData);
+          } else if (axiosError.response?.data) {
+            detail = String(axiosError.response.data);
+          }
+          throw new Error(`Failed to fetch managers. Status: ${status}. Detail: ${detail}`);
+        } else if (err instanceof Error) {
+          throw err;
+        } else {
+          throw new Error(String(err || 'An unknown error occurred while fetching managers list'));
+        }
+      }
+    },
+    enabled: !!userData && userData.role === 'ADMIN', // Only enable if user is ADMIN
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+
   useEffect(() => {
     const googleSuccess = searchParams.get('google_auth_success');
     const googleError = searchParams.get('google_auth_error');
@@ -131,6 +188,16 @@ const Settings = () => {
     }
 
   }, [searchParams, setSearchParams, queryClient]); // Add queryClient dependency
+
+  // Update local state based on managers query
+  useEffect(() => {
+    setIsManagerListLoading(isLoadingManagers);
+    if (managersError) {
+      setManagerListError(managersError.message);
+    } else {
+      setManagerListError(null);
+    }
+  }, [isLoadingManagers, managersError]);
 
   const handleConnectGoogle = async () => {
     console.log('[SettingsPage] handleConnectGoogle called.');
@@ -248,8 +315,12 @@ const Settings = () => {
       setSelectedFile(null); // Clear the selected file
       // Optionally, refetch employee list or other relevant data
       queryClient.invalidateQueries({ queryKey: ['employees'] }); // Invalidate employee list query
+
+      // TODO: Show the manager list card here, if the user is ADMIN
+      // You would map over `managersData` if it exists and is not loading/error
+
     } catch (error: any) {
-      console.error('Failed to upload CSV:', error);
+      console.error('CSV Upload Error:', error);
       setCsvErrorMessage(error.response?.data?.message || error.message || 'Failed to upload CSV. Please check the file format and try again.');
     } finally {
       setIsCsvUploading(false);
@@ -424,6 +495,57 @@ const Settings = () => {
         </div>
       </div>
       {/* End of Upload Data Card */}
+
+      {/* Manager List Card - ADMINS ONLY */}
+      {userData && userData.role === 'ADMIN' && (
+        <div className="mt-8 bg-white shadow sm:rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <h3 className="text-lg font-semibold text-gray-800">Managers</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              View and manage users with the manager role.
+            </p>
+            
+            {isManagerListLoading && (
+              <div className="mt-4 text-sm text-gray-500">Loading managers...</div>
+            )}
+            {managerListError && (
+              <div className="mt-4 text-sm text-red-600">
+                <WarningCircle size={20} className="inline mr-2" />
+                Error loading managers: {managerListError}
+              </div>
+            )}
+            {!isManagerListLoading && !managerListError && managersData && managersData.length > 0 && (
+              <div className="mt-4 flow-root">
+                <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+                  <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+                    <table className="min-w-full divide-y divide-gray-300">
+                      <thead>
+                        <tr>
+                          <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">Name</th>
+                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Email</th>
+                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Role</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {managersData.map((manager) => (
+                          <tr key={manager.id}>
+                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-0">{manager.name || 'N/A'}</td>
+                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{manager.email}</td>
+                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{manager.role}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+            {!isManagerListLoading && !managerListError && managersData && managersData.length === 0 && (
+               <div className="mt-4 text-sm text-gray-500">No users with the manager role found.</div>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );
