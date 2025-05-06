@@ -247,7 +247,7 @@ const Settings = () => {
       setCsvSuccessMessage(response.data.message || 'Employees uploaded successfully!');
       setSelectedFile(null); // Clear the selected file
       // Optionally, refetch employee list or other relevant data
-      // queryClient.invalidateQueries(['employees']); 
+      queryClient.invalidateQueries({ queryKey: ['employees'] }); // Invalidate employee list query
     } catch (error: any) {
       console.error('Failed to upload CSV:', error);
       setCsvErrorMessage(error.response?.data?.message || error.message || 'Failed to upload CSV. Please check the file format and try again.');

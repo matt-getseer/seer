@@ -362,6 +362,23 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
   }
 
   const currentUserId = req.user.userId;
+
+  // Fetch the user's organizationId
+  let userOrganizationId: string | null = null;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { organizationId: true },
+    });
+    if (!user || !user.organizationId) {
+      return res.status(400).json({ message: 'User is not associated with an organization. Cannot import employees.' });
+    }
+    userOrganizationId = user.organizationId;
+  } catch (error) {
+    console.error("Failed to fetch user's organization ID:", error);
+    return res.status(500).json({ message: "Failed to retrieve user's organization details." });
+  }
+
   const fileBuffer = req.file.buffer;
 
   // Convert buffer to a readable stream for the parser
@@ -370,7 +387,8 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
   const records: EmployeeCsvRow[] = [];
   const errors: { row: number; message: string; data: any }[] = [];
   let processedCount = 0;
-  let successCount = 0;
+  let createdCount = 0;
+  let updatedCount = 0;
   let rowNumber = 0; // For error reporting (1-indexed for CSV rows, excluding header)
 
   const parser = stream.pipe(parse({
@@ -414,29 +432,35 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
         continue;
       }
 
-      // Start date validation (if provided)
+      // Start date validation (if provided) - User requested removal for performance
       let validStartDate: Date | undefined = undefined;
       if (employee_start_date) {
-        console.log(`Validating employee_start_date: '${employee_start_date}' (Length: ${employee_start_date.length})`); // DEBUGGING LINE
-        if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(employee_start_date)) {
-             errors.push({ row: rowNumber, message: 'Invalid employee_start_date format. Expected YYYY-MM-DD.', data: record });
-             continue;
-        }
-        const parsedDate = new Date(employee_start_date);
+      //   console.log(`Validating employee_start_date: '${employee_start_date}' (Length: ${employee_start_date.length})`); // DEBUGGING LINE
+      //   if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(employee_start_date)) {
+      //        errors.push({ row: rowNumber, message: 'Invalid employee_start_date format. Expected YYYY-MM-DD.', data: record });
+      //        continue;
+      //   }
+        const parsedDate = new Date(employee_start_date); // Still parse it
         if (isNaN(parsedDate.getTime())) {
-          errors.push({ row: rowNumber, message: 'Invalid employee_start_date value.', data: record });
-          continue;
+          // errors.push({ row: rowNumber, message: 'Invalid employee_start_date value. Could not parse to a valid date.', data: record });
+          // continue; 
+          // Decide if unparsable date should be an error or silently become null/invalid
+          console.warn(`Row ${rowNumber}: employee_start_date '${employee_start_date}' is invalid and will likely result in null/invalid date in DB.`);
+          validStartDate = undefined; // Or handle as error if preferred
+        } else {
+          validStartDate = parsedDate;
         }
-        validStartDate = parsedDate;
       }
 
 
       try {
-        // Find or create Team
+        // Find or create Team (ensure userOrganizationId is used here if teams are org-specific)
         let team = await prisma.team.findFirst({
           where: {
             name: team_name,
-            userId: currentUserId,
+            // Assuming teams are scoped by user creating them or by organization
+            userId: currentUserId, 
+            organizationId: userOrganizationId, 
           },
         });
 
@@ -444,25 +468,48 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
           team = await prisma.team.create({
             data: {
               name: team_name,
-              department: team_department, // Department from CSV
+              department: team_department, 
               userId: currentUserId,
+              organizationId: userOrganizationId,
             },
           });
         }
 
-        // Create Employee
-        await prisma.employee.create({
-          data: {
+        // Check if employee already exists to differentiate create vs update for counts
+        const existingEmployee = await prisma.employee.findUnique({
+          where: { email: employee_email },
+          select: { id: true } // Only need to know if it exists
+        });
+
+        // Upsert Employee: Create if email doesn't exist, update if it does.
+        await prisma.employee.upsert({
+          where: { email: employee_email }, 
+          update: { 
+            name: employee_name,
+            title: employee_title,
+            startDate: validStartDate,
+            country: employee_country || null,
+            teamId: team.id, // Update team association
+            userId: currentUserId, // Should generally not change for an existing employee if already set
+                                 // but needs to be consistent for the operation to be allowed by Prisma policies/relations.
+          },
+          create: { // Data to create if employee with this email does not exist
             name: employee_name,
             title: employee_title,
             email: employee_email,
             startDate: validStartDate,
-            country: employee_country || null, // Handle optional country
+            country: employee_country || null,
             teamId: team.id,
             userId: currentUserId,
           },
         });
-        successCount++;
+        
+        // Increment the appropriate counter
+        if (existingEmployee) {
+          updatedCount++;
+        } else {
+          createdCount++;
+        }
       } catch (dbError: any) {
         let errorMessage = 'Database error while processing row.';
         if (dbError instanceof Prisma.PrismaClientKnownRequestError) {
@@ -492,14 +539,17 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
         });
     }
     
-    let message = `CSV processing complete. Successfully imported ${successCount} of ${processedCount} employees.`;
+    const finalSuccessCount = createdCount + updatedCount;
+    let message = `CSV processing complete. Processed ${processedCount} rows. Created ${createdCount} new employees, updated ${updatedCount} existing employees.`;
     if (errors.length > 0) {
       message += ` ${errors.length} rows had errors.`;
     }
 
-    return res.status(errors.length > 0 && successCount === 0 ? 400 : 200).json({
+    return res.status(errors.length > 0 && finalSuccessCount === 0 ? 400 : 200).json({
       message,
-      successCount,
+      successCount: finalSuccessCount,
+      createdCount,
+      updatedCount,
       errorCount: errors.length,
       errors,
     });

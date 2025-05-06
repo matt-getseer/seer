@@ -5,7 +5,7 @@ import { InsightData } from '../meeting-processing/types';
 import { processOneOnOneMeeting } from '../meeting-processing/oneOnOneProcessor';
 import { processReviewMeeting } from '../meeting-processing/reviewProcessor';
 import dotenv from 'dotenv';
-import { WebhookEvent, UserJSON, OrganizationJSON, OrganizationMembershipJSON, DeletedObjectJSON } from '@clerk/clerk-sdk-node';
+import { WebhookEvent, UserJSON, OrganizationJSON, OrganizationMembershipJSON, DeletedObjectJSON, users, OrganizationMembership } from '@clerk/clerk-sdk-node';
 import { Webhook } from 'svix';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -353,57 +353,82 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
         break;
 
       case 'organizationMembership.created':
-        const membershipCreatedData = evt.data as OrganizationMembershipJSON; // Use OrganizationMembershipJSON type
-
-        // Corrected access to organization ID and user ID
+        const membershipCreatedData = evt.data as OrganizationMembershipJSON;
         const clerkOrgIdForMembership = membershipCreatedData.organization.id;
-        // Corrected to use public_user_data based on linter feedback
-        // Further corrected to use user_id based on linter feedback for OrganizationMembershipPublicUserDataJSON
-        const clerkUserIdForMembership = membershipCreatedData.public_user_data?.user_id; 
+        const clerkUserIdForMembership = membershipCreatedData.public_user_data?.user_id;
 
         if (!clerkOrgIdForMembership || !clerkUserIdForMembership) {
-            console.error('Invalid organizationMembership.created payload (missing org ID or user ID):', membershipCreatedData);
-            return res.status(400).json({ error: 'Invalid payload for organizationMembership.created' });
+          console.error('Invalid organizationMembership.created payload (missing org ID or user ID):', membershipCreatedData);
+          return res.status(400).json({ error: 'Invalid payload for organizationMembership.created' });
         }
 
-        // 1. Find the local Organization by its clerkOrganizationId
-        const organization = await prisma.organization.findUnique({
-          where: { clerkOrganizationId: clerkOrgIdForMembership },
-        });
+        try {
+          let organization = await prisma.organization.findUnique({
+            where: { clerkOrganizationId: clerkOrgIdForMembership },
+          });
 
-        if (!organization) {
-          console.warn(`Organization with clerkOrganizationId ${clerkOrgIdForMembership} not found during membership creation. It might be created by another event shortly or there's a sync issue.`);
-          // Depending on your strategy, you might want to retry, or wait for organization.created
-          // For now, we'll proceed, and if the user update fails due to foreign key, it will be caught.
-          // Alternatively, you could choose to create the org here if it's missing, using data from the membership event if available.
-        }
-        
-        // 2. Find or create the local User by clerkUserId (using existing handler logic if possible, or simplified here)
-        // We expect findOrCreateUser to have run, but let's be safe and try to find the user.
-        const userToUpdate = await prisma.user.findUnique({
+          if (!organization) {
+            console.warn(`Organization ${clerkOrgIdForMembership} not found initially. Attempting to create or re-query.`);
+            if (membershipCreatedData.organization.name) {
+              try {
+                organization = await prisma.organization.create({
+                  data: {
+                    id: uuidv4(),
+                    clerkOrganizationId: clerkOrgIdForMembership,
+                    name: membershipCreatedData.organization.name,
+                    updatedAt: new Date(),
+                  },
+                });
+                console.log(`Organization ${clerkOrgIdForMembership} - ${membershipCreatedData.organization.name} created locally from membership event.`);
+              } catch (createError: any) {
+                if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === 'P2002') {
+                  console.warn(`Create failed due to P2002 (unique constraint) for org ${clerkOrgIdForMembership}. Re-querying as it likely now exists.`);
+                  organization = await prisma.organization.findUnique({
+                    where: { clerkOrganizationId: clerkOrgIdForMembership },
+                  });
+                  if (organization) {
+                    console.log(`Organization ${clerkOrgIdForMembership} found on re-query.`);
+                  } else {
+                    console.error(`Organization ${clerkOrgIdForMembership} still not found after P2002 and re-query. This is unexpected.`);
+                  }
+                } else {
+                  console.error(`Failed to create missing organization ${clerkOrgIdForMembership} from membership event with non-P2002 error:`, createError);
+                }
+              }
+            } else {
+              console.warn(`Cannot create organization ${clerkOrgIdForMembership} as name is missing from membership event.`);
+            }
+          }
+          
+          const userToUpdate = await prisma.user.findUnique({
             where: { clerkId: clerkUserIdForMembership },
-        });
+          });
 
-        if (!userToUpdate) {
-            console.warn(`User with clerkId ${clerkUserIdForMembership} not found during membership creation. Ensure findOrCreateUser runs successfully upon login/auth.`);
-            // This is problematic. The user should exist if they are being added to an org.
-            // Consider if `findOrCreateUser` needs to be invoked here or if this indicates an issue elsewhere.
-            return res.status(404).json({ error: `User ${clerkUserIdForMembership} not found.`});
-        }
+          if (!userToUpdate) {
+            console.warn(`User ${clerkUserIdForMembership} not found during membership creation.`);
+          }
 
-        // 3. Update the user's organizationId
-        if (organization) { // Only update if organization was found
+          if (userToUpdate && organization) {
             await prisma.user.update({
-              where: { id: userToUpdate.id }, 
-              data: { organizationId: organization.id }, // Link to your local Organization's UUID id
+              where: { id: userToUpdate.id },
+              data: { organizationId: organization.id },
             });
             console.log(`User ${clerkUserIdForMembership} linked to Organization ${clerkOrgIdForMembership} (local ID: ${organization.id})`);
-        } else {
-            console.warn(`Skipped linking User ${clerkUserIdForMembership} to Organization ${clerkOrgIdForMembership} because the organization was not found locally.`);
+          } else {
+            if (!organization) {
+              console.warn(`Skipped linking User ${clerkUserIdForMembership} to Org ${clerkOrgIdForMembership} (Org not found/resolved).`);
+            }
+            if (!userToUpdate && organization) { // Log if user was the missing piece
+              console.warn(`Skipped linking User ${clerkUserIdForMembership} (User not found) to Org ${clerkOrgIdForMembership}.`);
+            }
+          }
+        } catch (error) {
+          console.error(`Error processing organizationMembership.created for User ${clerkUserIdForMembership} / Org ${clerkOrgIdForMembership}:`, error);
+          return res.status(500).json({ error: 'Failed to process organizationMembership.created event.' });
         }
         break;
 
-      case 'user.created': // You might already handle this via findOrCreateUser on auth
+      case 'user.created':
         const userCreatedData = evt.data as UserJSON; // Cast to UserJSON for better type safety
         // Check if your `findOrCreateUser` utility already covers this adequately upon first authentication.
         // If not, or if you want webhooks to be the primary source of truth for user creation:
@@ -420,36 +445,48 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
             update: { 
                 email: primaryEmail,
                 name: `${userCreatedData.first_name || ''} ${userCreatedData.last_name || ''}`.trim() || null,
-                // Potentially update other fields if they change
-                // updatedAt: new Date(), // If you manage updatedAt manually
             },
             create: {
-                // id is auto-incremented by Prisma
                 clerkId: userCreatedData.id,
                 email: primaryEmail,
                 name: `${userCreatedData.first_name || ''} ${userCreatedData.last_name || ''}`.trim() || null,
-                password: 'clerk-webhook-user', // Default placeholder, as Clerk handles auth
-                // organizationId might be set by organizationMembership.created if it follows
-                // createdAt will be set by @default(now())
-                // updatedAt: new Date(), // If you manage updatedAt manually
+                password: 'clerk-webhook-user', 
             }
         });
         console.log(`User created/updated via webhook: ${userCreatedData.id}`);
-        // Note: If this user belongs to an organization immediately, Clerk might send
-        // organizationMembership.created event as well, or include organization details here.
-        // Check Clerk's user.created payload for `organization_memberships` array.
-        // If present, you might also link the organization here.
-        // For example: 
-        // if (userCreatedData.organization_memberships && userCreatedData.organization_memberships.length > 0) {
-        //   const primaryOrgClerkId = userCreatedData.organization_memberships[0].organization.id;
-        //   const org = await prisma.organization.findUnique({ where: { clerkOrganizationId: primaryOrgClerkId } });
-        //   if (org) {
-        //     await prisma.user.update({ where: { clerkId: userCreatedData.id }, data: { organizationId: org.id } });
-        //     console.log(`User ${userCreatedData.id} linked to primary organization ${primaryOrgClerkId} during creation.`);
-        //   } else {
-        //       console.warn(`Primary organization ${primaryOrgClerkId} for user ${userCreatedData.id} not found locally during user.created webhook.`);
-        //   }
-        // }
+
+        // Attempt to link organization if user has memberships
+        try {
+          // Assuming getOrganizationMembershipList might directly return the array based on persistent linter errors
+          const organizationMemberships: OrganizationMembership[] = await users.getOrganizationMembershipList({ userId: userCreatedData.id });
+
+          if (organizationMemberships && organizationMemberships.length > 0) {
+            const primaryOrgMembership: OrganizationMembership = organizationMemberships[0];
+            const clerkOrganizationId = primaryOrgMembership.organization.id;
+
+            if (clerkOrganizationId) {
+              const org = await prisma.organization.findUnique({ 
+                where: { clerkOrganizationId: clerkOrganizationId } 
+              });
+
+              if (org) {
+                await prisma.user.updateMany({ 
+                  where: { clerkId: userCreatedData.id }, 
+                  data: { organizationId: org.id } 
+                });
+                console.log(`User ${userCreatedData.id} linked to organization ${clerkOrganizationId} (local ID: ${org.id}) during user.created webhook processing.`);
+              } else {
+                  console.warn(`Organization ${clerkOrganizationId} for user ${userCreatedData.id} not found locally during user.created webhook. The organization.created event might be pending or failed.`);
+              }
+            } else {
+              console.log(`No organization ID found in primary organization membership for user ${userCreatedData.id} during user.created webhook.`);
+            }
+          } else {
+            console.log(`No organization memberships found for user ${userCreatedData.id} via getOrganizationMembershipList during user.created webhook. Will rely on organizationMembership.created event.`);
+          }
+        } catch (error) {
+          console.error(`Error fetching organization memberships for user ${userCreatedData.id} during user.created webhook:`, error);
+        }
         break;
 
       case 'user.updated':
@@ -541,6 +578,50 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
         } catch (error) {
           console.error(`Error processing organization.deleted event for Clerk ID ${orgDeletedData.id}:`, error);
           return res.status(500).json({ error: 'Failed to process organization.deleted event.' });
+        }
+        break;
+
+      case 'organizationMembership.deleted':
+        const membershipDeletedData = evt.data as OrganizationMembershipJSON; // Type might need adjustment if payload is different for delete
+        
+        const clerkOrgIdForDeletedMembership = membershipDeletedData.organization?.id;
+        const clerkUserIdForDeletedMembership = membershipDeletedData.public_user_data?.user_id;
+
+        if (!clerkOrgIdForDeletedMembership || !clerkUserIdForDeletedMembership) {
+          console.error('Invalid organizationMembership.deleted payload (missing org ID or user ID):', membershipDeletedData);
+          return res.status(400).json({ error: 'Invalid payload for organizationMembership.deleted' });
+        }
+
+        try {
+          const user = await prisma.user.findUnique({
+            where: { clerkId: clerkUserIdForDeletedMembership },
+            select: { id: true, organizationId: true } // Select current organizationId for comparison
+          });
+
+          const organization = await prisma.organization.findUnique({
+            where: { clerkOrganizationId: clerkOrgIdForDeletedMembership },
+            select: { id: true } // Select local organization ID
+          });
+
+          if (user && organization) {
+            // Only unlink if the user is currently linked to the organization from which the membership was deleted
+            if (user.organizationId === organization.id) {
+              await prisma.user.update({
+                where: { id: user.id },
+                data: { organizationId: null },
+              });
+              console.log(`User ${clerkUserIdForDeletedMembership} (local ID: ${user.id}) unlinked from Organization ${clerkOrgIdForDeletedMembership} (local ID: ${organization.id}) due to membership deletion.`);
+            } else {
+              console.log(`User ${clerkUserIdForDeletedMembership} was not linked to organization ${clerkOrgIdForDeletedMembership} (or already unlinked). No action taken for organizationMembership.deleted.`);
+            }
+          } else {
+            if (!user) console.warn(`User with Clerk ID ${clerkUserIdForDeletedMembership} not found locally during organizationMembership.deleted processing.`);
+            if (!organization) console.warn(`Organization with Clerk ID ${clerkOrgIdForDeletedMembership} not found locally during organizationMembership.deleted processing.`);
+          }
+        } catch (error) {
+          console.error(`Error processing organizationMembership.deleted for Clerk User ID ${clerkUserIdForDeletedMembership} and Clerk Org ID ${clerkOrgIdForDeletedMembership}:`, error);
+          // Decide if this should cause a 500 to retry or 200 to acknowledge and investigate later
+          return res.status(500).json({ error: 'Failed to process organizationMembership.deleted event.' });
         }
         break;
 
