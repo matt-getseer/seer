@@ -11,9 +11,11 @@ import Employees from './pages/Employees'
 import Teams from './pages/Teams'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
+import UserHomePage from './pages/UserHomePage'
 import { setTokenGetter } from './api/client'
 import CreateOrganization from '@/pages/organizations/CreateOrganization'
 import MinimalLayout from './layouts/MinimalLayout'
+import { AppProvider, useAppContext } from './context/AppContext'
 
 // Lazy load report pages
 const TeamPerformance = lazy(() => import('./pages/reports/TeamPerformance'))
@@ -146,6 +148,34 @@ const OrganizationCheckWrapper = memo(({ children }: { children: React.ReactNode
 });
 // --- End NEW Component ---
 
+// --- NEW: RoleProtect Component ---
+interface RoleProtectProps {
+  allowedRoles: Array<'ADMIN' | 'MANAGER' | 'USER'>;
+  children: React.ReactNode;
+}
+
+const RoleProtect = ({ allowedRoles, children }: RoleProtectProps) => {
+  const { currentUser, isLoadingUser } = useAppContext(); // <-- Use REAL useAppContext
+  const location = useLocation();
+
+  if (isLoadingUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (!currentUser || !currentUser.role || !allowedRoles.includes(currentUser.role)) {
+    // Redirect to home page if role not allowed or no user
+    // The home page (/) will then decide what to show based on role
+    return <Navigate to="/" state={{ from: location }} replace />;
+  }
+
+  return <>{children}</>;
+};
+// --- End RoleProtect Component ---
+
 // NEW Component: Contains the main application logic previously in App
 const AppRoutes = () => {
   // Move state hooks here
@@ -161,7 +191,8 @@ const AppRoutes = () => {
   // Move auth and location hooks here
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
-  const location = useLocation(); // This is now valid as AppRoutes is inside Router
+  const location = useLocation();
+  const { currentUser, isLoadingUser } = useAppContext(); // <-- Use REAL useAppContext
 
   // Move logging useEffect here
   useEffect(() => {
@@ -237,19 +268,27 @@ const AppRoutes = () => {
                     {/* Main application routes requiring organization */}
                     <Route 
                       path="/" 
-                      element={
+                      element={(
                         <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <Home />
+                          {isLoadingUser ? (
+                            <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div></div>
+                          ) : currentUser && currentUser.role === 'USER' ? (
+                            <UserHomePage />
+                          ) : (
+                            <Home /> // For ADMIN/MANAGER or if role is null/unexpected (though Protect should handle unauth)
+                          )}
                         </MainLayout>
-                      }
+                      )}
                     />
                     <Route 
                       path="/employees" 
-                      element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <Employees />
-                        </MainLayout>
-                      }
+                      element={(
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER']}>
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                            <Employees />
+                          </MainLayout>
+                        </RoleProtect>
+                      )}
                     />
                     <Route 
                       path="/employees/:id" 
@@ -261,101 +300,111 @@ const AppRoutes = () => {
                     />
                     <Route 
                       path="/teams" 
-                      element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <Teams />
-                        </MainLayout>
-                      }
+                      element={(
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER']}>
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                            <Teams />
+                          </MainLayout>
+                        </RoleProtect>
+                      )}
                     />
                     <Route 
                       path="/meetings"
-                      element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <MeetingsPage />
-                        </MainLayout>
-                      }
+                      element={(
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER', 'USER']}> {/* USER can see their own meetings list on UserHomePage, but this is for the general /meetings page if it exists for them */}
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                            <MeetingsPage />
+                          </MainLayout>
+                        </RoleProtect>
+                      )}
                     />
                     <Route 
                       path="/meetings/:meetingId"
-                      element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <MeetingOverviewPage />
-                        </MainLayout>
-                      }
+                      element={(
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER', 'USER']}> {/* USER can see their own meetings, so can view details */}
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                            <MeetingOverviewPage />
+                          </MainLayout>
+                        </RoleProtect>
+                      )}
                     />
                     <Route 
                       path="/reports" 
-                      element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <Reports />
-                        </MainLayout>
-                      }
+                      element={(
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER']}>
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                            <Reports />
+                          </MainLayout>
+                        </RoleProtect>
+                      )}
                     />
                     <Route 
                       path="/reports/team-performance" 
                       element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                           <TeamPerformance />
-                        </MainLayout>
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER']}>
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
+                            <TeamPerformance />
+                          </MainLayout>
+                        </RoleProtect>
                       }
                     />
                     <Route 
                       path="/reports/core-competency" 
                       element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <Suspense fallback={<div>Loading...</div>}>
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER']}>
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
                             <CoreCompetency />
-                          </Suspense>
-                        </MainLayout>
+                          </MainLayout>
+                        </RoleProtect>
                       }
                     />
                     <Route 
                       path="/reports/engagement" 
                       element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <Suspense fallback={<div>Loading...</div>}>
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER']}>
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
                             <Engagement />
-                          </Suspense>
-                        </MainLayout>
+                          </MainLayout>
+                        </RoleProtect>
                       }
                     />
                     <Route 
                       path="/reports/sentiment" 
                       element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <Suspense fallback={<div>Loading...</div>}>
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER']}>
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
                             <Sentiment />
-                          </Suspense>
-                        </MainLayout>
+                          </MainLayout>
+                        </RoleProtect>
                       }
                     />
                     <Route 
                       path="/reports/top-performer" 
                       element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <Suspense fallback={<div>Loading...</div>}>
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER']}>
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
                             <TopPerformer />
-                          </Suspense>
-                        </MainLayout>
+                          </MainLayout>
+                        </RoleProtect>
                       }
                     />
                     <Route 
                       path="/reports/employees-at-risk" 
                       element={
-                        <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <Suspense fallback={<div>Loading...</div>}>
+                        <RoleProtect allowedRoles={['ADMIN', 'MANAGER']}>
+                          <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
                             <EmployeesAtRisk />
-                          </Suspense>
-                        </MainLayout>
+                          </MainLayout>
+                        </RoleProtect>
                       }
                     />
                     <Route 
                       path="/settings" 
-                      element={
+                      element={(
                         <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
                           <Settings />
                         </MainLayout>
-                      }
+                      )}
                     />
                     
                     {/* Catch-all INSIDE organization check (user is signed in, has org) */}
@@ -386,7 +435,13 @@ const AppRoutes = () => {
 function App() {
   return (
     <Router>
-      <AppRoutes /> 
+      <AppProvider>
+        <NavigationSetup>
+          <ClearRedirects>
+            <AppRoutes /> 
+          </ClearRedirects>
+        </NavigationSetup>
+      </AppProvider>
     </Router>
   )
 }

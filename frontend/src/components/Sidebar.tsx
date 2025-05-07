@@ -9,9 +9,11 @@ import {
   UsersThree,
   MagnifyingGlass,
   CaretDoubleLeft,
-  CaretDoubleRight
+  CaretDoubleRight,
+  Spinner
 } from '@phosphor-icons/react'
 import { UserButton, useUser } from '@clerk/clerk-react'
+import { useAppContext } from '../context/AppContext'
 
 interface SidebarProps {
   onSearchClick: () => void;
@@ -86,12 +88,24 @@ const NavLinkItem = memo(({
 });
 
 const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: SidebarProps) => {
-  const { user } = useUser();
+  const { user: clerkUser } = useUser();
+  const { currentUser, isLoadingUser } = useAppContext();
+
   const toggleCollapse = useCallback(() => {
     if (onToggleCollapse) {
       onToggleCollapse(!isCollapsed);
     }
   }, [onToggleCollapse, isCollapsed]);
+
+  if (isLoadingUser) {
+    return (
+      <aside className={`bg-[#f4f4f5] fixed h-screen flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16' : 'w-sidebar'} items-center justify-center`}>
+        <Spinner size={32} className="animate-spin text-indigo-600" />
+      </aside>
+    );
+  }
+
+  const userRole = currentUser?.role || null;
 
   return (
     <aside className={`bg-[#f4f4f5] fixed h-screen flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16' : 'w-sidebar'}`}>
@@ -146,30 +160,34 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
             icon={ChatCircle}
             label="Meetings"
           />
-
-          <NavLinkItem 
-            to="/employees"
-            title="Employees"
-            isCollapsed={isCollapsed}
-            icon={Users}
-            label="Employees"
-          />
           
-          <NavLinkItem 
-            to="/teams"
-            title="Teams"
-            isCollapsed={isCollapsed}
-            icon={UsersThree}
-            label="Teams"
-          />
-          
-          <NavLinkItem 
-            to="/reports"
-            title="Reports"
-            isCollapsed={isCollapsed}
-            icon={ChartLine}
-            label="Reports"
-          />
+          {(userRole === 'ADMIN' || userRole === 'MANAGER') && (
+            <>
+              <NavLinkItem 
+                to="/employees"
+                title="Employees"
+                isCollapsed={isCollapsed}
+                icon={Users}
+                label="Employees"
+              />
+              
+              <NavLinkItem 
+                to="/teams"
+                title="Teams"
+                isCollapsed={isCollapsed}
+                icon={UsersThree}
+                label="Teams"
+              />
+              
+              <NavLinkItem 
+                to="/reports"
+                title="Reports"
+                isCollapsed={isCollapsed}
+                icon={ChartLine}
+                label="Reports"
+              />
+            </>
+          )}
           
           <NavLinkItem 
             to="/settings"
@@ -195,10 +213,10 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
           {!isCollapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">
-                {user?.fullName ?? 'Loading user...'}
+                {clerkUser?.fullName ?? 'Loading user...'}
               </p>
               <p className="text-xs text-gray-500 truncate">
-                {user?.primaryEmailAddress?.emailAddress ?? ''}
+                {clerkUser?.primaryEmailAddress?.emailAddress ?? ''}
               </p>
             </div>
           )}

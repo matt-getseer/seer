@@ -1,7 +1,8 @@
 import express, { Request, Response, NextFunction, RequestHandler } from 'express';
-import { PrismaClient, Prisma, UserRole } from '@prisma/client';
+import { PrismaClient, Prisma, UserRole, User as PrismaUser } from '@prisma/client';
 import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
 import { clerkClient } from '@clerk/clerk-sdk-node'; // Added Clerk SDK client
+import { getAccessibleEmployees, getAccessibleMeetings } from '../services/accessControlService'; // Import new services
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -67,9 +68,9 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const user = await prisma.user.findUnique({
+    // Fetch the raw Prisma user to get role and auth tokens
+    const prismaUser = await prisma.user.findUnique({
       where: { id: req.user.userId },
-      // Select necessary fields including tokens to check auth status
       select: {
         id: true,
         email: true,
@@ -77,32 +78,50 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
         clerkId: true,
         createdAt: true,
         updatedAt: true,
-        googleRefreshToken: true, // For Google Auth check
-        zoomRefreshToken: true,   // For Zoom Auth check
-        role: true
-      } as any, // Use 'as any' carefully or define a more specific type
+        googleRefreshToken: true,
+        zoomRefreshToken: true,
+        role: true,
+        // Do NOT select password or other sensitive tokens unless explicitly needed by services
+      },
     });
 
-    if (!user) {
+    if (!prismaUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Determine auth statuses based on token presence
-    const userData = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      clerkId: user.clerkId,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-      hasGoogleAuth: !!user.googleRefreshToken,
-      hasZoomAuth: !!user.zoomRefreshToken, // Check for Zoom token presence
-      role: user.role
-    };
-    // Note: We don't need to explicitly delete the tokens here 
-    // because they are not included in the final userData object structure.
+    // Cast prismaUser to the User type expected by accessControlService.
+    // This assumes the service functions correctly handle potentially missing optional fields
+    // and only use the necessary ones (like id and role for USER logic).
+    const currentUserForService = prismaUser as PrismaUser; // PrismaUser is already alias for User from @prisma/client
 
-    res.json(userData);
+    let employeeProfile = null;
+    let meetings = [];
+
+    // Fetch employee profile details if the user has a role (especially for USER role)
+    // Admins/Managers might also get their "employee" view this way if they are also employees.
+    const employeeDataArray = await getAccessibleEmployees(currentUserForService);
+    if (employeeDataArray.length > 0) {
+      employeeProfile = employeeDataArray[0]; // Assuming the first record is the relevant one
+    }
+    
+    // Fetch meetings for the current user
+    meetings = await getAccessibleMeetings(currentUserForService);
+
+    const responseData = {
+      id: prismaUser.id,
+      email: prismaUser.email,
+      name: prismaUser.name,
+      clerkId: prismaUser.clerkId,
+      createdAt: prismaUser.createdAt,
+      updatedAt: prismaUser.updatedAt,
+      role: prismaUser.role,
+      hasGoogleAuth: !!prismaUser.googleRefreshToken,
+      hasZoomAuth: !!prismaUser.zoomRefreshToken,
+      employeeProfile: employeeProfile, // Add employee profile
+      meetings: meetings, // Add meetings
+    };
+
+    res.json(responseData);
   } catch (error) {
     next(error);
   }

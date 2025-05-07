@@ -85,8 +85,25 @@ export async function getAccessibleTeams(currentUser: User): Promise<Team[]> {
     });
   }
 
-  // Regular USERS typically don't fetch lists of all accessible teams in this manner.
-  // They might see their own team, which would be a different specific query.
+  if (currentUser.role === UserRole.USER) {
+    // Find the employee record for the current user
+    const employee = await prisma.employee.findFirst({
+      where: { userId: currentUser.id },
+      select: { teamId: true }
+    });
+
+    if (employee && employee.teamId) {
+      return prisma.team.findMany({
+        where: { id: employee.teamId }
+        // No longer including the 'employees' field here for the USER role's own team view,
+        // as the EmployeeProfile page for the user themselves primarily uses employee.team.name/department
+        // which comes from the getAccessibleEmployees call.
+      });
+    }
+    return []; // User is not associated with any team or not an employee
+  }
+
+  // Fallback for any other roles or if no conditions met prior
   return [];
 }
 
@@ -131,6 +148,20 @@ export async function getAccessibleEmployees(currentUser: User): Promise<Employe
       }
     });
   }
+
+  if (currentUser.role === UserRole.USER) {
+    const employee = await prisma.employee.findFirst({
+      where: { userId: currentUser.id },
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true } }, // Select necessary user fields
+        team: true,
+        Employee: { select: { id: true, name: true, email: true } }, // Manager's basic info
+        // other_Employee: false // Typically users don't see their direct reports list here unless they are also managers
+      }
+    });
+    return employee ? [employee] : [];
+  }
+
   return [];
 }
 
@@ -193,6 +224,54 @@ export async function getAccessibleMeetings(currentUser: User): Promise<Meeting[
       }
     });
   }
+
+  if (currentUser.role === UserRole.USER) {
+    // Find the employee ID for the current user
+    const employee = await prisma.employee.findFirst({
+      where: { userId: currentUser.id },
+      select: { id: true }
+    });
+
+    if (!employee) {
+      // If the user is not an employee, they might still be a manager for meetings if managerId on Meeting is a userId
+      // For now, assuming meetings are primarily linked via employeeId or a manager (User) directly.
+      // If User can be a manager of a meeting without being an employee, this needs to be handled.
+      // Let's assume managerId on Meeting refers to a User's ID.
+      return prisma.meeting.findMany({
+        where: {
+          managerId: currentUser.id, // Meetings managed directly by this user (if managerId is userId)
+        },
+        include: {
+          manager: true,
+          employee: { include: { team: true, user: { select: { id: true, name: true, email: true }} } },
+          insights: true, // Consider if users should see all insights for their meetings
+          transcript: true, // Consider if users should see transcripts
+        }
+      });
+    }
+    
+    // User is an employee, find meetings they are involved in as an employee or as a manager (if managerId is userId)
+    return prisma.meeting.findMany({
+      where: {
+        OR: [
+          { employeeId: employee.id }, // Meetings where the user is the employee participant
+          { managerId: currentUser.id } // Meetings where the user is the manager (assuming managerId on Meeting is userId)
+        ]
+      },
+      include: {
+        manager: { select: { id: true, name: true, email: true } }, // Basic info of manager
+        employee: { 
+          include: { 
+            team: { select: { id:true, name: true }}, 
+            user: { select: { id: true, name: true, email: true }}
+          } 
+        },
+        insights: true, // Re-evaluate if USER role should see all insights by default
+        transcript: true, // Re-evaluate if USER role should see transcript by default
+      }
+    });
+  }
+
   return [];
 }
 

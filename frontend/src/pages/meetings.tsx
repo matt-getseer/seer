@@ -1,94 +1,117 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { meetingService } from '../api/client'; // Keep for potential mutations
-import { format } from 'date-fns'; // For date formatting
-import { useMeetings } from '../hooks/useQueryHooks'; // Import the custom hook
-import { AxiosError } from 'axios'; // Import AxiosError
-import { ArrowUp, ArrowDown, MagnifyingGlass } from 'phosphor-react'; // Import Phosphor icons, added MagnifyingGlass
+// import { meetingService } from '../api/client'; // Keep if needed for mutations later
+import { format } from 'date-fns';
+import { useMeetings } from '../hooks/useQueryHooks';
+import { AxiosError } from 'axios';
+import { ArrowUp, ArrowDown, MagnifyingGlass, Spinner, WarningCircle } from '@phosphor-icons/react'; // Correct import from @phosphor-icons/react, added Spinner/Warning
+import { useAppContext, AppUser, Meeting as AppMeeting } from '../context/AppContext'; // <-- Import context
 
-// Define the expected structure of a meeting object from the API
-interface Meeting {
-  id: number;
-  title: string | null;
-  scheduledTime: string;
-  platform: string | null;
-  status: string;
-  durationMinutes?: number | null; // Add duration
+// Define the expected structure of a meeting object from the API (for useMeetings hook)
+// Keep this if useMeetings returns slightly different structure than AppMeeting
+interface HookMeeting extends AppMeeting { // Or define separately if very different
   employee: {
     id: number;
     name: string | null;
   };
-  // Add other fields if needed for the list view
+  durationMinutes?: number | null; 
 }
 
 // Define sort configuration
+type SortKey = keyof AppMeeting | 'employeeName'; // Use AppMeeting type for keys, add employeeName
+
 type SortConfig = {
-  key: keyof Meeting | 'employeeName'; // Allow sorting by nested employee name
+  key: SortKey;
   direction: 'ascending' | 'descending';
 } | null;
 
 const MeetingsPage: React.FC = () => {
-  // Use the custom hook for data fetching, loading, and error state
-  const { data: meetingsData = [], isLoading, error: queryError } = useMeetings<Meeting[]>();
+  // Get user info from context
+  const { currentUser, isLoadingUser: isLoadingAppContextUser, errorLoadingUser: appContextUserError } = useAppContext();
 
-  const [searchTerm, setSearchTerm] = useState(''); // Added searchTerm state
+  // Use the hook for fetching meetings (primarily for Admin/Manager)
+  const { data: hookData = [], isLoading: isLoadingHook, error: hookQueryError } = useMeetings<HookMeeting[]>({
+    // Only enable the hook if the user is loaded and is an Admin or Manager
+    enabled: !!currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER')
+  });
+
+  const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
-
-  // Keep navigation state
   const navigate = useNavigate();
 
-  // Handle potential error from react-query
-  const error = queryError 
-  ? (
-      (queryError instanceof AxiosError && 
-       queryError.response?.data && 
-       typeof queryError.response.data === 'object' && 
-       'message' in queryError.response.data && 
-       typeof queryError.response.data.message === 'string'
-      ) 
-        ? queryError.response.data.message // Use message from response data if available
-        : (queryError as Error).message // Otherwise, use the general error message
-    ) || 'Failed to load meetings. Please try again later.' // Fallback message
-  : null;
+  // Determine which meetings data to use based on role
+  const meetingsData: AppMeeting[] = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'USER') {
+      return currentUser.meetings || []; // Use meetings from context for USER
+    }
+    // For ADMIN/MANAGER, use data from the hook
+    return hookData as AppMeeting[]; // Cast or map if HookMeeting is different from AppMeeting
+  }, [currentUser, hookData]);
 
+  // Determine combined loading and error states
+  const isLoading = isLoadingAppContextUser || (currentUser && currentUser.role !== 'USER' && isLoadingHook);
+  const error = appContextUserError || (currentUser && currentUser.role !== 'USER' && hookQueryError) 
+    ? (
+        appContextUserError || 
+        (hookQueryError 
+          ? (hookQueryError instanceof AxiosError && 
+             hookQueryError.response?.data && 
+             typeof hookQueryError.response.data === 'object' && 
+             'message' in hookQueryError.response.data && 
+             typeof hookQueryError.response.data.message === 'string'
+            ) 
+              ? hookQueryError.response.data.message 
+              : (hookQueryError as Error).message 
+          : 'Failed to load meetings. Please try again later.') // Fallback message
+      )
+    : null;
+
+  // Keep handleRowClick
   const handleRowClick = (meetingId: number) => {
     navigate(`/meetings/${meetingId}`);
   };
 
-  // Memoized filtering logic
+  // Memoized filtering logic (uses combined meetingsData)
   const filteredMeetings = useMemo(() => {
     if (!searchTerm.trim()) {
       return meetingsData;
     }
     const searchLower = searchTerm.toLowerCase();
-    return meetingsData.filter((meeting: Meeting) => {
+    return meetingsData.filter((meeting: AppMeeting) => { // Use AppMeeting type
       const titleMatch = meeting.title?.toLowerCase().includes(searchLower);
-      const employeeNameMatch = meeting.employee?.name?.toLowerCase().includes(searchLower);
+      // Assuming AppMeeting might not have nested employee, adjust if needed
+      // const employeeNameMatch = (meeting as HookMeeting).employee?.name?.toLowerCase().includes(searchLower);
       const platformMatch = meeting.platform?.toLowerCase().includes(searchLower);
       const statusMatch = meeting.status?.toLowerCase().includes(searchLower);
-      return titleMatch || employeeNameMatch || platformMatch || statusMatch;
+      return titleMatch /*|| employeeNameMatch*/ || platformMatch || statusMatch; // Adjust based on available fields
     });
   }, [meetingsData, searchTerm]);
 
-  // Memoized sorting logic - now uses filteredMeetings
+  // Memoized sorting logic (uses combined filteredMeetings)
   const sortedMeetings = useMemo(() => {
-    let sortableItems = [...filteredMeetings]; // Changed from meetingsData
+    let sortableItems = [...filteredMeetings];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         let aValue: any;
         let bValue: any;
 
-        // Handle nested employee name sorting
-        if (sortConfig.key === 'employeeName') {
-            aValue = a.employee?.name || '';
-            bValue = b.employee?.name || '';
+        // Handle potential employee name sorting (check if field exists)
+        if (sortConfig.key === 'employeeName' && 'employee' in a && 'employee' in b) {
+            aValue = (a as HookMeeting).employee?.name || '';
+            bValue = (b as HookMeeting).employee?.name || '';
         } else {
-            aValue = a[sortConfig.key as keyof Meeting];
-            bValue = b[sortConfig.key as keyof Meeting];
+            // Need to ensure sortConfig.key is a valid key of AppMeeting
+            const key = sortConfig.key as keyof AppMeeting;
+            if (key in a && key in b) {
+              aValue = a[key];
+              bValue = b[key];
+            } else {
+              aValue = ''; // Default if key is somehow invalid for AppMeeting
+              bValue = '';
+            }
         }
 
-
-        // Basic comparison, handle nulls/undefined and case-insensitivity for strings
         if (aValue === null || aValue === undefined) aValue = '';
         if (bValue === null || bValue === undefined) bValue = '';
 
@@ -97,24 +120,21 @@ const MeetingsPage: React.FC = () => {
             bValue = bValue.toLowerCase();
         }
 
-        if (aValue < bValue) {
-          return sortConfig.direction === 'ascending' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-          return sortConfig.direction === 'ascending' ? 1 : -1;
-        }
+        if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
       });
     }
     return sortableItems;
-  }, [filteredMeetings, sortConfig]); // Changed from meetingsData
+  }, [filteredMeetings, sortConfig]);
 
+  // Keep handleSearchChange
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
   }, []);
 
-  // Function to request sorting
-  const requestSort = (key: keyof Meeting | 'employeeName') => {
+  // Function to request sorting (use SortKey)
+  const requestSort = (key: SortKey) => {
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
       direction = 'descending';
@@ -122,43 +142,40 @@ const MeetingsPage: React.FC = () => {
     setSortConfig({ key, direction });
   };
 
-  // Function to render sort icons
-  const getSortIcon = (key: keyof Meeting | 'employeeName') => {
-    if (!sortConfig || sortConfig.key !== key) {
-      // Return a placeholder or default icon if needed, or null for no icon when not sorted
-      return null; // Or <SomeDefaultIcon size={16} />;
-    }
-    if (sortConfig.direction === 'ascending') {
-      return <ArrowUp size={16} className="inline ml-1" />;
-    }
+  // Function to render sort icons (use SortKey)
+  const getSortIcon = (key: SortKey) => {
+    if (!sortConfig || sortConfig.key !== key) return null;
+    if (sortConfig.direction === 'ascending') return <ArrowUp size={16} className="inline ml-1" />;
     return <ArrowDown size={16} className="inline ml-1" />;
   };
 
-  // Display loading state from the hook
+  // Combined loading state
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <Spinner size={48} className="animate-spin text-indigo-600" />
       </div>
     );
   }
 
-  // Display error state from the hook
+  // Combined error state
   if (error) {
     return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-        <strong className="font-bold">Error:</strong>
-        <span className="block sm:inline"> {error}</span>
+      <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-lg shadow max-w-lg mx-auto mt-10" role="alert">
+        <div className="flex items-center mb-3">
+           <WarningCircle size={24} className="mr-2" />
+           <h3 className="text-lg font-semibold">Error Loading Meetings</h3>
+        </div>
+        <p>{error}</p>
       </div>
     );
   }
 
-  // Display meeting table using data from the hook
+  // Render the meeting table using sortedMeetings
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-6">
          <h1 className="text-2xl font-semibold text-gray-900">Meetings</h1>
-         {/* Search Bar Added Here */}
          <div className="relative rounded-md w-1/3">
             <input
               type="text"
@@ -181,9 +198,12 @@ const MeetingsPage: React.FC = () => {
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('title')}>
                     Title {getSortIcon('title')}
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('employeeName')}>
-                    Employee {getSortIcon('employeeName')}
-                  </th>
+                  {/* Conditionally show Employee column if needed and available */}
+                  {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER') && (
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('employeeName')}>
+                      Employee {getSortIcon('employeeName')}
+                    </th>
+                  )}
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => requestSort('scheduledTime')}>
                     Date/Time {getSortIcon('scheduledTime')}
                   </th>
@@ -198,7 +218,7 @@ const MeetingsPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {sortedMeetings.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                    <td colSpan={(currentUser?.role === 'USER') ? 4 : 5} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
                       {searchTerm ? `No meetings found matching "${searchTerm}"` : 'No meetings found.'}
                     </td>
                   </tr>
@@ -206,62 +226,43 @@ const MeetingsPage: React.FC = () => {
                   sortedMeetings.map((meeting) => (
                     <tr key={meeting.id} onClick={() => handleRowClick(meeting.id)} className="hover:bg-gray-50 cursor-pointer">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{meeting.title || '-'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{meeting.employee?.name || 'N/A'}</td>
+                      {/* Conditionally show Employee column */}
+                      {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER') && (
+                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{(meeting as HookMeeting).employee?.name || 'N/A'}</td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {format(new Date(meeting.scheduledTime), 'PPpp')} 
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{meeting.platform || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {(() => {
-                          const status = meeting.status;
-                          const scheduledTime = new Date(meeting.scheduledTime);
-                          const now = new Date();
-                          const durationMs = (meeting.durationMinutes || 0) * 60 * 1000; // Duration in milliseconds, default 0
-                          const endTime = new Date(scheduledTime.getTime() + durationMs);
-                          
-                          // Refined check: If status is IN_WAITING_ROOM and current time is past the calculated end time
-                          if (status === 'IN_WAITING_ROOM' && now > endTime) {
-                            return (
-                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">
-                                {'DID NOT HAPPEN'.toUpperCase()}
-                              </span>
-                            );
-                          }
-                          
-                          // Existing status logic (keep SCHEDULED etc. handling for cases before IN_WAITING_ROOM or if duration check fails)
-                          const initialStatuses = ['SCHEDULED', 'PENDING_BOT_INVITE', 'BOT_INVITED'];
-                          if (initialStatuses.includes(status) && now > scheduledTime && !(status === 'IN_WAITING_ROOM' && now > endTime)) {
-                             // Show scheduled if time passed but not yet 'DID NOT HAPPEN' based on duration logic
-                             // Or handle other initial states if needed.
-                             // Keep default gray badge for these? Or hide? Let's keep default for now.
-                            return (
-                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                                {status.toUpperCase()}
-                              </span>
-                            );
-                          }
-                          
-                          if (status === 'GENERATING_INSIGHTS' || status === 'CALL_ENDED') {
-                            return (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2"></div>
-                                {'PROCESSING...'.toUpperCase()}
-                              </span>
-                            );
-                          } else if (status === 'COMPLETED') {
-                            return (
-                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                {'COMPLETED'.toUpperCase()}
-                              </span>
-                            );
-                          } else if (status.startsWith('ERROR')) {
-                            return (
-                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                                {'ERROR'.toUpperCase()}
-                              </span>
-                            );
-                          }
-                        })()}
+                         {/* Status rendering logic (consider if durationMinutes exists on AppMeeting) */}
+                         {(() => {
+                            const status = meeting.status;
+                            const scheduledTime = new Date(meeting.scheduledTime);
+                            const now = new Date();
+                            // Check if durationMinutes exists before using it
+                            const durationMs = ('durationMinutes' in meeting ? (meeting as HookMeeting).durationMinutes || 0 : 0) * 60 * 1000;
+                            const endTime = new Date(scheduledTime.getTime() + durationMs);
+                            
+                            if (status === 'IN_WAITING_ROOM' && now > endTime) {
+                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">DID NOT HAPPEN</span>;
+                            }
+                            const initialStatuses = ['SCHEDULED', 'PENDING_BOT_INVITE', 'BOT_INVITED'];
+                            if (initialStatuses.includes(status) && now > scheduledTime && !(status === 'IN_WAITING_ROOM' && now > endTime)) {
+                               return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{status.toUpperCase()}</span>;
+                            }
+                            if (status === 'GENERATING_INSIGHTS' || status === 'CALL_ENDED') {
+                              return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><Spinner size={12} className="animate-spin mr-1.5" />PROCESSING...</span>;
+                            }
+                            if (status === 'COMPLETED') {
+                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">COMPLETED</span>;
+                            }
+                            if (status.startsWith('ERROR')) {
+                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">ERROR</span>;
+                            }
+                            // Default rendering
+                            return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">{status.toUpperCase()}</span>;
+                          })()}
                       </td>
                     </tr>
                   ))

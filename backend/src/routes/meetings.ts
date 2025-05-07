@@ -399,43 +399,75 @@ router.get('/', authenticate, extractUserInfo, async (req: RequestWithUser, res:
 
 // GET /api/meetings/:id - Temporarily removing Redis caching
 router.get('/:id', authenticate, extractUserInfo, async (req: RequestWithUser, res: Response) => {
-  const managerId = req.user?.userId;
   const meetingId = parseInt(req.params.id, 10);
-  // const skipCache = req.query.skipCache === 'true'; // Cache logic commented out
+  const userId = req.user?.userId;
 
-  if (!managerId) {
-    return res.status(401).json({ message: 'User not authenticated or manager ID not found.' });
-  }
   if (isNaN(meetingId)) {
     return res.status(400).json({ message: 'Invalid meeting ID.' });
   }
-
-  // const cacheKey = `meeting_${meetingId}_user_${managerId}`;
-  // if (!skipCache) { ... cache check logic commented out ... }
+  if (!userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
 
   try {
+    // 1. Fetch the requesting user's details (including role)
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true }
+    });
+
+    if (!currentUser) {
+      return res.status(404).json({ message: 'Authenticated user not found.' });
+    }
+
+    // 2. Fetch the requested meeting with relevant details
     const meeting = await prisma.meeting.findUnique({
-      where: {
-        id: meetingId,
-        managerId: managerId, // Ensure the user owns this meeting
-      },
-      include: {
-        employee: true,
+      where: { id: meetingId },
+      include: { 
+        manager: { select: { id: true, name: true, email: true } }, 
+        employee: { select: { id: true, name: true, email: true, title: true } },
         transcript: true,
         insights: true,
-      },
+      } 
     });
 
     if (!meeting) {
-      return res.status(404).json({ message: 'Meeting not found or access denied.' });
+      return res.status(404).json({ message: 'Meeting not found.' });
     }
 
-    // try { ... cache set logic commented out ... } catch (cacheError) { ... }
+    // 3. Check Permissions
+    let isAllowed = false;
+    if (currentUser.role === 'ADMIN') {
+      isAllowed = true;
+    } else if (currentUser.role === 'MANAGER') {
+      // For Managers, check if they are the manager of this meeting OR
+      // if the meeting's manager is within their hierarchy (requires accessControlService logic)
+      // Simple check for now: are they the direct manager?
+      if (meeting.managerId === currentUser.id) {
+          isAllowed = true;
+      }
+      // TODO: Implement proper hierarchical check for managers if needed, potentially calling a function
+      // like `canManagerAccessMeeting(currentUser.id, meetingId)` from accessControlService.
+      // For now, only direct managers or admins can access via this check.
+      
+    } else if (currentUser.role === 'USER') {
+      // For Users, check if they are the manager OR the employee involved
+      const employeeUser = await prisma.employee.findUnique({ where: { id: meeting.employeeId }, select: { userId: true } });
+      if (meeting.managerId === currentUser.id || employeeUser?.userId === currentUser.id) {
+        isAllowed = true;
+      }
+    }
 
-    res.status(200).json(meeting);
+    if (!isAllowed) {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
+
+    // 4. Return the meeting data
+    res.json(meeting);
+
   } catch (error) {
-    console.error(`Error fetching meeting details for ID ${meetingId}:`, error);
-    res.status(500).json({ message: 'Failed to retrieve meeting details.' });
+    console.error(`Error fetching meeting ${meetingId}:`, error);
+    res.status(500).json({ message: 'Failed to fetch meeting details.' });
   }
 });
 

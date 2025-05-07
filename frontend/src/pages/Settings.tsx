@@ -1,11 +1,12 @@
 import React, { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
-import { Link as LinkIcon, CheckCircle, WarningCircle, X } from '@phosphor-icons/react'; // Example icon, Added X
+import { Link as LinkIcon, CheckCircle, WarningCircle, X } from '@phosphor-icons/react'; // Example icon, Added X and Bell for Notifications
 import { userService } from '../api/client'; // Keep named import for userService
 import apiClient from '../api/client'; // Add default import for apiClient
 import { useQuery, useQueryClient, useMutation, UseMutationOptions } from '@tanstack/react-query'; // Import QueryClient and useMutation, UseMutationOptions
 import { useAuth } from '@clerk/clerk-react'; // useOrganization has been removed
 import { Dialog, Transition } from '@headlessui/react'; // Added Dialog and Transition
+import { useAppContext, AppUser } from '../context/AppContext'; // <-- Import useAppContext and AppUser
 
 // Define expected user data shape
 interface UserData {
@@ -42,7 +43,7 @@ interface SelectableTeamData {
 }
 
 // Define possible tab values
-type SettingsTab = 'Users' | 'Teams' | 'Integrations' | 'Employees';
+type SettingsTab = 'Users' | 'Teams' | 'Integrations' | 'Employees' | 'Notifications';
 
 // Define possible UserRoles for the application
 const APP_USER_ROLES = ['ADMIN', 'MANAGER', 'USER'] as const;
@@ -56,6 +57,7 @@ interface InvitationData {
 
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { currentUser, isLoadingUser: isLoadingAppContextUser, errorLoadingUser: appContextUserError } = useAppContext(); // <-- Use AppContext
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false); // Specific loading state for Google
@@ -91,23 +93,45 @@ const Settings = () => {
   const { isSignedIn, isLoaded: isAuthLoaded, orgId } = useAuth(); // orgId is from useAuth
 
   // Update tabItems to be defined before being used in isValidTab and state init
-  const tabItems = [
-    { id: 'Users' as SettingsTab, label: 'Users' },
-    { id: 'Teams' as SettingsTab, label: 'Teams' },
-    { id: 'Integrations' as SettingsTab, label: 'Integrations' },
-    { id: 'Employees' as SettingsTab, label: 'Employee Data' },
+  const allPossibleTabItems: Array<{ id: SettingsTab; label: string; icon?: React.ElementType }> = [
+    { id: 'Users', label: 'Users' },
+    { id: 'Teams', label: 'Teams' },
+    { id: 'Integrations', label: 'Integrations' },
+    { id: 'Employees', label: 'Employee Data' },
+    { id: 'Notifications', label: 'Notifications'},
   ];
 
-  // Helper function to check if a string is a valid SettingsTab ID
-  const isValidTab = (tabId: string | null): tabId is SettingsTab => {
-    return tabItems.some(tab => tab.id === tabId);
+  const displayedTabItems = React.useMemo(() => {
+    if (!currentUser) return []; // Or a default minimal set if preferred during loading
+    if (currentUser.role === 'USER') {
+      return allPossibleTabItems.filter(tab => tab.id === 'Integrations' || tab.id === 'Notifications');
+    }
+    return allPossibleTabItems;
+  }, [currentUser]);
+
+  // Helper function to check if a string is a valid *displayed* SettingsTab ID
+  const isValidDisplayedTab = (tabId: string | null): tabId is SettingsTab => {
+    return displayedTabItems.some(tab => tab.id === tabId);
   };
 
-  // Initialize activeTab from URL search parameter or default to 'Users'
+  // Initialize activeTab from URL search parameter or default based on role and displayed tabs
   const initialTabFromUrl = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState<SettingsTab>(
-    isValidTab(initialTabFromUrl) ? initialTabFromUrl : 'Users'
-  );
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+    if (isValidDisplayedTab(initialTabFromUrl)) {
+      return initialTabFromUrl;
+    }
+    // Default to the first available displayed tab
+    return displayedTabItems.length > 0 ? displayedTabItems[0].id : allPossibleTabItems[0].id; // Fallback if displayed is empty initially
+  });
+
+  // Effect to update activeTab if displayedTabItems changes and current activeTab is not in them
+  useEffect(() => {
+    if (displayedTabItems.length > 0 && !isValidDisplayedTab(activeTab)) {
+      setActiveTab(displayedTabItems[0].id);
+      // Also update URL if default changes due to role change (though less likely without page reload)
+      setSearchParams(prev => { prev.set('tab', displayedTabItems[0].id); return prev; }, { replace: true });
+    }
+  }, [displayedTabItems, activeTab, setSearchParams]);
 
   // Fetch user data including Google & Zoom Auth status
   const { data: userData, isLoading: isLoadingUser, error: userError, refetch: refetchUserData } = useQuery<UserData, Error>({
@@ -209,7 +233,7 @@ const Settings = () => {
         }
       }
     },
-    enabled: !!userData && userData.role === 'ADMIN', // Only enable if user is ADMIN
+    enabled: !!currentUser && currentUser.role === 'ADMIN', // Only enable if user is ADMIN
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
@@ -234,23 +258,25 @@ const Settings = () => {
       }
     },
     // This query can be enabled once the user (ADMIN) is loaded, as it's for a primary list view
-    enabled: !!userData && userData.role === 'ADMIN', 
+    enabled: !!currentUser && currentUser.role === 'ADMIN', 
     staleTime: 5 * 60 * 1000,
   });
 
   // Function to handle tab click and update URL search parameter
   const handleTabClick = (tabId: SettingsTab) => {
-    setActiveTab(tabId);
-    setSearchParams(prevParams => {
-      prevParams.set('tab', tabId);
-      return prevParams;
-    }, { replace: true }); // Use replace to avoid bloating browser history
+    if (displayedTabItems.some(tab => tab.id === tabId)) { // Ensure tab is clickable
+      setActiveTab(tabId);
+      setSearchParams(prevParams => {
+        prevParams.set('tab', tabId);
+        return prevParams;
+      }, { replace: true });
+    }
   };
 
   // Effect to sync activeTab if URL changes from external navigation (e.g., back/forward button)
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab');
-    if (isValidTab(tabFromUrl) && tabFromUrl !== activeTab) {
+    if (isValidDisplayedTab(tabFromUrl) && tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl);
     }
     // This effect should only run when searchParams changes from external sources,
@@ -446,11 +472,11 @@ const Settings = () => {
   };
 
   // Determine connection statuses and button texts
-  const isGoogleConnected = userData?.hasGoogleAuth ?? false;
+  const isGoogleConnected = currentUser?.hasGoogleAuth ?? false;
   const googleConnectionStatusText = isGoogleConnected ? 'Connected' : 'Not Connected';
   const googleButtonText = isGoogleConnected ? 'Reconnect Google Calendar' : 'Connect Google Calendar';
 
-  const isZoomConnected = userData?.hasZoomAuth ?? false; // Check Zoom status
+  const isZoomConnected = currentUser?.hasZoomAuth ?? false; // Check Zoom status
   const zoomConnectionStatusText = isZoomConnected ? 'Connected' : 'Not Connected';
   const zoomButtonText = isZoomConnected ? 'Reconnect Zoom Account' : 'Connect Zoom Account';
 
@@ -568,42 +594,65 @@ const Settings = () => {
     },
   });
 
-  return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Settings</h1>
+  // Loading state for the whole page based on AppContext user loading
+  if (isLoadingAppContextUser) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <p className="ml-4 text-gray-600">Loading settings...</p>
+      </div>
+    );
+  }
 
-      {/* Tab Navigation */}
-      <div className="mb-6 border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-          {tabItems.map((tab) => (
+  // Error state for the whole page if AppContext user failed to load
+  if (appContextUserError || !currentUser) {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-lg shadow max-w-lg mx-auto mt-10">
+        <div className="flex items-center mb-3">
+          <WarningCircle size={24} className="mr-2" />
+          <h3 className="text-lg font-semibold">Error Loading Settings</h3>
+        </div>
+        <p>{appContextUserError || 'Your user information could not be loaded. Please try again later.'}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
+      </div>
+
+      <div className="border-b border-gray-200">
+        <nav className="mb-px flex space-x-2 sm:space-x-8 overflow-x-auto pb-0.5" aria-label="Tabs">
+          {displayedTabItems.map((tab) => (
             <button
               key={tab.id}
               onClick={() => handleTabClick(tab.id)}
-              className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm 
-                ${activeTab === tab.id
-                  ? 'border-indigo-500 text-indigo-600'
+              className={`
+                whitespace-nowrap py-3 px-3 sm:py-4 sm:px-4 border-b-2 font-medium text-sm transition-colors duration-150 ease-in-out
+                focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0
+                ${tab.id === activeTab
+                  ? 'border-indigo-600 text-indigo-700'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              aria-current={activeTab === tab.id ? 'page' : undefined}
+                }
+              `}
+              aria-current={tab.id === activeTab ? 'page' : undefined}
             >
+              {tab.icon && <tab.icon className="inline-block w-4 h-4 mr-1.5 -mt-0.5" />}
               {tab.label}
             </button>
           ))}
         </nav>
       </div>
 
-      {/* General Feedback Messages & User Loading Error (remains at top, outside tab content) */}
-      {successMessage && <div className="mb-4 p-3 bg-green-100 text-green-700 text-sm rounded-md">{successMessage}</div>}
-      {errorMessage && <div className="mb-4 p-3 bg-red-100 text-red-700 text-sm rounded-md">{errorMessage}</div>}
-      {userError && !userData && <div className="mb-4 p-3 bg-red-100 text-red-700 text-sm rounded-md">Error loading user settings: {userError.message}</div>}
-
-      {/* Tab Content */}
-      <div>
-        {activeTab === 'Users' && (
-          <div className="space-y-6"> {/* Added a wrapping div for spacing if multiple cards appear in Users tab */}
+      <div className="mt-8">
+        {/* Conditional rendering of tab content */}
+        {activeTab === 'Users' && currentUser.role === 'ADMIN' && (
+          <div>
             {/* User Management and Invite Button - ADMINS ONLY */}
-            {userData && userData.role === 'ADMIN' && (
-              <div className="bg-white shadow sm:rounded-lg">
+            {currentUser && currentUser.role === 'ADMIN' && (
+              <div className="bg-white shadow sm:rounded-lg mb-6">
                 <div className="px-4 py-5 sm:p-6">
                   <div className="flex justify-between items-center">
                     <h3 className="text-lg leading-6 font-medium text-gray-900">User Invitations</h3>
@@ -637,7 +686,7 @@ const Settings = () => {
             )}
 
             {/* Managers List Card - ADMINS ONLY (existing) */}
-            {userData && userData.role === 'ADMIN' && (
+            {currentUser && currentUser.role === 'ADMIN' && (
               <div className="bg-white shadow sm:rounded-lg"> {/* Added card styling for consistency */}
                 <div className="px-4 py-5 sm:p-6"> {/* Added padding for consistency */}
                   <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Current Managers</h3> {/* Added title */}
@@ -693,7 +742,7 @@ const Settings = () => {
               </div>
             )}
             {/* If user is not admin and on Users tab, show a message or different content */}
-            {userData && userData.role !== 'ADMIN' && (
+            {currentUser && currentUser.role !== 'ADMIN' && (
                 <div className="bg-white shadow sm:rounded-lg p-6">
                     <p className="text-sm text-gray-600">User management and invitations are available for administrators.</p>
                 </div>
@@ -701,10 +750,10 @@ const Settings = () => {
           </div>
         )}
 
-        {activeTab === 'Teams' && (
+        {activeTab === 'Teams' && (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') && (
           <>
             {/* === "All Teams" List Card - ADMINS ONLY === */}
-            {userData && userData.role === 'ADMIN' && (
+            {currentUser && currentUser.role === 'ADMIN' && (
               <div className="">
                 <div className="">
                   {isLoadingAllTeamsForList && (
@@ -745,8 +794,8 @@ const Settings = () => {
                                 let displayManager = 'Unassigned';
                                 if (managerDetails) {
                                     displayManager = managerDetails.name || managerDetails.email;
-                                } else if (team.userId && team.userId === userData?.id) {
-                                    displayManager = `${userData.name || 'You'} (Admin)`;
+                                } else if (team.userId && team.userId === currentUser?.id) {
+                                    displayManager = `${currentUser.name || 'You'} (Admin)`;
                                 }
                                 return (
                                   <tr key={team.id} className="hover:bg-gray-50">
@@ -834,7 +883,7 @@ const Settings = () => {
           </>
         )}
 
-        {activeTab === 'Employees' && (
+        {activeTab === 'Employees' && (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') && (
           <div className="employee-data-tab-content">
             {/* Upload Data Card - Remove card shell styling and inner padding */}
             <div className=""> 
@@ -870,6 +919,17 @@ const Settings = () => {
             </div>
         </div>
         )}
+
+        {activeTab === 'Notifications' && (
+          <div className="bg-white shadow sm:rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg font-medium text-gray-900">Notifications</h3>
+              <p className="mt-2 text-sm text-gray-600">
+                Notification settings and preferences will be available here in the future.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* "Assign Manager to Team" Modal (its rendering is controlled by isAssignManagerModalOpen, independent of tabs) */}
@@ -895,12 +955,12 @@ const Settings = () => {
                         <div>
                           <label htmlFor="assign-to-me-admin" className="flex items-center text-sm">
                             <input id="assign-to-me-admin" name="manager-assignment" type="radio" className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
-                              checked={managerToAssign === null || managerToAssign === userData?.id}
+                              checked={managerToAssign === null || managerToAssign === currentUser?.id}
                               onChange={() => setManagerToAssign(null)} />
-                            <span className="ml-2 text-gray-700">Assign to me ({userData?.name || 'Admin'})</span>
+                            <span className="ml-2 text-gray-700">Assign to me ({currentUser?.name || 'Admin'})</span>
                           </label>
                         </div>
-                        {managersData.filter(m => m.id !== userData?.id).map(manager => (
+                        {managersData.filter(m => m.id !== currentUser?.id).map(manager => (
                           <div key={manager.id}>
                             <label htmlFor={`manager-${manager.id}`} className="flex items-center text-sm">
                               <input id={`manager-${manager.id}`} name="manager-assignment" type="radio" className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
@@ -910,7 +970,7 @@ const Settings = () => {
                             </label>
                           </div>
                         ))}
-                        {managersData.filter(m => m.id !== userData?.id).length === 0 && !isLoadingManagers && (
+                        {managersData.filter(m => m.id !== currentUser?.id).length === 0 && !isLoadingManagers && (
                             <p className="text-sm text-gray-500">No other managers available to assign.</p>
                         )}
                       </fieldset>

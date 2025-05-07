@@ -45,7 +45,15 @@ const MeetingOverviewPage: React.FC = () => {
   const navigate = useNavigate();
   const id = meetingId ? (typeof meetingId === 'string' ? parseInt(meetingId) : meetingId) : null;
 
+  // Log the ID being used for fetching
+  console.log('[MeetingOverviewPage] Fetching meeting with ID:', id);
+
   const { data: meeting, isLoading, error: queryError } = useMeeting<MeetingDetail>(id);
+
+  // Log fetched data state
+  console.log('[MeetingOverviewPage] isLoading:', isLoading);
+  console.log('[MeetingOverviewPage] queryError:', queryError);
+  console.log('[MeetingOverviewPage] meeting data:', meeting);
 
   // NEW: Tab state and items for MeetingOverviewPage
   const [activeOverviewTab, setActiveOverviewTab] = useState<MeetingOverviewTab>('Overview');
@@ -72,6 +80,9 @@ const MeetingOverviewPage: React.FC = () => {
     ) || 'Failed to load meeting details. Please try again later.'
   : null;
 
+  // Log the final error state being used
+  console.log('[MeetingOverviewPage] Final calculated error state:', error);
+
   // Display loading state from hook
   if (isLoading) {
     return (
@@ -83,6 +94,7 @@ const MeetingOverviewPage: React.FC = () => {
 
   // Display error state from hook
   if (error) {
+    console.log('[MeetingOverviewPage] Rendering error state.'); // Log entering error block
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
         <strong className="font-bold">Error:</strong>
@@ -93,10 +105,14 @@ const MeetingOverviewPage: React.FC = () => {
   
   // Display not found state (if hook returns null/undefined data after loading without error)
   if (!meeting) {
+    console.log('[MeetingOverviewPage] Rendering not found state (meeting data is null/undefined).'); // Log entering not found block
      return (
       <div className="text-center text-gray-500 mt-10">Meeting not found.</div>
     );
   }
+
+  // If we reach here, meeting data should be available
+  console.log('[MeetingOverviewPage] Proceeding to render meeting details.');
 
   // NEW: Calculate groupedInsights after loading and error checks, and if meeting exists
   let groupedInsights: Record<string, MeetingDetail['insights']> | null = null;
