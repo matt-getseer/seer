@@ -15,6 +15,7 @@ interface EmployeeCsvRow {
   team_department: string;
   employee_start_date?: string; // Optional
   employee_country?: string;    // Optional
+  manager_email?: string; // Optional: Email of the manager
 }
 
 // Typed prisma client
@@ -401,8 +402,9 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
         team_name,
         team_department,
         employee_start_date,
-        employee_country
-      } = record as Partial<EmployeeCsvRow>; // Cast to partial to handle potentially missing optional fields
+        employee_country,
+        manager_email
+      } = record as Partial<EmployeeCsvRow & { manager_email?: string }>; // Ensure type assertion is robust
 
       // Basic validation for required fields
       if (!employee_name || !employee_title || !employee_email || !team_name || !team_department) {
@@ -436,6 +438,23 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
         }
       }
 
+      let managerId: number | null = null; // Initialize managerId
+
+      if (manager_email && typeof manager_email === 'string' && manager_email.trim() !== '') {
+        try {
+          const manager = await prisma.employee.findUnique({
+            where: { email: manager_email.trim() },
+            select: { id: true }
+          });
+          if (manager) {
+            managerId = manager.id;
+          } else {
+            console.warn(`CSV Upload: Manager with email "${manager_email.trim()}" not found for employee "${employee_email}". Employee will be created/updated without a manager.`);
+          }
+        } catch (lookupError) {
+          console.error(`CSV Upload: Error looking up manager with email "${manager_email.trim()}":`, lookupError);
+        }
+      }
 
       try {
         // Find or create Team (ensure userOrganizationId is used here if teams are org-specific)
@@ -473,11 +492,11 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
             title: employee_title,
             startDate: validStartDate,
             country: employee_country || null,
-            teamId: team.id, // Update team association
-            userId: currentUserId, // Should generally not change for an existing employee if already set
-                                 // but needs to be consistent for the operation to be allowed by Prisma policies/relations.
+            teamId: team.id, 
+            userId: currentUserId, 
+            managerId: managerId, // Add managerId to update
           },
-          create: { // Data to create if employee with this email does not exist
+          create: { 
             name: employee_name,
             title: employee_title,
             email: employee_email,
@@ -485,6 +504,7 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
             country: employee_country || null,
             teamId: team.id,
             userId: currentUserId,
+            managerId: managerId, // Add managerId to create
           },
         });
         
@@ -518,7 +538,7 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
     if (processedCount === 0 && req.file.buffer.length > 0) {
         // This might happen if the CSV is empty after headers or headers are missing/malformed.
         return res.status(400).json({ 
-            message: 'No valid data rows found in the CSV. Please ensure the CSV is not empty and has correct headers: employee_name, employee_title, employee_email, team_name, team_department, employee_start_date (optional, YYYY-MM-DD), employee_country (optional).',
+            message: 'No valid data rows found in the CSV. Please ensure the CSV is not empty and has correct headers: employee_name, employee_title, employee_email, team_name, team_department, employee_start_date (optional, YYYY-MM-DD), employee_country (optional), manager_email (optional).',
             errors: [] 
         });
     }

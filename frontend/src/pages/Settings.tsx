@@ -7,6 +7,8 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'; /
 import { useAuth } from '@clerk/clerk-react'; // useOrganization has been removed
 import { Dialog, Transition } from '@headlessui/react'; // Added Dialog and Transition
 import { useAppContext, AppUser } from '../context/AppContext'; // Keep AppUser for now
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { DotsThreeVertical, Pencil, UserPlus, Trash } from '@phosphor-icons/react'; // Icons for dropdown
 
 // Define expected user data shape
 interface UserData {
@@ -70,6 +72,13 @@ const Settings = () => {
   const [assignManagerModalSaveError, setAssignManagerModalSaveError] = useState<string | null>(null);
   const [assignManagerModalSaveSuccessMessage, setAssignManagerModalSuccessMessage] = useState<string | null>(null);
 
+  // State for Create Team Modal
+  const [isCreateTeamModalOpen, setIsCreateTeamModalOpen] = useState(false);
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamDepartment, setNewTeamDepartment] = useState('');
+  const [createTeamLoading, setCreateTeamLoading] = useState(false);
+  const [createTeamError, setCreateTeamError] = useState<string | null>(null);
+
   // State for User Invitation Modal
   const [isInviteUserModalOpen, setIsInviteUserModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -82,6 +91,22 @@ const Settings = () => {
   const [isManagerListLoading, setIsManagerListLoading] = useState(false);
   const [managerListError, setManagerListError] = useState<string | null>(null);
 
+  // State for Edit Team Modal
+  const [isEditTeamModalOpen, setIsEditTeamModalOpen] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<SelectableTeamData | null>(null); 
+  const [editTeamName, setEditTeamName] = useState('');
+  const [editTeamDepartment, setEditTeamDepartment] = useState('');
+  const [editTeamError, setEditTeamError] = useState<string | null>(null);
+
+  // State for Delete Team Modal
+  const [isDeleteTeamModalOpen, setIsDeleteTeamModalOpen] = useState(false);
+  const [deletingTeam, setDeletingTeam] = useState<SelectableTeamData | null>(null);
+  const [deleteTeamEmployeeCount, setDeleteTeamEmployeeCount] = useState<number>(0);
+  const [deleteTeamEmployeeCountLoading, setDeleteTeamEmployeeCountLoading] = useState(false);
+  const [deleteTeamError, setDeleteTeamError] = useState<string | null>(null);
+  // Add state for delete success message, similar to other modals
+  const [deleteTeamSuccessMessage, setDeleteTeamSuccessMessage] = useState<string | null>(null);
+
   const queryClient = useQueryClient();
   const { isSignedIn, isLoaded: isAuthLoaded, orgId } = useAuth(); // orgId is from useAuth
 
@@ -90,8 +115,8 @@ const Settings = () => {
     { id: 'Users', label: 'Users' },
     { id: 'Teams', label: 'Teams' },
     { id: 'Integrations', label: 'Integrations' },
-    { id: 'Employees', label: 'Employee Data' },
     { id: 'Notifications', label: 'Notifications'},
+    { id: 'Employees', label: 'CSV Upload' },
   ];
 
   const displayedTabItems = React.useMemo(() => {
@@ -576,6 +601,175 @@ const Settings = () => {
     },
   });
 
+  const closeCreateTeamModal = () => {
+    setIsCreateTeamModalOpen(false);
+    // Resetting fields on close is good practice if modal is re-used or if values shouldn't persist
+    setNewTeamName(''); 
+    setNewTeamDepartment('');
+    setCreateTeamError(null);
+  };
+
+  const handleCreateTeamSave = async () => {
+    if (!newTeamName.trim() || !newTeamDepartment.trim()) {
+      setCreateTeamError('Team name and department are required.');
+      return;
+    }
+    setCreateTeamError(null); // Clear previous errors
+    createTeamMutation.mutate({ name: newTeamName.trim(), department: newTeamDepartment.trim() });
+  };
+
+  // Mutation for creating a new team
+  const createTeamMutation = useMutation<
+    any, // Backend response type (expecting the new team object)
+    Error, // Error type
+    { name: string; department: string } // Variables type (name, department)
+  >({
+    mutationFn: async (teamData) => {
+      // Assuming your apiClient is set up to handle POST requests
+      // And that the backend route for creating a team is POST /api/teams
+      // Adjust the endpoint if it's different (e.g., just '/teams' if apiClient has a base URL)
+      const response = await apiClient.post('/teams', teamData); // Using '/teams' assuming apiClient baseURL is /api
+      return response.data; 
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allTeamsForList'] });
+      closeCreateTeamModal();
+      // Optionally, add a success toast/message here if desired, though modal closing often suffices
+      // setSuccessMessage('Team created successfully!'); // Example if you have a general success message state
+    },
+    onError: (error: Error) => {
+      setCreateTeamError(error.message || 'An unknown error occurred while creating the team.');
+    },
+    // onSettled can be used to turn off loading state regardless of success/error,
+    // but setCreateTeamLoading will be handled by isPending/isLoading from the hook directly in UI.
+  });
+
+  const openEditTeamModal = (team: SelectableTeamData) => {
+    setEditingTeam(team);
+    setEditTeamName(team.name);
+    setEditTeamDepartment(team.department);
+    setIsEditTeamModalOpen(true);
+    setEditTeamError(null);
+  };
+
+  const closeEditTeamModal = () => {
+    setIsEditTeamModalOpen(false);
+    setEditingTeam(null);
+    setEditTeamName('');
+    setEditTeamDepartment('');
+    setEditTeamError(null);
+  };
+
+  const handleEditTeamSave = async () => {
+    if (!editingTeam) {
+      setEditTeamError('No team selected for editing.');
+      return;
+    }
+    if (!editTeamName.trim() || !editTeamDepartment.trim()) {
+      setEditTeamError('Team name and department are required.');
+      return;
+    }
+    setEditTeamError(null);
+    editTeamMutation.mutate({ 
+      id: editingTeam.id, 
+      name: editTeamName.trim(), 
+      department: editTeamDepartment.trim() 
+    });
+  };
+
+  // Mutation for updating an existing team
+  const editTeamMutation = useMutation<
+    any, // Backend response type (expecting the updated team object)
+    Error, // Error type
+    { id: number; name: string; department: string } // Variables type
+  >({
+    mutationFn: async (teamData) => {
+      const { id, ...updatePayload } = teamData;
+      // Adjust endpoint if apiClient baseURL is not /api
+      const response = await apiClient.put(`/teams/${id}`, updatePayload);
+      return response.data;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['allTeamsForList'] });
+      // Optionally, update the specific item in the cache if the backend returns the updated team
+      // queryClient.setQueryData(['allTeamsForList'], (oldData: SelectableTeamData[] | undefined) => 
+      //   oldData ? oldData.map(team => team.id === variables.id ? { ...team, ...variables } : team) : []
+      // );
+      closeEditTeamModal();
+    },
+    onError: (error: Error) => {
+      setEditTeamError(error.message || 'An unknown error occurred while updating the team.');
+    },
+  });
+
+  // Delete Team Modal Handlers
+  const openDeleteTeamModal = async (team: SelectableTeamData) => {
+    setDeletingTeam(team);
+    setIsDeleteTeamModalOpen(true); // Open modal immediately to show loading state for count
+    setDeleteTeamEmployeeCountLoading(true);
+    setDeleteTeamError(null); // Clear previous errors
+    setDeleteTeamSuccessMessage(null); // Clear success message when opening modal
+    try {
+      const response = await apiClient.get<{ employeeCount: number }>(`/teams/${team.id}/employee-count`);
+      setDeleteTeamEmployeeCount(response.data.employeeCount);
+    } catch (error: any) {
+      console.error('Failed to fetch employee count for team:', error);
+      setDeleteTeamError(error.response?.data?.message || error.message || 'Failed to fetch employee count for this team.');
+      setDeleteTeamEmployeeCount(0); // Sensible default or indicate error in count
+    } finally {
+      setDeleteTeamEmployeeCountLoading(false);
+    }
+  };
+
+  const closeDeleteTeamModal = () => {
+    setIsDeleteTeamModalOpen(false);
+    setDeletingTeam(null);
+    setDeleteTeamError(null);
+    setDeleteTeamSuccessMessage(null); // Ensure success message is cleared on close
+    setDeleteTeamEmployeeCount(0); // Reset count on close
+  };
+
+  const handleDeleteTeamConfirm = async () => {
+    if (!deletingTeam) {
+      setDeleteTeamError("No team selected for deletion."); // Should not happen if modal opened correctly
+      return;
+    }
+    // Call the mutation to delete the team
+    deleteTeamMutation.mutate(deletingTeam.id);
+  };
+
+  // NEW Mutation for deleting a team
+  const deleteTeamMutation = useMutation<
+    any, // Response type from backend (e.g., { message: string })
+    Error, // Error type
+    number // Variables type (teamId)
+  >({
+    mutationFn: async (teamId: number) => {
+      setDeleteTeamError(null); 
+      setDeleteTeamSuccessMessage(null); 
+      const response = await apiClient.delete(`/teams/${teamId}`);
+      return response.data;
+    },
+    onSuccess: async (data: any) => { // Made onSuccess async and explicitly typed data for now
+      try {
+        await refetchAllTeamsForList(); // Explicitly call refetch
+        setDeleteTeamSuccessMessage(data?.message || 'Team deleted successfully!');
+      } catch (error) {
+        console.error("Failed to refetch teams list after deletion:", error);
+        setDeleteTeamError('Team deleted, but failed to refresh the list. Please refresh manually.');
+      }
+      
+      setTimeout(() => {
+        closeDeleteTeamModal();
+        setDeleteTeamSuccessMessage(null); 
+      }, 1500);
+    },
+    onError: (error: Error) => {
+      setDeleteTeamError(error.message || 'An unknown error occurred while deleting the team.');
+      setDeleteTeamSuccessMessage(null);
+    },
+  });
+
   // Loading state for the whole page based on AppContext user loading
   if (isLoadingAppContextUser) {
     return (
@@ -737,6 +931,22 @@ const Settings = () => {
             {/* === "All Teams" List Card - ADMINS ONLY === */}
             {currentUser && currentUser.role === 'ADMIN' && (
               <div className="">
+                {/* Add New Team Button */} 
+                <div className="mb-4 flex justify-start">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreateTeamModalOpen(true);
+                      setNewTeamName(''); // Reset form fields when opening
+                      setNewTeamDepartment('');
+                      setCreateTeamError(null); // Clear previous errors
+                    }}
+                    className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Add New Team
+                  </button>
+                </div>
+
                 <div className="">
                   {isLoadingAllTeamsForList && (
                     <div className="mt-4 text-sm text-gray-500">Loading all teams...</div>
@@ -779,10 +989,13 @@ const Settings = () => {
                                 } else if (team.userId && team.userId === currentUser?.id) {
                                     displayManager = `${currentUser.name || 'You'} (Admin)`;
                                 }
+                                const isUnassignedTeam = team.name === "NO TEAM ASSIGNED"; // Check if it's the special team
+
                                 return (
                                   <tr key={team.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                       {team.name}
+                                      {isUnassignedTeam && <span className="ml-2 text-xs text-gray-500 italic">(System Team)</span>}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                       {team.department}
@@ -791,12 +1004,47 @@ const Settings = () => {
                                       {displayManager}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                      <button 
-                                        onClick={() => openAssignManagerModal(team)} 
-                                        className="text-indigo-600 hover:text-indigo-900"
-                                      >
-                                        Assign Manager<span className="sr-only">, {team.name}</span>
-                                      </button>
+                                      {!isUnassignedTeam ? (
+                                        <DropdownMenu.Root>
+                                          <DropdownMenu.Trigger asChild>
+                                            <button className="p-1.5 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
+                                              <DotsThreeVertical size={20} weight="bold" />
+                                              <span className="sr-only">Actions for {team.name}</span>
+                                            </button>
+                                          </DropdownMenu.Trigger>
+                                          <DropdownMenu.Portal>
+                                            <DropdownMenu.Content 
+                                              className="min-w-[180px] bg-white rounded-md shadow-lg border border-gray-200 p-1 z-50" 
+                                              sideOffset={5}
+                                              align="end"
+                                            >
+                                              <DropdownMenu.Item 
+                                                className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-md hover:bg-indigo-50 hover:text-indigo-600 focus:bg-indigo-50 focus:text-indigo-600 focus:outline-none cursor-pointer"
+                                                onSelect={() => {
+                                                  openEditTeamModal(team);
+                                                }}
+                                              >
+                                                <Pencil size={16} className="mr-2.5" /> Edit Team Details
+                                              </DropdownMenu.Item>
+                                              <DropdownMenu.Item 
+                                                className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-md hover:bg-indigo-50 hover:text-indigo-600 focus:bg-indigo-50 focus:text-indigo-600 focus:outline-none cursor-pointer"
+                                                onSelect={() => openAssignManagerModal(team)}
+                                              >
+                                                <UserPlus size={16} className="mr-2.5" /> Assign Manager
+                                              </DropdownMenu.Item>
+                                              <DropdownMenu.Separator className="h-px bg-gray-200 my-1" />
+                                              <DropdownMenu.Item 
+                                                className="flex items-center px-3 py-2 text-sm text-red-600 rounded-md hover:bg-red-50 focus:bg-red-50 focus:text-red-700 focus:outline-none cursor-pointer"
+                                                onSelect={() => openDeleteTeamModal(team)}
+                                              >
+                                                <Trash size={16} className="mr-2.5" /> Delete Team
+                                              </DropdownMenu.Item>
+                                            </DropdownMenu.Content>
+                                          </DropdownMenu.Portal>
+                                        </DropdownMenu.Root>
+                                      ) : (
+                                        <span className="text-xs text-gray-400 italic">N/A</span> // No actions for "NO TEAM ASSIGNED"
+                                      )}
                                     </td>
                                   </tr>
                                 );
@@ -967,7 +1215,7 @@ const Settings = () => {
                   <div className="mt-6 flex justify-end space-x-3">
                     <button type="button" className="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2" 
                             onClick={closeAssignManagerModal} disabled={assignManagerModalSaveLoading}>Cancel</button>
-                    <button type="button" className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-gray-400" 
+                    <button type="button" className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2" 
                             onClick={handleAssignManagerSave} disabled={isLoadingManagers || assignManagerModalSaveLoading}>{assignManagerModalSaveLoading ? 'Saving...' : 'Save Assignment'}</button>
                   </div>
                 </Dialog.Panel>
@@ -1076,8 +1324,297 @@ const Settings = () => {
         </Dialog>
       </Transition.Root>
 
+      {/* Edit Team Modal */}
+      <Transition.Root show={isEditTeamModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-10" onClose={closeEditTeamModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 z-10 overflow-y-auto">
+            <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                  <div>
+                    <div className="mt-3 text-center sm:mt-2">
+                      <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">
+                        Edit Team: {editingTeam?.name}
+                      </Dialog.Title>
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <label htmlFor="edit-team-name" className="block text-sm font-medium text-gray-700 text-left">
+                            Team Name
+                          </label>
+                          <div className="mt-1">
+                            <input
+                              type="text"
+                              name="edit-team-name"
+                              id="edit-team-name"
+                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+                              value={editTeamName}
+                              onChange={(e) => setEditTeamName(e.target.value)}
+                              disabled={editTeamMutation.isPending}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label htmlFor="edit-team-department" className="block text-sm font-medium text-gray-700 text-left">
+                            Department
+                          </label>
+                          <div className="mt-1">
+                            <input
+                              type="text"
+                              name="edit-team-department"
+                              id="edit-team-department"
+                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+                              value={editTeamDepartment}
+                              onChange={(e) => setEditTeamDepartment(e.target.value)}
+                              disabled={editTeamMutation.isPending}
+                            />
+                          </div>
+                        </div>
+                        {editTeamError && (
+                           <div className="mt-2 p-3 bg-red-50 text-red-600 text-sm rounded-md">
+                                <WarningCircle size={18} className="inline mr-1" /> {editTeamError}
+                           </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-2 sm:text-sm disabled:opacity-50"
+                      onClick={handleEditTeamSave}
+                      disabled={editTeamMutation.isPending}
+                    >
+                      {editTeamMutation.isPending ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-1 sm:mt-0 sm:text-sm"
+                      onClick={closeEditTeamModal}
+                      disabled={editTeamMutation.isPending}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
+
+      {/* Create Team Modal */}
+      <Transition.Root show={isCreateTeamModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-10" onClose={closeCreateTeamModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 z-10 overflow-y-auto">
+            <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                  <div>
+                    <div className="mt-3 text-center sm:mt-2">
+                      <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">
+                        Create New Team
+                      </Dialog.Title>
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <label htmlFor="new-team-name" className="block text-sm font-medium text-gray-700 text-left">
+                            Team Name
+                          </label>
+                          <div className="mt-1">
+                            <input
+                              type="text"
+                              name="new-team-name"
+                              id="new-team-name"
+                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+                              placeholder="e.g., Engineering, Marketing"
+                              value={newTeamName}
+                              onChange={(e) => setNewTeamName(e.target.value)}
+                              disabled={createTeamMutation.isPending}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label htmlFor="new-team-department" className="block text-sm font-medium text-gray-700 text-left">
+                            Department
+                          </label>
+                          <div className="mt-1">
+                            <input
+                              type="text"
+                              name="new-team-department"
+                              id="new-team-department"
+                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+                              placeholder="e.g., Product Development, Growth"
+                              value={newTeamDepartment}
+                              onChange={(e) => setNewTeamDepartment(e.target.value)}
+                              disabled={createTeamMutation.isPending}
+                            />
+                          </div>
+                        </div>
+                        {createTeamError && (
+                           <div className="mt-2 p-3 bg-red-50 text-red-600 text-sm rounded-md">
+                                <WarningCircle size={18} className="inline mr-1" /> {createTeamError}
+                           </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-2 sm:text-sm disabled:opacity-50"
+                      onClick={handleCreateTeamSave}
+                      disabled={createTeamMutation.isPending}
+                    >
+                      {createTeamMutation.isPending ? 'Creating...' : 'Create Team'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-1 sm:mt-0 sm:text-sm"
+                      onClick={closeCreateTeamModal}
+                      disabled={createTeamMutation.isPending}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
+
+      {/* Delete Team Modal UI (Basic structure, assuming you will build this out) */}
+      <Transition.Root show={isDeleteTeamModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-10" onClose={closeDeleteTeamModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 z-10 overflow-y-auto">
+            <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                  <div>
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                      <WarningCircle className="h-6 w-6 text-red-600" aria-hidden="true" />
+                    </div>
+                    <div className="mt-3 text-center sm:mt-5">
+                      <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">
+                        Delete Team: {deletingTeam?.name}
+                      </Dialog.Title>
+                      <div className="mt-2">
+                        {deleteTeamEmployeeCountLoading ? (
+                          <p className="text-sm text-gray-500">Loading employee count...</p>
+                        ) : (
+                          <>
+                            <p className="text-sm text-gray-500">
+                              This team has {deleteTeamEmployeeCount} employee(s).
+                            </p>
+                            {deleteTeamEmployeeCount > 0 && (
+                              <p className="mt-1 text-sm text-yellow-600">
+                                Deleting this team will unassign these employees. This action cannot be undone.
+                              </p>
+                            )}
+                             <p className="mt-1 text-sm text-gray-500">
+                              Are you sure you want to permanently delete this team?
+                            </p>
+                          </>
+                        )}
+                      </div>
+                      {deleteTeamError && (
+                        <div className="mt-3 p-3 bg-red-50 text-red-700 text-sm rounded-md text-left">
+                           <WarningCircle size={18} className="inline mr-2" /> {deleteTeamError}
+                        </div>
+                      )}
+                      {deleteTeamSuccessMessage && (
+                        <div className="mt-3 p-3 bg-green-50 text-green-700 text-sm rounded-md text-left">
+                          <CheckCircle size={18} className="inline mr-2" /> {deleteTeamSuccessMessage}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex w-full justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 sm:col-start-2 sm:text-sm disabled:opacity-50"
+                      onClick={handleDeleteTeamConfirm}
+                      disabled={deleteTeamMutation.isPending || deleteTeamEmployeeCountLoading || !!deleteTeamSuccessMessage}
+                    >
+                      {deleteTeamMutation.isPending ? 'Deleting...' : 'Delete Team'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-1 sm:mt-0 sm:text-sm"
+                      onClick={closeDeleteTeamModal}
+                      disabled={deleteTeamMutation.isPending}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
+
     </div>
   );
 };
 
-export default Settings; 
+export default Settings;
