@@ -1,10 +1,58 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = "prisma+postgres://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlfa2V5IjoiYzYxZjJmYjAtNmU1NS00ZjIzLWI4YmQtOTQ5YzgyZDU0OGZhIiwidGVuYW50X2lkIjoiZWFlYzFkOGU1ZWU4MTRkMGNhZjUwZmUxNDQ2MDY5MDc1NTUxYTg1ZTMwMzFmMzVhOWZiZmFlZGMwZjJjNzY5NyIsImludGVybmFsX3NlY3JldCI6IjkwMzVhZjYwLTNhMTItNDE5Mi1hZGQ3LTUwZGY5ODIzOGVjMyJ9.cFB8UVGf8FBmAUrZ9Czu70YlHQPqKl6uGlK0ZGM31cw"
+  url      = env("DATABASE_URL")
+}
+
+// MODEL ORDERING: Based on your last provided schema that worked up to Employee.
+// If issues arise, consider reordering to: Team, Organization, User, Department, Employee, Meeting etc.
+
+model Organization {
+  id                  String       @id @db.Uuid
+  clerkOrganizationId String       @unique
+  name                String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  Team                Team[]
+  departments         Department[]
+  User                User[]
+
+  @@index([clerkOrganizationId])
+}
+
+model Department {
+  id             Int          @id @default(autoincrement())
+  name           String
+  organizationId String       @db.Uuid
+  headId         Int?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  head           User?        @relation("DepartmentHead", fields: [headId], references: [id])
+  teams          Team[]
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
+  @@index([headId])
+}
+
+model Team {
+  id             Int          @id @default(autoincrement())
+  name           String
+  organizationId String       @db.Uuid
+  Organization   Organization @relation(fields: [organizationId], references: [id])
+  departmentId   Int
+  department     Department   @relation(fields: [departmentId], references: [id])
+  userId         Int? // Keeping TeamManager relation commented for now
+  user           User?        @relation("TeamManager", fields: [userId], references: [id])
+  Employee       Employee[] // Using your casing from previous schema
+
+  createdAt DateTime @default(now()) // <--- ADD THIS LINE
+  updatedAt DateTime @updatedAt // <--- ADD THIS LINE
 }
 
 model User {
@@ -15,79 +63,69 @@ model User {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   clerkId            String?       @unique
-  googleAccessToken  String?
-  googleRefreshToken String?
-  googleTokenExpiry  DateTime?
-  zoomAccessToken    String?
-  zoomRefreshToken   String?
-  zoomTokenExpiry    DateTime?
+  // Scalar fields for google/zoom tokens would go here from your backup if you have them
+  googleAccessToken  String? // Example
+  googleRefreshToken String? // Example
+  googleTokenExpiry  DateTime? // Example
+  zoomAccessToken    String? // Example
+  zoomRefreshToken   String? // Example
+  zoomTokenExpiry    DateTime? // Example
   organizationId     String?       @db.Uuid
-  employees          Employee[]
-  meetings           Meeting[]     @relation("ManagerMeetings")
-  teams              Team[]
   Organization       Organization? @relation(fields: [organizationId], references: [id])
+  departmentsHeaded  Department[]  @relation("DepartmentHead")
   role               UserRole      @default(USER)
+  Employee           Employee[] // Using your casing
+  meetings           Meeting[]     @relation("ManagerMeetings") // Relation to Meeting
 
-  @@index([organizationId])
-}
+  teams Team[] @relation("TeamManager") // Keeping commented for now
 
-model Team {
-  id             Int          @id @default(autoincrement())
-  name           String
-  department     String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  userId         Int?
-  organizationId String       @db.Uuid
-  employees      Employee[]
-  Organization   Organization @relation(fields: [organizationId], references: [id])
-  user           User?        @relation(fields: [userId], references: [id])
-
-  @@unique([name, organizationId])
   @@index([organizationId])
 }
 
 model Employee {
-  id             Int        @id @default(autoincrement())
-  name           String
-  title          String
-  email          String     @unique
-  teamId         Int
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  userId         Int
-  startDate      DateTime?
-  country        String?
-  managerId      Int?
+  id        Int       @id @default(autoincrement())
+  name      String
+  title     String
+  email     String    @unique
+  teamId    Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  userId    Int
+  startDate DateTime?
+  country   String?
+  managerId Int?
+
   Employee       Employee?  @relation("EmployeeToEmployee", fields: [managerId], references: [id])
   other_Employee Employee[] @relation("EmployeeToEmployee")
   team           Team       @relation(fields: [teamId], references: [id])
   user           User       @relation(fields: [userId], references: [id])
-  meetings       Meeting[]  @relation("EmployeeMeetings")
+  meetings       Meeting[]  @relation("EmployeeMeetings") // Relation to Meeting
 
   @@index([managerId])
 }
 
 model Meeting {
-  id                    Int              @id @default(autoincrement())
+  id                    Int         @id @default(autoincrement())
   title                 String?
   scheduledTime         DateTime
   durationMinutes       Int?
   platform              String?
   audioFileUrl          String?
-  status                String           @default("SCHEDULED")
+  status                String      @default("SCHEDULED")
   managerId             Int
   employeeId            Int
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
-  meetingBaasId         String?          @unique
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  meetingBaasId         String?     @unique
   googleCalendarEventId String?
   meetingUrl            String?
-  meetingType           MeetingType      @default(ONE_ON_ONE)
-  employee              Employee         @relation("EmployeeMeetings", fields: [employeeId], references: [id])
-  manager               User             @relation("ManagerMeetings", fields: [managerId], references: [id])
-  insights              MeetingInsight[]
-  transcript            Transcript?
+  meetingType           MeetingType @default(ONE_ON_ONE)
+
+  employee Employee @relation("EmployeeMeetings", fields: [employeeId], references: [id])
+  manager  User     @relation("ManagerMeetings", fields: [managerId], references: [id])
+
+  insights   MeetingInsight[] // Keep commented for relations to models not yet added
+  transcript Transcript? // Keep commented for relations to models not yet added
 
   @@index([managerId])
   @@index([employeeId])
@@ -127,26 +165,14 @@ model OAuthState {
   @@index([stateValue])
 }
 
-model Organization {
-  id                  String   @id @db.Uuid
-  clerkOrganizationId String   @unique
-  name                String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  Team                Team[]
-  User                User[]
-
-  @@index([clerkOrganizationId])
+enum UserRole {
+  ADMIN
+  MANAGER
+  USER
 }
 
 enum MeetingType {
   ONE_ON_ONE
   SIX_MONTH_REVIEW
   TWELVE_MONTH_REVIEW
-}
-
-enum UserRole {
-  ADMIN
-  MANAGER
-  USER
 }

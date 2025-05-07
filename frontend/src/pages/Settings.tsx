@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
-import { Link as LinkIcon, CheckCircle, WarningCircle, X } from '@phosphor-icons/react'; // Example icon, Added X and Bell for Notifications
+import { Link as LinkIcon, CheckCircle, WarningCircle, X, CaretDown, CaretUp, Check } from '@phosphor-icons/react'; // Added CaretDown, CaretUp, Check
 import { userService } from '../api/client'; // Keep named import for userService
 import apiClient from '../api/client'; // Add default import for apiClient
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'; // Removed UseMutationOptions
@@ -8,6 +8,7 @@ import { useAuth } from '@clerk/clerk-react'; // useOrganization has been remove
 import { Dialog, Transition } from '@headlessui/react'; // Added Dialog and Transition
 import { useAppContext, AppUser } from '../context/AppContext'; // Keep AppUser for now
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import * as Select from '@radix-ui/react-select'; // Added Radix UI Select import
 import { DotsThreeVertical, Pencil, UserPlus, Trash } from '@phosphor-icons/react'; // Icons for dropdown
 
 // Define expected user data shape
@@ -33,12 +34,20 @@ interface ManagerData {
 interface SelectableTeamData {
   id: number;
   name: string;
-  department: string;
+  department: DepartmentData;
   userId: number | null; // ID of the user currently managing this team, or null
 }
 
+// Define department data shape
+interface DepartmentData {
+  id: number;
+  name: string;
+  // headId?: number | null; // Optional: For future use
+  // teamCount?: number;    // Optional: For future use
+}
+
 // Define possible tab values
-type SettingsTab = 'Users' | 'Teams' | 'Integrations' | 'Employees' | 'Notifications';
+type SettingsTab = 'Users' | 'Teams' | 'Integrations' | 'Employees' | 'Notifications' | 'Departments';
 
 // Define possible UserRoles for the application
 const APP_USER_ROLES = ['ADMIN', 'MANAGER', 'USER'] as const;
@@ -75,9 +84,15 @@ const Settings = () => {
   // State for Create Team Modal
   const [isCreateTeamModalOpen, setIsCreateTeamModalOpen] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
-  const [newTeamDepartment, setNewTeamDepartment] = useState('');
-  const [createTeamLoading, setCreateTeamLoading] = useState(false);
+  const [newTeamDepartmentId, setNewTeamDepartmentId] = useState<number | null>(null); // MODIFIED: for ID, can be null
+  const [createTeamLoading, setCreateTeamLoading] = useState(false); // This might be replaced by mutation.isPending
   const [createTeamError, setCreateTeamError] = useState<string | null>(null);
+
+  // State for Create Department Modal
+  const [isCreateDepartmentModalOpen, setIsCreateDepartmentModalOpen] = useState(false);
+  const [newDepartmentName, setNewDepartmentName] = useState('');
+  const [createDepartmentLoading, setCreateDepartmentLoading] = useState(false);
+  const [createDepartmentError, setCreateDepartmentError] = useState<string | null>(null);
 
   // State for User Invitation Modal
   const [isInviteUserModalOpen, setIsInviteUserModalOpen] = useState(false);
@@ -98,6 +113,12 @@ const Settings = () => {
   const [editTeamDepartment, setEditTeamDepartment] = useState('');
   const [editTeamError, setEditTeamError] = useState<string | null>(null);
 
+  // State for Edit Department Modal
+  const [isEditDepartmentModalOpen, setIsEditDepartmentModalOpen] = useState(false);
+  const [editingDepartment, setEditingDepartment] = useState<DepartmentData | null>(null);
+  const [editDepartmentName, setEditDepartmentName] = useState('');
+  const [editDepartmentError, setEditDepartmentError] = useState<string | null>(null);
+
   // State for Delete Team Modal
   const [isDeleteTeamModalOpen, setIsDeleteTeamModalOpen] = useState(false);
   const [deletingTeam, setDeletingTeam] = useState<SelectableTeamData | null>(null);
@@ -107,6 +128,12 @@ const Settings = () => {
   // Add state for delete success message, similar to other modals
   const [deleteTeamSuccessMessage, setDeleteTeamSuccessMessage] = useState<string | null>(null);
 
+  // State for Delete Department Modal
+  const [isDeleteDepartmentModalOpen, setIsDeleteDepartmentModalOpen] = useState(false);
+  const [deletingDepartment, setDeletingDepartment] = useState<DepartmentData | null>(null);
+  const [deleteDepartmentError, setDeleteDepartmentError] = useState<string | null>(null);
+  const [deleteDepartmentSuccessMessage, setDeleteDepartmentSuccessMessage] = useState<string | null>(null);
+
   const queryClient = useQueryClient();
   const { isSignedIn, isLoaded: isAuthLoaded, orgId } = useAuth(); // orgId is from useAuth
 
@@ -114,6 +141,7 @@ const Settings = () => {
   const allPossibleTabItems: Array<{ id: SettingsTab; label: string; icon?: React.ElementType }> = [
     { id: 'Users', label: 'Users' },
     { id: 'Teams', label: 'Teams' },
+    { id: 'Departments', label: 'Departments' }, // Added Departments tab
     { id: 'Integrations', label: 'Integrations' },
     { id: 'Notifications', label: 'Notifications'},
     { id: 'Employees', label: 'CSV Upload' },
@@ -277,6 +305,33 @@ const Settings = () => {
     },
     // This query can be enabled once the user (ADMIN) is loaded, as it's for a primary list view
     enabled: !!currentUser && currentUser.role === 'ADMIN', 
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch all departments (for the new "Departments" tab list card)
+  const {
+    data: allDepartments,
+    isLoading: isLoadingAllDepartments,
+    error: allDepartmentsError,
+    refetch: refetchAllDepartments
+  } = useQuery<DepartmentData[], Error>({
+    queryKey: ['allDepartments'],
+    queryFn: async () => {
+      try {
+        // Assuming apiClient is configured with baseURL (e.g., /api)
+        const response = await apiClient.get('/departments'); 
+        if (!response || response.status < 200 || response.status >= 300) {
+          const errorData = response?.data as any;
+          throw new Error(errorData?.message || `Failed to fetch departments. Status: ${response?.status || 'unknown'}`);
+        }
+        return response.data;
+      } catch (err: any) {
+        console.error("Error fetching departments:", err);
+        throw new Error(err.message || 'An unknown error occurred while fetching departments');
+      }
+    },
+    // Enable if user is Admin or Manager. Adjust if only Admin should see/manage departments.
+    enabled: !!currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER'), 
     staleTime: 5 * 60 * 1000,
   });
 
@@ -603,51 +658,92 @@ const Settings = () => {
 
   const closeCreateTeamModal = () => {
     setIsCreateTeamModalOpen(false);
-    // Resetting fields on close is good practice if modal is re-used or if values shouldn't persist
     setNewTeamName(''); 
-    setNewTeamDepartment('');
+    setNewTeamDepartmentId(null); // MODIFIED: Reset to null
     setCreateTeamError(null);
   };
 
   const handleCreateTeamSave = async () => {
-    if (!newTeamName.trim() || !newTeamDepartment.trim()) {
-      setCreateTeamError('Team name and department are required.');
+    if (!newTeamName.trim()) {
+      setCreateTeamError('Team name is required.');
       return;
     }
     setCreateTeamError(null); // Clear previous errors
-    createTeamMutation.mutate({ name: newTeamName.trim(), department: newTeamDepartment.trim() });
+
+    const payload: { name: string; departmentId?: number } = {
+      name: newTeamName.trim(),
+    };
+
+    if (newTeamDepartmentId !== null) {
+      payload.departmentId = newTeamDepartmentId;
+    }
+    // If newTeamDepartmentId is null, departmentId field is omitted from payload,
+    // and backend will default to SYSTEM department.
+
+    createTeamMutation.mutate(payload);
   };
 
   // Mutation for creating a new team
   const createTeamMutation = useMutation<
     any, // Backend response type (expecting the new team object)
     Error, // Error type
-    { name: string; department: string } // Variables type (name, department)
+    { name: string; departmentId?: number } // MODIFIED: departmentId is optional number
   >({
     mutationFn: async (teamData) => {
-      // Assuming your apiClient is set up to handle POST requests
-      // And that the backend route for creating a team is POST /api/teams
-      // Adjust the endpoint if it's different (e.g., just '/teams' if apiClient has a base URL)
-      const response = await apiClient.post('/teams', teamData); // Using '/teams' assuming apiClient baseURL is /api
+      const response = await apiClient.post('/teams', teamData); 
       return response.data; 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['allTeamsForList'] });
       closeCreateTeamModal();
-      // Optionally, add a success toast/message here if desired, though modal closing often suffices
-      // setSuccessMessage('Team created successfully!'); // Example if you have a general success message state
     },
     onError: (error: Error) => {
       setCreateTeamError(error.message || 'An unknown error occurred while creating the team.');
     },
-    // onSettled can be used to turn off loading state regardless of success/error,
-    // but setCreateTeamLoading will be handled by isPending/isLoading from the hook directly in UI.
   });
+
+  // Mutation for creating a new department
+  const createDepartmentMutation = useMutation<
+  DepartmentData, // Backend response type (expecting the new department object)
+Error,          // Error type
+{ name: string } // Variables type (name for the new department)
+>({
+mutationFn: async (departmentData: { name: string }) => {
+  // setCreateDepartmentLoading(true); // This loading state is better handled by createDepartmentMutation.isPending
+  setCreateDepartmentError(null); // Clear previous errors, uses your existing state
+  try {
+    const response = await apiClient.post('/departments', departmentData); // Assumes your API endpoint is /api/departments
+    if (!response || response.status < 200 || response.status >= 300) {
+      const errorData = response?.data as any;
+      throw new Error(errorData?.message || `Failed to create department. Status: ${response?.status}`);
+    }
+    return response.data;
+  } catch (err: any) {
+    // Ensure an actual Error object is thrown for react-query's onError
+    if (err instanceof Error) throw err;
+    throw new Error(String(err || 'An unknown error occurred while creating the department.'));
+  }
+},
+onSuccess: () => {
+  queryClient.invalidateQueries({ queryKey: ['allDepartments'] }); // Refreshes the department list
+  closeCreateDepartmentModal(); // Calls the handler function you'll add next
+  // Optional: setNewDepartmentName(''); // Clear input in modal, can also be done in closeCreateDepartmentModal
+  // Optional: setSuccessMessage('Department created successfully!'); // If you have a general success message state
+},
+onError: (error: Error) => {
+  setCreateDepartmentError(error.message || 'An unknown error occurred while creating the department.'); // Uses your existing state
+},
+// onSettled: () => { // Optional: For cleanup that runs on success or error
+//   setCreateDepartmentLoading(false); // This loading state is better handled by createDepartmentMutation.isPending
+// },
+});
+
+  
 
   const openEditTeamModal = (team: SelectableTeamData) => {
     setEditingTeam(team);
     setEditTeamName(team.name);
-    setEditTeamDepartment(team.department);
+    setEditTeamDepartment(team.department.name);
     setIsEditTeamModalOpen(true);
     setEditTeamError(null);
   };
@@ -658,6 +754,20 @@ const Settings = () => {
     setEditTeamName('');
     setEditTeamDepartment('');
     setEditTeamError(null);
+  };
+
+  const closeDeleteDepartmentModal = () => {
+    setIsDeleteDepartmentModalOpen(false);
+    setDeletingDepartment(null);
+    setDeleteDepartmentError(null);
+    setDeleteDepartmentSuccessMessage(null); // Clear success message on close
+  };
+
+  const closeEditDepartmentModal = () => {
+    setIsEditDepartmentModalOpen(false);
+    setEditingDepartment(null); // This uses the state we defined earlier
+    setEditDepartmentName('');  // This uses the state we defined earlier
+    setEditDepartmentError(null); // This uses the state we defined earlier
   };
 
   const handleEditTeamSave = async () => {
@@ -675,6 +785,52 @@ const Settings = () => {
       name: editTeamName.trim(), 
       department: editTeamDepartment.trim() 
     });
+  };
+
+  const handleEditDepartmentSave = async () => {
+    if (!editingDepartment) {
+      setEditDepartmentError('No department selected for editing.');
+      return;
+    }
+    if (!editDepartmentName.trim()) {
+      setEditDepartmentError('Department name cannot be empty.');
+      return;
+    }
+    setEditDepartmentError(null);
+
+    editDepartmentMutation.mutate({
+      id: editingDepartment.id,
+      name: editDepartmentName.trim(),
+    });
+  };
+
+  const openEditDepartmentModal = (department: DepartmentData) => {
+    setEditingDepartment(department); // Uses your existing state
+    setEditDepartmentName(department.name); // Uses your existing state
+    setEditDepartmentError(null); // Uses your existing state
+    setIsEditDepartmentModalOpen(true); // Uses your existing state
+  };
+
+  // Create Department Modal Handlers
+  const openCreateDepartmentModal = () => {
+    setNewDepartmentName('');
+    setCreateDepartmentError(null);
+    setIsCreateDepartmentModalOpen(true);
+  };
+
+  const closeCreateDepartmentModal = () => {
+    setIsCreateDepartmentModalOpen(false);
+    setNewDepartmentName('');
+    setCreateDepartmentError(null);
+  };
+
+  const handleCreateDepartmentSave = async () => {
+    if (!newDepartmentName.trim()) {
+      setCreateDepartmentError('Department name is required.');
+      return;
+    }
+    setCreateDepartmentError(null);
+    createDepartmentMutation.mutate({ name: newDepartmentName.trim() });
   };
 
   // Mutation for updating an existing team
@@ -701,6 +857,62 @@ const Settings = () => {
       setEditTeamError(error.message || 'An unknown error occurred while updating the team.');
     },
   });
+
+  const editDepartmentMutation = useMutation<
+    DepartmentData, // Backend response type (expecting the updated department object)
+    Error,          // Error type
+    { id: number; name: string } // Variables type (id of department to update, new name)
+  >({
+    mutationFn: async (departmentData) => {
+      const { id, ...updatePayload } = departmentData;
+      const response = await apiClient.put(`/departments/${id}`, updatePayload);
+      if (!response || response.status < 200 || response.status >= 300) {
+        const errorData = response?.data as any;
+        throw new Error(errorData?.message || `Failed to update department. Status: ${response?.status}`);
+      }
+      return response.data;
+    },
+    onSuccess: (updatedDepartment) => {
+      queryClient.invalidateQueries({ queryKey: ['allDepartments'] });
+      closeEditDepartmentModal();
+    },
+    onError: (error: Error) => {
+      setEditDepartmentError(error.message || 'An unknown error occurred while updating the department.');
+    },
+  });
+
+  const deleteDepartmentMutation = useMutation<
+  any,
+  Error,
+  number
+>({
+  mutationFn: async (departmentId: number) => {
+    setDeleteDepartmentError(null);
+    setDeleteDepartmentSuccessMessage(null);
+    const response = await apiClient.delete(`/departments/${departmentId}`);
+    if (!response || response.status < 200 || response.status >= 300) {
+      const errorData = response?.data as any;
+      throw new Error(errorData?.message || `Failed to delete department. Status: ${response?.status}`);
+    }
+    return response.data;
+  },
+  onSuccess: async (data: any) => {
+    try {
+      await refetchAllDepartments();
+      setDeleteDepartmentSuccessMessage(data?.message || 'Department deleted successfully!');
+    } catch (error) {
+      console.error("Failed to refetch departments list after deletion:", error);
+      setDeleteDepartmentError('Department deleted, but failed to refresh the list. Please refresh manually.');
+    }
+    setTimeout(() => {
+      closeDeleteDepartmentModal();
+    }, 1500);
+  },
+  onError: (error: Error) => {
+    setDeleteDepartmentError(error.message || 'An unknown error occurred while deleting the department.');
+    setDeleteDepartmentSuccessMessage(null);
+  },
+});
 
   // Delete Team Modal Handlers
   const openDeleteTeamModal = async (team: SelectableTeamData) => {
@@ -736,6 +948,23 @@ const Settings = () => {
     }
     // Call the mutation to delete the team
     deleteTeamMutation.mutate(deletingTeam.id);
+  };
+
+  const handleDeleteDepartmentConfirm = async () => {
+    if (!deletingDepartment) {
+      setDeleteDepartmentError("No department selected for deletion.");
+      return;
+    }
+    // deleteDepartmentMutation.mutate(deletingDepartment.id); // Will be uncommented later
+    console.log("Attempting to delete department:", deletingDepartment.id); // Placeholder for now
+  };
+
+  const openDeleteDepartmentModal = async (department: DepartmentData) => {
+    setDeletingDepartment(department);
+    setIsDeleteDepartmentModalOpen(true);
+    setDeleteDepartmentError(null);
+    setDeleteDepartmentSuccessMessage(null);
+    // ... any other logic like fetching counts if needed
   };
 
   // NEW Mutation for deleting a team
@@ -938,7 +1167,7 @@ const Settings = () => {
                     onClick={() => {
                       setIsCreateTeamModalOpen(true);
                       setNewTeamName(''); // Reset form fields when opening
-                      setNewTeamDepartment('');
+                      setNewTeamDepartmentId(null); // MODIFIED: Reset to null
                       setCreateTeamError(null); // Clear previous errors
                     }}
                     className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
@@ -998,7 +1227,7 @@ const Settings = () => {
                                       {isUnassignedTeam && <span className="ml-2 text-xs text-gray-500 italic">(System Team)</span>}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                      {team.department}
+                                      {team.department?.name}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                       {displayManager}
@@ -1060,6 +1289,108 @@ const Settings = () => {
             )}
           </>
         )}
+
+{activeTab === 'Departments' && (currentUser.role === 'ADMIN') && ( // Adjust role check as needed
+  <>
+    {/* === "All Departments" List Card - ADMINS/MANAGERS === */}
+    {currentUser && (currentUser.role === 'ADMIN') && ( // Double check role for safety
+      <div className=""> {/* Outer container for department section */}
+        {/* Add New Department Button */}
+        <div className="mb-4 flex justify-start">
+          <button
+            type="button"
+            onClick={openCreateDepartmentModal} // Uses your handler
+            className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            Add New Department
+          </button>
+        </div>
+
+        {/* Department List Table */}
+        <div className=""> {/* Card styling can be added here if desired, e.g., bg-white shadow sm:rounded-lg */}
+          {isLoadingAllDepartments && ( // From your useQuery
+            <div className="mt-4 text-sm text-gray-500">Loading departments...</div>
+          )}
+          {allDepartmentsError && ( // From your useQuery
+            <div className="mt-4 text-sm text-red-600">
+              <WarningCircle size={20} className="inline mr-2" />
+              Error loading departments: {allDepartmentsError.message}
+            </div>
+          )}
+          {!isLoadingAllDepartments && !allDepartmentsError && allDepartments && ( // From your useQuery
+            <div className="mt-4 rounded-lg overflow-hidden">
+              {allDepartments.length === 0 ? (
+                <p className="px-6 py-4 text-sm text-gray-500">No departments found. Click "Add New Department" to create one.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                          Department Name
+                        </th>
+                        {/* Add more columns if DepartmentData includes more fields like 'Head of Department' or 'Team Count' in the future */}
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                          <span className="sr-only">Actions</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {allDepartments.map((department) => (
+                        <tr key={department.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {department.name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <DropdownMenu.Root>
+                              <DropdownMenu.Trigger asChild>
+                                <button className="p-1.5 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
+                                  <DotsThreeVertical size={20} weight="bold" />
+                                  <span className="sr-only">Actions for {department.name}</span>
+                                </button>
+                              </DropdownMenu.Trigger>
+                              <DropdownMenu.Portal>
+                                <DropdownMenu.Content
+                                  className="min-w-[180px] bg-white rounded-md shadow-lg border border-gray-200 p-1 z-50"
+                                  sideOffset={5}
+                                  align="end"
+                                >
+                                  <DropdownMenu.Item
+                                    className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-md hover:bg-indigo-50 hover:text-indigo-600 focus:bg-indigo-50 focus:text-indigo-600 focus:outline-none cursor-pointer"
+                                    onSelect={() => openEditDepartmentModal(department)} // Uses your handler
+                                  >
+                                    <Pencil size={16} className="mr-2.5" /> Edit Department
+                                  </DropdownMenu.Item>
+                                  {/* Future: Option to assign Head of Department could go here */}
+                                  <DropdownMenu.Separator className="h-px bg-gray-200 my-1" />
+                                  <DropdownMenu.Item
+                                    className="flex items-center px-3 py-2 text-sm text-red-600 rounded-md hover:bg-red-50 focus:bg-red-50 focus:text-red-700 focus:outline-none cursor-pointer"
+                                    onSelect={() => openDeleteDepartmentModal(department)} // Uses your handler
+                                  >
+                                    <Trash size={16} className="mr-2.5" /> Delete Department
+                                  </DropdownMenu.Item>
+                                </DropdownMenu.Content>
+                              </DropdownMenu.Portal>
+                            </DropdownMenu.Root>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+    {currentUser && !(currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') && ( // If user is not Admin/Manager
+        <div className="bg-white shadow sm:rounded-lg p-6">
+            <p className="text-sm text-gray-600">Department management is available for administrators and managers.</p>
+        </div>
+    )}
+  </>
+)}
 
         {activeTab === 'Integrations' && (
           <>
@@ -1473,21 +1804,92 @@ const Settings = () => {
                           </div>
                         </div>
                         <div>
-                          <label htmlFor="new-team-department" className="block text-sm font-medium text-gray-700 text-left">
+                          <label htmlFor="new-team-department-select" className="block text-sm font-medium text-gray-700 text-left mb-1">
                             Department
                           </label>
-                          <div className="mt-1">
-                            <input
-                              type="text"
-                              name="new-team-department"
-                              id="new-team-department"
-                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
-                              placeholder="e.g., Product Development, Growth"
-                              value={newTeamDepartment}
-                              onChange={(e) => setNewTeamDepartment(e.target.value)}
-                              disabled={createTeamMutation.isPending}
-                            />
-                          </div>
+                          <Select.Root
+                            // Provide the placeholder value when state is null, otherwise the ID string
+                            value={newTeamDepartmentId === null ? 'SYSTEM_PLACEHOLDER' : newTeamDepartmentId.toString()}
+                            onValueChange={(value) => {
+                              // Map the placeholder value back to null state, otherwise parse the ID
+                              if (value === 'SYSTEM_PLACEHOLDER') {
+                                setNewTeamDepartmentId(null);
+                              } else {
+                                // Ensure value is not empty/null before parsing, though Radix shouldn't allow empty item values
+                                setNewTeamDepartmentId(value ? parseInt(value) : null);
+                              }
+                            }}
+                            disabled={createTeamMutation.isPending || isLoadingAllDepartments}
+                          >
+                            <Select.Trigger
+                              id="new-team-department-select"
+                              className="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm ring-offset-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
+                              aria-label="Department"
+                            >
+                              {/* Display placeholder if state is null, otherwise display selected department name */}
+                              <Select.Value>
+                                {newTeamDepartmentId === null
+                                  ? <span className="text-gray-500">Select a department (optional)</span> // Placeholder text
+                                  : allDepartments?.find(d => d.id === newTeamDepartmentId)?.name || 'Loading...' // Find name from ID
+                                }
+                              </Select.Value>
+                              <Select.Icon className="text-gray-500">
+                                <CaretDown size={16} />
+                              </Select.Icon>
+                            </Select.Trigger>
+                            <Select.Portal>
+                              <Select.Content
+                                position="popper"
+                                sideOffset={5}
+                                className="relative z-50 min-w-[8rem] overflow-hidden rounded-md border border-gray-200 bg-white text-gray-900 shadow-md animate-in fade-in-80"
+                              >
+                                <Select.ScrollUpButton className="flex items-center justify-center h-[25px] bg-white text-gray-700 cursor-default">
+                                  <CaretUp size={16} />
+                                </Select.ScrollUpButton>
+                                <Select.Viewport className="p-1">
+                                  <Select.Item
+                                    value="SYSTEM_PLACEHOLDER" // MODIFIED: Use non-empty placeholder value
+                                    className="relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-indigo-100 focus:text-indigo-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                  >
+                                    <Select.ItemIndicator className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+                                      {/* Conditionally show check if newTeamDepartmentId is null (i.e., this option is selected) */} 
+                                      {newTeamDepartmentId === null && <Check size={14} weight="bold" />}
+                                    </Select.ItemIndicator>
+                                    <Select.ItemText>(Default to System)</Select.ItemText>
+                                  </Select.Item>
+
+                                  {isLoadingAllDepartments && (
+                                    <Select.Item value="loading-placeholder" disabled className="py-1.5 px-3 text-sm text-gray-400">
+                                      Loading departments...
+                                    </Select.Item>
+                                  )}
+                                  {!isLoadingAllDepartments && allDepartments && allDepartments.map((dept) => (
+                                    <Select.Item
+                                      key={dept.id}
+                                      value={dept.id.toString()} // MODIFIED: Value is department ID as string
+                                      className="relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-indigo-100 focus:text-indigo-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                    >
+                                      <Select.ItemIndicator className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+                                        <Check size={14} weight="bold" />
+                                      </Select.ItemIndicator>
+                                      <Select.ItemText>{dept.name}</Select.ItemText>
+                                    </Select.Item>
+                                  ))}
+                                  {!isLoadingAllDepartments && (!allDepartments || allDepartments.length === 0) && (
+                                     <Select.Item value="no-depts-placeholder" disabled className="py-1.5 px-3 text-sm text-gray-400">
+                                      No custom departments available.
+                                    </Select.Item>
+                                  )}
+                                </Select.Viewport>
+                                <Select.ScrollDownButton className="flex items-center justify-center h-[25px] bg-white text-gray-700 cursor-default">
+                                  <CaretDown size={16} />
+                                </Select.ScrollDownButton>
+                              </Select.Content>
+                            </Select.Portal>
+                          </Select.Root>
+                          <p className="mt-1 text-xs text-gray-500">
+                            If no department is selected, the team will be assigned to the "SYSTEM" department.
+                          </p>
                         </div>
                         {createTeamError && (
                            <div className="mt-2 p-3 bg-red-50 text-red-600 text-sm rounded-md">
@@ -1521,6 +1923,89 @@ const Settings = () => {
           </div>
         </Dialog>
       </Transition.Root>
+
+      {/* Create Department Modal */}
+<Transition.Root show={isCreateDepartmentModalOpen} as={Fragment}>
+  <Dialog as="div" className="relative z-10" onClose={closeCreateDepartmentModal}>
+    <Transition.Child
+      as={Fragment}
+      enter="ease-out duration-300"
+      enterFrom="opacity-0"
+      enterTo="opacity-100"
+      leave="ease-in duration-200"
+      leaveFrom="opacity-100"
+      leaveTo="opacity-0"
+    >
+      <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+    </Transition.Child>
+
+    <div className="fixed inset-0 z-10 overflow-y-auto">
+      <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-300"
+          enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+          enterTo="opacity-100 translate-y-0 sm:scale-100"
+          leave="ease-in duration-200"
+          leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+          leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+        >
+          <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+            <div>
+              <div className="mt-3 text-center sm:mt-2">
+                <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">
+                  Create New Department
+                </Dialog.Title>
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <label htmlFor="new-department-name" className="block text-sm font-medium text-gray-700 text-left">
+                      Department Name
+                    </label>
+                    <div className="mt-1">
+                      <input
+                        type="text"
+                        name="new-department-name"
+                        id="new-department-name"
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+                        placeholder="e.g., Human Resources, Finance"
+                        value={newDepartmentName} // Uses your state
+                        onChange={(e) => setNewDepartmentName(e.target.value)} // Uses your state
+                        disabled={createDepartmentMutation.isPending} // Uses your mutation
+                      />
+                    </div>
+                  </div>
+                  {createDepartmentError && ( // Uses your state
+                     <div className="mt-2 p-3 bg-red-50 text-red-600 text-sm rounded-md">
+                          <WarningCircle size={18} className="inline mr-1" /> {createDepartmentError}
+                     </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+              <button
+                type="button"
+                className="inline-flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-2 sm:text-sm disabled:opacity-50"
+                onClick={handleCreateDepartmentSave} // Uses your handler
+                disabled={createDepartmentMutation.isPending} // Uses your mutation
+              >
+                {createDepartmentMutation.isPending ? 'Creating...' : 'Create Department'}
+              </button>
+              <button
+                type="button"
+                className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-1 sm:mt-0 sm:text-sm"
+                onClick={closeCreateDepartmentModal} // Uses your handler
+                disabled={createDepartmentMutation.isPending} // Uses your mutation
+              >
+                Cancel
+              </button>
+            </div>
+          </Dialog.Panel>
+        </Transition.Child>
+      </div>
+    </div>
+  </Dialog>
+</Transition.Root>
 
       {/* Delete Team Modal UI (Basic structure, assuming you will build this out) */}
       <Transition.Root show={isDeleteTeamModalOpen} as={Fragment}>
@@ -1612,6 +2097,174 @@ const Settings = () => {
           </div>
         </Dialog>
       </Transition.Root>
+
+      {/* Edit Department Modal */}
+<Transition.Root show={isEditDepartmentModalOpen} as={Fragment}>
+  <Dialog as="div" className="relative z-10" onClose={closeEditDepartmentModal}>
+    <Transition.Child
+      as={Fragment}
+      enter="ease-out duration-300"
+      enterFrom="opacity-0"
+      enterTo="opacity-100"
+      leave="ease-in duration-200"
+      leaveFrom="opacity-100"
+      leaveTo="opacity-0"
+    >
+      <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+    </Transition.Child>
+
+    <div className="fixed inset-0 z-10 overflow-y-auto">
+      <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-300"
+          enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+          enterTo="opacity-100 translate-y-0 sm:scale-100"
+          leave="ease-in duration-200"
+          leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+          leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+        >
+          <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+            <div>
+              <div className="mt-3 text-center sm:mt-2">
+                <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">
+                  Edit Department: {editingDepartment?.name}
+                </Dialog.Title>
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <label htmlFor="edit-department-name" className="block text-sm font-medium text-gray-700 text-left">
+                      Department Name
+                    </label>
+                    <div className="mt-1">
+                      <input
+                        type="text"
+                        name="edit-department-name"
+                        id="edit-department-name"
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+                        value={editDepartmentName} // Uses your state
+                        onChange={(e) => setEditDepartmentName(e.target.value)} // Uses your state
+                        disabled={editDepartmentMutation.isPending} // Uses your mutation
+                      />
+                    </div>
+                  </div>
+                  {editDepartmentError && ( // Uses your state
+                     <div className="mt-2 p-3 bg-red-50 text-red-600 text-sm rounded-md">
+                          <WarningCircle size={18} className="inline mr-1" /> {editDepartmentError}
+                     </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+              <button
+                type="button"
+                className="inline-flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-2 sm:text-sm disabled:opacity-50"
+                onClick={handleEditDepartmentSave} // Uses your handler
+                disabled={editDepartmentMutation.isPending} // Uses your mutation
+              >
+                {editDepartmentMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button
+                type="button"
+                className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-1 sm:mt-0 sm:text-sm"
+                onClick={closeEditDepartmentModal} // Uses your handler
+                disabled={editDepartmentMutation.isPending} // Uses your mutation
+              >
+                Cancel
+              </button>
+            </div>
+          </Dialog.Panel>
+        </Transition.Child>
+      </div>
+    </div>
+  </Dialog>
+</Transition.Root>
+
+      {/* Delete Department Modal */}
+<Transition.Root show={isDeleteDepartmentModalOpen} as={Fragment}>
+  <Dialog as="div" className="relative z-10" onClose={closeDeleteDepartmentModal}>
+    <Transition.Child
+      as={Fragment}
+      enter="ease-out duration-300"
+      enterFrom="opacity-0"
+      enterTo="opacity-100"
+      leave="ease-in duration-200"
+      leaveFrom="opacity-100"
+      leaveTo="opacity-0"
+    >
+      <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+    </Transition.Child>
+
+    <div className="fixed inset-0 z-10 overflow-y-auto">
+      <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-300"
+          enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+          enterTo="opacity-100 translate-y-0 sm:scale-100"
+          leave="ease-in duration-200"
+          leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+          leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+        >
+          <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+            <div>
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                <WarningCircle className="h-6 w-6 text-red-600" aria-hidden="true" />
+              </div>
+              <div className="mt-3 text-center sm:mt-5">
+                <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">
+                  Delete Department: {deletingDepartment?.name}
+                </Dialog.Title>
+                <div className="mt-2">
+                  {/* Optional: Display count of teams/employees if fetched in openDeleteDepartmentModal 
+                  {deleteDepartmentTeamCountLoading ? (
+                    <p className="text-sm text-gray-500">Loading related item count...</p>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      This department has {deleteDepartmentTeamCount} team(s).
+                    </p>
+                  )}
+                  */}
+                  <p className="text-sm text-gray-500">
+                    Are you sure you want to permanently delete this department? This action cannot be undone.
+                  </p>
+                </div>
+                {deleteDepartmentError && ( // Uses your state
+                  <div className="mt-3 p-3 bg-red-50 text-red-700 text-sm rounded-md text-left">
+                     <WarningCircle size={18} className="inline mr-2" /> {deleteDepartmentError}
+                  </div>
+                )}
+                {deleteDepartmentSuccessMessage && ( // Uses your state
+                  <div className="mt-3 p-3 bg-green-50 text-green-700 text-sm rounded-md text-left">
+                    <CheckCircle size={18} className="inline mr-2" /> {deleteDepartmentSuccessMessage}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+              <button
+                type="button"
+                className="inline-flex w-full justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 sm:col-start-2 sm:text-sm disabled:opacity-50"
+                onClick={handleDeleteDepartmentConfirm} // Uses your handler
+                disabled={deleteDepartmentMutation.isPending || !!deleteDepartmentSuccessMessage /* Prevent multiple deletes while success message shows */}
+              >
+                {deleteDepartmentMutation.isPending ? 'Deleting...' : 'Delete Department'}
+              </button>
+              <button
+                type="button"
+                className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-1 sm:mt-0 sm:text-sm"
+                onClick={closeDeleteDepartmentModal} // Uses your handler
+                disabled={deleteDepartmentMutation.isPending}
+              >
+                Cancel
+              </button>
+            </div>
+          </Dialog.Panel>
+        </Transition.Child>
+      </div>
+    </div>
+  </Dialog>
+</Transition.Root>
 
     </div>
   );

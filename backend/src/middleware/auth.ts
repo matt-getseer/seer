@@ -25,6 +25,7 @@ export interface RequestWithUser extends Request {
     userId: number;
     clerkId: string;
     email?: string;
+    organizationId?: string | null;
   };
 }
 
@@ -64,7 +65,8 @@ export const extractUserInfo = async (req: RequestWithUser, res: Response, next:
       req.user = {
         userId: user.id,
         clerkId: user.clerkId || clerkId,
-        email: user.email
+        email: user.email,
+        organizationId: user.organizationId
       };
       
       next();

@@ -354,17 +354,25 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
             console.error('Invalid organization.updated payload:', orgUpdatedData);
             return res.status(400).json({ error: 'Invalid payload for organization.updated (missing ID)' });
         }
-        await prisma.organization.update({
+        // Use upsert to handle cases where the organization might not exist locally yet
+        await prisma.organization.upsert({
           where: { clerkOrganizationId: orgUpdatedData.id },
-          data: {
+          update: { // Data to use if record IS found
             name: orgUpdatedData.name || undefined, // Ensure name is not null if it's optional and can be unset
             // slug: orgUpdatedData.slug, // if you use slug
             // imageUrl: orgUpdatedData.image_url, // if you use image_url
             // ... any other fields you want to sync
             updatedAt: new Date(), // Explicitly set. RECOMMENDED: use @updatedAt in schema.prisma for Organization model
           },
+          create: { // Data to use if record IS NOT found
+            id: uuidv4(), // Generate local UUID
+            clerkOrganizationId: orgUpdatedData.id,
+            name: orgUpdatedData.name || 'Unnamed Organization', // Provide a default name if needed
+            // createdAt will be set by @default(now())
+            updatedAt: new Date(),
+          },
         });
-        console.log(`Organization updated in DB: ${orgUpdatedData.id}`);
+        console.log(`Organization upserted in DB: ${orgUpdatedData.id}`);
         break;
 
       case 'organizationMembership.created':

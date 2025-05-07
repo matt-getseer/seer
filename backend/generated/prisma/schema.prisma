@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
@@ -14,24 +8,171 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tasks     Task[]
+// MODEL ORDERING: Based on your last provided schema that worked up to Employee.
+// If issues arise, consider reordering to: Team, Organization, User, Department, Employee, Meeting etc.
+
+model Organization {
+  id                  String       @id @db.Uuid
+  clerkOrganizationId String       @unique
+  name                String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  Team                Team[]
+  departments         Department[]
+  User                User[]
+
+  @@index([clerkOrganizationId])
 }
 
-model Task {
-  id          Int       @id @default(autoincrement())
-  title       String
-  description String?
-  completed   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  dueDate     DateTime?
-  userId      Int
-  user        User      @relation(fields: [userId], references: [id])
+model Department {
+  id             Int          @id @default(autoincrement())
+  name           String
+  organizationId String       @db.Uuid
+  headId         Int?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  head           User?        @relation("DepartmentHead", fields: [headId], references: [id])
+  teams          Team[]
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
+  @@index([headId])
+}
+
+model Team {
+  id             Int          @id @default(autoincrement())
+  name           String
+  organizationId String       @db.Uuid
+  Organization   Organization @relation(fields: [organizationId], references: [id])
+  departmentId   Int
+  department     Department   @relation(fields: [departmentId], references: [id])
+  userId         Int? // Keeping TeamManager relation commented for now
+  user           User?        @relation("TeamManager", fields: [userId], references: [id])
+  Employee       Employee[] // Using your casing from previous schema
+
+  createdAt DateTime @default(now()) // <--- ADD THIS LINE
+  updatedAt DateTime @updatedAt // <--- ADD THIS LINE
+}
+
+model User {
+  id                 Int           @id @default(autoincrement())
+  email              String        @unique
+  name               String?
+  password           String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  clerkId            String?       @unique
+  // Scalar fields for google/zoom tokens would go here from your backup if you have them
+  googleAccessToken  String? // Example
+  googleRefreshToken String? // Example
+  googleTokenExpiry  DateTime? // Example
+  zoomAccessToken    String? // Example
+  zoomRefreshToken   String? // Example
+  zoomTokenExpiry    DateTime? // Example
+  organizationId     String?       @db.Uuid
+  Organization       Organization? @relation(fields: [organizationId], references: [id])
+  departmentsHeaded  Department[]  @relation("DepartmentHead")
+  role               UserRole      @default(USER)
+  Employee           Employee[] // Using your casing
+  meetings           Meeting[]     @relation("ManagerMeetings") // Relation to Meeting
+
+  teams Team[] @relation("TeamManager") // Keeping commented for now
+
+  @@index([organizationId])
+}
+
+model Employee {
+  id        Int       @id @default(autoincrement())
+  name      String
+  title     String
+  email     String    @unique
+  teamId    Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  userId    Int
+  startDate DateTime?
+  country   String?
+  managerId Int?
+
+  Employee       Employee?  @relation("EmployeeToEmployee", fields: [managerId], references: [id])
+  other_Employee Employee[] @relation("EmployeeToEmployee")
+  team           Team       @relation(fields: [teamId], references: [id])
+  user           User       @relation(fields: [userId], references: [id])
+  meetings       Meeting[]  @relation("EmployeeMeetings") // Relation to Meeting
+
+  @@index([managerId])
+}
+
+model Meeting {
+  id                    Int         @id @default(autoincrement())
+  title                 String?
+  scheduledTime         DateTime
+  durationMinutes       Int?
+  platform              String?
+  audioFileUrl          String?
+  status                String      @default("SCHEDULED")
+  managerId             Int
+  employeeId            Int
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  meetingBaasId         String?     @unique
+  googleCalendarEventId String?
+  meetingUrl            String?
+  meetingType           MeetingType @default(ONE_ON_ONE)
+
+  employee Employee @relation("EmployeeMeetings", fields: [employeeId], references: [id])
+  manager  User     @relation("ManagerMeetings", fields: [managerId], references: [id])
+
+  insights   MeetingInsight[] // Keep commented for relations to models not yet added
+  transcript Transcript? // Keep commented for relations to models not yet added
+
+  @@index([managerId])
+  @@index([employeeId])
+}
+
+model Transcript {
+  id           Int      @id @default(autoincrement())
+  meetingId    Int      @unique
+  content      String
+  languageCode String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+}
+
+model MeetingInsight {
+  id             Int      @id @default(autoincrement())
+  meetingId      Int
+  type           String
+  content        String
+  relevanceScore Float?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  meeting        Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+}
+
+model OAuthState {
+  id                  String   @id @db.Uuid
+  stateValue          String   @unique
+  clerkOrganizationId String
+  createdAt           DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([stateValue])
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  USER
+}
+
+enum MeetingType {
+  ONE_ON_ONE
+  SIX_MONTH_REVIEW
+  TWELVE_MONTH_REVIEW
 }
