@@ -1,26 +1,62 @@
-import { Meeting, MeetingType } from '@prisma/client';
+import { Meeting, MeetingType, PrismaClient } from '@prisma/client';
 import { InsightData } from './types';
 import { callClaudeWithRetry, MeetingInsights } from '../services/nlpService';
 
-const ONE_ON_ONE_SYSTEM_PROMPT = `You are a specialist in analyzing 1-on-1 meetings between managers and employees. 
-Analyze the following meeting transcript focusing on:
+const BASE_ONE_ON_ONE_SYSTEM_PROMPT = `You are a specialist in analyzing 1-on-1 meetings.
+The meeting is between {MANAGER_NAME} (manager) and {EMPLOYEE_NAME} (employee).
+Analyze the following meeting transcript. Focus on:
 1.  A concise summary of the main discussion points.
-2.  Specific action items agreed upon, including who owns them if mentioned.
-3.  Key topics or themes that emerged during the conversation.
+2.  Specific action items agreed upon, including who owns them if mentioned (e.g., "{EMPLOYEE_NAME} to update the report" or "{MANAGER_NAME} to provide resources").
+3.  Strengths demonstrated by {EMPLOYEE_NAME} or positive aspects discussed.
+4.  Areas where {EMPLOYEE_NAME} could use support or development, or where {MANAGER_NAME} can provide assistance.
+
+When generating the summary, action items, strengths, and areas for support, please use the names {MANAGER_NAME} and {EMPLOYEE_NAME} where appropriate, instead of generic terms like "the manager" or "the employee". If a name is not available, you can use "the manager" or "the employee" as a fallback.
+
 Please format your response as a valid JSON object with the following structure: 
 { 
   "summary": "string", 
-  "actionItems": ["string (include owner if possible, e.g., 'John to update the report')"], 
-  "keyTopics": ["string"] 
+  "actionItems": ["string"], 
+  "strengths": ["string"], 
+  "areasForSupport": ["string"] 
 }. 
 Only output the JSON object.`;
+
+const prisma = new PrismaClient();
 
 export async function processOneOnOneMeeting(transcript: string, meeting: Meeting): Promise<InsightData[]> {
     console.log(`Processing 1:1 meeting ID: ${meeting.id} with specific 1:1 prompt.`);
     const insights: InsightData[] = [];
 
+    let managerName = 'The Manager';
+    let employeeName = 'The Employee';
+
+    try {
+        const manager = await prisma.user.findUnique({
+            where: { id: meeting.managerId },
+            select: { name: true }
+        });
+        if (manager && manager.name) {
+            managerName = manager.name;
+        }
+
+        const employee = await prisma.employee.findUnique({
+            where: { id: meeting.employeeId },
+            select: { name: true }
+        });
+        if (employee && employee.name) {
+            employeeName = employee.name;
+        }
+    } catch (error) {
+        console.error(`Error fetching manager or employee name for meeting ${meeting.id}:`, error);
+        // Continue with default names if fetching fails
+    }
+
+    const systemPrompt = BASE_ONE_ON_ONE_SYSTEM_PROMPT
+        .replace(/{MANAGER_NAME}/g, managerName)
+        .replace(/{EMPLOYEE_NAME}/g, employeeName);
+
     // Call the refactored Claude service with the specific prompt
-    const analysisResult = await callClaudeWithRetry(transcript, ONE_ON_ONE_SYSTEM_PROMPT);
+    const analysisResult = await callClaudeWithRetry(transcript, systemPrompt);
 
     if (analysisResult) {
         console.log(`Successfully generated analysis for 1:1 meeting ${meeting.id}`);
@@ -42,12 +78,21 @@ export async function processOneOnOneMeeting(transcript: string, meeting: Meetin
                 });
             });
         }
-        if (analysisResult.keyTopics && analysisResult.keyTopics.length > 0) {
-            analysisResult.keyTopics.forEach(topic => {
+        if (analysisResult.strengths && analysisResult.strengths.length > 0) {
+            analysisResult.strengths.forEach(item => {
                 insights.push({
                     meetingId: meeting.id,
-                    type: 'KEY_TOPIC',
-                    content: topic,
+                    type: 'STRENGTHS',
+                    content: item,
+                });
+            });
+        }
+        if (analysisResult.areasForSupport && analysisResult.areasForSupport.length > 0) {
+            analysisResult.areasForSupport.forEach(item => {
+                insights.push({
+                    meetingId: meeting.id,
+                    type: 'AREAS_FOR_SUPPORT',
+                    content: item,
                 });
             });
         }

@@ -24,8 +24,8 @@ const TopPerformer = lazy(() => import('./pages/reports/TopPerformer'))
 const EmployeesAtRisk = lazy(() => import('./pages/reports/EmployeesAtRisk'))
 
 // Lazy load meeting pages
-const MeetingsPage = lazy(() => import('./pages/MeetingsPage'))
-const MeetingDetailPage = lazy(() => import('./pages/MeetingDetailPage'))
+const MeetingsPage = lazy(() => import('./pages/meetings'))
+const MeetingOverviewPage = lazy(() => import('./pages/meetingoverview'))
 
 // Navigation setup component
 const NavigationSetup = memo(({ children }: { children: React.ReactNode }) => {
@@ -268,7 +268,7 @@ const AppRoutes = () => {
                       }
                     />
                     <Route 
-                      path="/meetings" 
+                      path="/meetings"
                       element={
                         <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
                           <MeetingsPage />
@@ -276,10 +276,10 @@ const AppRoutes = () => {
                       }
                     />
                     <Route 
-                      path="/meetings/:meetingId" 
+                      path="/meetings/:meetingId"
                       element={
                         <MainLayout sidebarCollapsed={sidebarCollapsed} setSidebarCollapsed={handleSetSidebarCollapsed} setSearchModalOpen={handleSetSearchModalOpen}>
-                          <MeetingDetailPage />
+                          <MeetingOverviewPage />
                         </MainLayout>
                       }
                     />

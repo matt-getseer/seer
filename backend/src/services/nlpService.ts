@@ -9,7 +9,8 @@ const anthropic = new Anthropic({
 export interface MeetingInsights {
   summary: string;
   actionItems: string[];
-  keyTopics: string[];
+  strengths: string[];
+  areasForSupport: string[];
 }
 
 const MAX_RETRIES = 3;
@@ -59,7 +60,8 @@ async function callClaudeWithRetry(
         if (
           typeof insights.summary === 'string' &&
           Array.isArray(insights.actionItems) &&
-          Array.isArray(insights.keyTopics)
+          Array.isArray(insights.strengths) &&
+          Array.isArray(insights.areasForSupport)
         ) {
           console.log('Successfully parsed insights from Anthropic response.');
           return insights;
