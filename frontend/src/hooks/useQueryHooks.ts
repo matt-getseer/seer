@@ -94,89 +94,6 @@ export function useEmployee<TData = any, TError = unknown>(id: number | null) {
   });
 }
 
-export function useTeamEmployees(teamId: number | null) {
-  const { isLoaded: isOrgLoaded, organization } = useOrganization();
-  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
-  const enabled = isOrgLoaded && isAuthLoaded && !!organization && !!teamId && isSignedIn;
-
-  return useQuery({
-    queryKey: ['employees', 'team', teamId, organization?.id],
-    queryFn: async () => {
-      if (!teamId) return [];
-      console.log(`RQ: Fetching employees for team ${teamId}...`);
-      const response = await employeeService.getTeamEmployees(teamId);
-      return response.data;
-    },
-    enabled: enabled,
-  });
-}
-
-export function useCreateEmployee() {
-  const queryClient = useQueryClient();
-  const { organization } = useOrganization();
-  
-  return useMutation({
-    mutationFn: async (employee: {
-      name: string;
-      title: string;
-      email: string;
-      teamId: number;
-      startDate: string;
-    }) => {
-      const response = await employeeService.createEmployee(employee);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees', organization?.id] });
-    },
-    onError: (error: AxiosError) => {
-      console.error('Error creating employee:', error);
-    }
-  });
-}
-
-export function useUpdateEmployee() {
-  const queryClient = useQueryClient();
-  const { organization } = useOrganization();
-  
-  return useMutation({
-    mutationFn: async ({ id, data }: {
-      id: number;
-      data: {
-        name?: string;
-        title?: string;
-        email?: string;
-        teamId?: number;
-        startDate?: string;
-      }
-    }) => {
-      const response = await employeeService.updateEmployee(id, data);
-      return response.data;
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['employees', organization?.id] });
-      queryClient.invalidateQueries({ queryKey: ['employee', variables.id, organization?.id] });
-      queryClient.invalidateQueries({ queryKey: ['employees', 'team', undefined, organization?.id] });
-    }
-  });
-}
-
-export function useDeleteEmployee() {
-  const queryClient = useQueryClient();
-  const { organization } = useOrganization();
-  
-  return useMutation({
-    mutationFn: async (id: number) => {
-      const response = await employeeService.deleteEmployee(id);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees', organization?.id] });
-      queryClient.invalidateQueries({ queryKey: ['employees', 'team', undefined, organization?.id] });
-    }
-  });
-}
-
 // Team hooks
 export function useTeams<TData = any, TError = unknown>(
   options?: QueryHookOptions<TData, TError>
@@ -198,65 +115,6 @@ export function useTeams<TData = any, TError = unknown>(
     },
     enabled: enabled,
     ...options,
-  });
-}
-
-export function useTeam<TData = any, TError = unknown>(id: number | null) {
-  const { isLoaded: isOrgLoaded, organization } = useOrganization();
-  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
-  const enabled = isOrgLoaded && isAuthLoaded && !!organization && !!id && isSignedIn;
-  const queryKey = ['team', id, organization?.id];
-
-  return useQuery<TData, TError>({
-    queryKey: queryKey,
-    queryFn: async () => {
-      console.log(`RQ: Fetching team ${id}...`);
-      try {
-        const response = await teamService.getTeamById(id!);
-        return await processApiResponse<TData>(response, `team ${id}`);
-      } catch (err) {
-        return handleQueryFnError(err, `team ${id}`);
-      }
-    },
-    enabled: enabled,
-  });
-}
-
-export function useUpdateTeam() {
-  const queryClient = useQueryClient();
-  const { organization } = useOrganization();
-  
-  return useMutation({
-    mutationFn: async ({ id, data }: {
-      id: number;
-      data: {
-        name?: string;
-        department?: string;
-      }
-    }) => {
-      const response = await teamService.updateTeam(id, data);
-      return response.data;
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['teams', organization?.id] });
-      queryClient.invalidateQueries({ queryKey: ['team', variables.id, organization?.id] });
-    }
-  });
-}
-
-export function useDeleteTeam() {
-  const queryClient = useQueryClient();
-  const { organization } = useOrganization();
-  
-  return useMutation({
-    mutationFn: async (id: number) => {
-      const response = await teamService.deleteTeam(id);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['teams', organization?.id] });
-      queryClient.invalidateQueries({ queryKey: ['employees', organization?.id] });
-    }
   });
 }
 
@@ -335,27 +193,5 @@ export function useEmployeeMeetings<TData = any, TError = unknown>(
     },
     enabled: enabled,
     ...options,
-  });
-}
-
-export function useScheduleMeeting() {
-  const queryClient = useQueryClient();
-  const { organization } = useOrganization();
-  return useMutation({
-    mutationFn: meetingService.scheduleMeeting,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['meetings', organization?.id] });
-    },
-  });
-}
-
-export function useRecordMeeting() {
-  const queryClient = useQueryClient();
-  const { organization } = useOrganization();
-  return useMutation({
-    mutationFn: meetingService.recordMeeting,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['meetings', organization?.id] });
-    },
   });
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CaretLeft, CaretDown, Calendar, DownloadSimple, Export, ChartBar } from '@phosphor-icons/react'
+import { CaretLeft, CaretDown, Calendar, DownloadSimple, Export } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
 import { 
   BarChart, 
@@ -58,7 +58,7 @@ const keyMetrics = [
 ]
 
 const TeamPerformance = () => {
-  const [timeRange, setTimeRange] = useState('Last 6 months')
+  const [timeRange] = useState('Last 6 months')
   
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">

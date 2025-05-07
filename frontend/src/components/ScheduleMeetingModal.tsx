@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css'; // Import date picker CSS
 import { meetingService } from '../api/client';
-import { VideoCamera, Buildings } from '@phosphor-icons/react'; // Using Phosphor icons for platform
+// import { VideoCamera, Buildings } from '@phosphor-icons/react'; // Removed unused icons
 
 // Define MeetingType locally for frontend usage
 type MeetingType = 'ONE_ON_ONE' | 'SIX_MONTH_REVIEW' | 'TWELVE_MONTH_REVIEW';

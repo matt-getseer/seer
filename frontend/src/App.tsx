@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom'
 import { useState, useEffect, lazy, Suspense, useCallback, memo } from 'react'
-import { useAuth, useUser, useOrganization, SignedIn, SignedOut, Protect } from '@clerk/clerk-react'
+import { useAuth, useUser, useOrganization, Protect } from '@clerk/clerk-react'
 import Sidebar from './components/Sidebar'
 import Navbar from './components/Navbar'
 import SearchModal from './components/SearchModal'
@@ -93,7 +93,7 @@ const MainLayout = memo(({ children, sidebarCollapsed, setSidebarCollapsed, setS
   setSidebarCollapsed: (collapsed: boolean) => void;
   setSearchModalOpen: (open: boolean) => void;
 }) => {
-  const { user } = useUser(); 
+  const { isLoaded } = useUser();
 
   const handleSearchClick = useCallback(() => {
     setSearchModalOpen(true);

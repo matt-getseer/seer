@@ -1,8 +1,8 @@
 import { CreateOrganization as ClerkCreateOrganization } from '@clerk/clerk-react'
-import { useNavigate } from 'react-router-dom'
+// import { useNavigate } from 'react-router-dom' // Removed unused import
 
 const CreateOrganization = () => {
-  const navigate = useNavigate()
+  // const navigate = useNavigate() // Removed unused variable
 
   return (
     // Removed the outer div with max-w-4xl and py-10 for consistency with MinimalLayout

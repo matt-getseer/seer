@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { teamService } from '../api/client'
+import { useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AxiosError } from 'axios'
 import { MagnifyingGlass, ArrowUp, ArrowDown } from '@phosphor-icons/react'

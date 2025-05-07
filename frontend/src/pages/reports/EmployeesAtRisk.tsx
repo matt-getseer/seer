@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CaretLeft, CaretDown, Calendar, DownloadSimple, Export, FileArrowDown, Warning } from '@phosphor-icons/react'
+import { CaretLeft, CaretDown, Calendar, DownloadSimple, Export } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
 
 interface Employee {
@@ -37,7 +37,7 @@ const insights = [
 ]
 
 const EmployeesAtRisk = () => {
-  const [timeRange, setTimeRange] = useState('Last 3 months')
+  const [timeRange] = useState('Last 3 months')
   const [employees] = useState<Employee[]>([
     {
       id: '1',

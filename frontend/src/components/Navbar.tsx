@@ -1,7 +1,7 @@
 import { Question, CaretRight } from '@phosphor-icons/react'
 import { FC, useState, useEffect, useCallback, useMemo, memo } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { UserButton, useClerk } from '@clerk/clerk-react'
+import { useClerk } from '@clerk/clerk-react'
 import { employeeService } from '../api/client'
 
 // Cache for employee name lookups
@@ -37,11 +37,6 @@ const Navbar: FC = memo(() => {
   const { signOut } = useClerk()
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
   const [isScrolled, setIsScrolled] = useState(false);
-
-  const handleLogout = useCallback(async () => {
-    await signOut()
-    navigate('/sign-in')
-  }, [signOut, navigate])
 
   // Effect to handle scroll detection
   useEffect(() => {

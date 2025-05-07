@@ -64,11 +64,7 @@ const apiClient = axios.create({
 });
 
 // Create a function to get Clerk token
-export const getClerkToken = async () => {
-  // This needs to be used within a React component with Clerk's context
-  const { getToken } = useAuth();
-  return await getToken();
-};
+// export const getClerkToken = async () => { ... function body ... };
 
 // Dynamic token getter for use outside React components
 let tokenGetter: (() => Promise<string | null>) | null = null;
@@ -199,39 +195,21 @@ export const userService = {
   }
 };
 
-export const authService = {
-  logout: () => {
-    // No local token to remove with Clerk
-    // Clerk handles logout via its components/hooks
-    
-    // But we can clear the cache
-    apiCache.clear();
-  }
-};
+// Remove authService
+// export const authService = {
+//   logout: () => {
+//     ...
+//   }
+// };
 
-export const taskService = {
-  getAllTasks: async () => {
-    return await apiClient.get('/tasks');
-  },
-  getTaskById: async (id: number) => {
-    return await apiClient.get(`/tasks/${id}`);
-  },
-  createTask: async (task: { title: string; description?: string; dueDate?: string; userId: number }) => {
-    const response = await apiClient.post('/tasks', task);
-    invalidateCache('/tasks');
-    return response;
-  },
-  updateTask: async (id: number, task: { title?: string; description?: string; completed?: boolean; dueDate?: string }) => {
-    const response = await apiClient.put(`/tasks/${id}`, task);
-    invalidateCache('/tasks');
-    return response;
-  },
-  deleteTask: async (id: number) => {
-    const response = await apiClient.delete(`/tasks/${id}`);
-    invalidateCache('/tasks');
-    return response;
-  },
-};
+// Remove taskService
+// export const taskService = {
+//   getAllTasks: async () => { ... },
+//   getTaskById: async (id: number) => { ... },
+//   createTask: async (task: ...) => { ... },
+//   updateTask: async (id: number, task: ...) => { ... },
+//   deleteTask: async (id: number) => { ... },
+// };
 
 // Teams Service
 export const teamService = {

@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 // import { meetingService } from '../api/client'; // Keep if needed for mutations later
 import { format } from 'date-fns';
 import { useMeetings } from '../hooks/useQueryHooks';
 import { AxiosError } from 'axios';
 import { ArrowUp, ArrowDown, MagnifyingGlass, Spinner, WarningCircle } from '@phosphor-icons/react'; // Correct import from @phosphor-icons/react, added Spinner/Warning
-import { useAppContext, AppUser, Meeting as AppMeeting } from '../context/AppContext'; // <-- Import context
+import { useAppContext, Meeting as AppMeeting } from '../context/AppContext'; // Removed unused AppUser import
 
 // Define the expected structure of a meeting object from the API (for useMeetings hook)
 // Keep this if useMeetings returns slightly different structure than AppMeeting

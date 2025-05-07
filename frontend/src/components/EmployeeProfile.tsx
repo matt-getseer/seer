@@ -1,28 +1,10 @@
-import { useState, useEffect, memo, useCallback } from 'react';
-import { employeeService, meetingService } from '../api/client';
+import { memo } from 'react';
 import Flag from 'react-world-flags';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import { useEmployee, useEmployeeMeetings } from '../hooks/useQueryHooks';
 import { ArrowLeft, EnvelopeSimple, Phone, Calendar, MapPin, Building, WarningCircle } from '@phosphor-icons/react';
-import { AxiosResponse } from 'axios';
-
-type Employee = {
-  id: number;
-  name: string;
-  title: string;
-  email: string;
-  startDate: string;
-  country?: string;
-  interviewCount?: number;
-  team?: {
-    id: number;
-    name: string;
-    department: string;
-  };
-  healthScore?: number; // Overall score from 0-100
-};
 
 // Mock data for historical performance - would come from API in real implementation
 const mockAnalysisHistory = [

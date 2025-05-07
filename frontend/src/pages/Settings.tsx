@@ -3,10 +3,10 @@ import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
 import { Link as LinkIcon, CheckCircle, WarningCircle, X } from '@phosphor-icons/react'; // Example icon, Added X and Bell for Notifications
 import { userService } from '../api/client'; // Keep named import for userService
 import apiClient from '../api/client'; // Add default import for apiClient
-import { useQuery, useQueryClient, useMutation, UseMutationOptions } from '@tanstack/react-query'; // Import QueryClient and useMutation, UseMutationOptions
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'; // Removed UseMutationOptions
 import { useAuth } from '@clerk/clerk-react'; // useOrganization has been removed
 import { Dialog, Transition } from '@headlessui/react'; // Added Dialog and Transition
-import { useAppContext, AppUser } from '../context/AppContext'; // <-- Import useAppContext and AppUser
+import { useAppContext, AppUser } from '../context/AppContext'; // Keep AppUser for now
 
 // Define expected user data shape
 interface UserData {
@@ -25,13 +25,6 @@ interface ManagerData {
   name: string;
   email: string;
   role: string;
-}
-
-// Define managed team data shape
-interface ManagedTeamData {
-  id: number;
-  name: string;
-  department: string;
 }
 
 // Define selectable team data shape (all teams available for assignment)
@@ -58,20 +51,16 @@ interface InvitationData {
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser, isLoadingUser: isLoadingAppContextUser, errorLoadingUser: appContextUserError } = useAppContext(); // <-- Use AppContext
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false); // Specific loading state for Google
-  const [isZoomLoading, setIsZoomLoading] = useState(false); // Specific loading state for Zoom
+  const [successMessage, setSuccessMessage] = useState<string | null>(null); // Keep for now
+  const [errorMessage, setErrorMessage] = useState<string | null>(null); // Keep for now
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false); 
+  const [isZoomLoading, setIsZoomLoading] = useState(false); 
 
   // State for CSV Upload
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isCsvUploading, setIsCsvUploading] = useState(false);
   const [csvSuccessMessage, setCsvSuccessMessage] = useState<string | null>(null);
   const [csvErrorMessage, setCsvErrorMessage] = useState<string | null>(null);
-
-  // State for Manager List
-  const [isManagerListLoading, setIsManagerListLoading] = useState(false);
-  const [managerListError, setManagerListError] = useState<string | null>(null);
 
   // NEW State for the new "Assign Manager to Team" Modal
   const [isAssignManagerModalOpen, setIsAssignManagerModalOpen] = useState(false);
@@ -88,6 +77,10 @@ const Settings = () => {
   const [inviteUserError, setInviteUserError] = useState<string | null>(null);
   const [inviteUserSuccessMessage, setInviteUserSuccessMessage] = useState<string | null>(null);
   const [isInvitingUser, setIsInvitingUser] = useState(false);
+
+  // State for manager list loading and error (mirroring query states)
+  const [isManagerListLoading, setIsManagerListLoading] = useState(false);
+  const [managerListError, setManagerListError] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
   const { isSignedIn, isLoaded: isAuthLoaded, orgId } = useAuth(); // orgId is from useAuth
@@ -134,7 +127,7 @@ const Settings = () => {
   }, [displayedTabItems, activeTab, setSearchParams]);
 
   // Fetch user data including Google & Zoom Auth status
-  const { data: userData, isLoading: isLoadingUser, error: userError, refetch: refetchUserData } = useQuery<UserData, Error>({
+  const { isLoading: isLoadingUser } = useQuery<UserData, Error>({
     queryKey: ['currentUser'],
     queryFn: async () => {
       try {
@@ -290,27 +283,33 @@ const Settings = () => {
     const zoomSuccess = searchParams.get('zoom_auth_success');
     const zoomError = searchParams.get('zoom_auth_error');
     let needsUserRefetch = false;
+    let updateParams = false;
+
     // Create a new SearchParams object to modify, to avoid issues with stale closures if only searchParams is modified directly.
     const newSearchParams = new URLSearchParams(searchParams.toString());
 
     if (googleSuccess) {
-      setSuccessMessage('Google Calendar connected successfully!');
+      setSuccessMessage('Google Calendar connected successfully!'); // Use the general success message
       newSearchParams.delete('google_auth_success');
       needsUserRefetch = true;
+      updateParams = true;
     } else if (googleError) {
       const decodedError = decodeURIComponent(googleError);
-      setErrorMessage(`Failed to connect Google Calendar: ${decodedError || 'Unknown error'}. Please try again.`);
+      setErrorMessage(`Failed to connect Google Calendar: ${decodedError || 'Unknown error'}. Please try again.`); // Use general error message
       newSearchParams.delete('google_auth_error');
+      updateParams = true;
     }
 
     if (zoomSuccess) {
-      setSuccessMessage('Zoom account connected successfully!');
+      setSuccessMessage('Zoom account connected successfully!'); // Use general success message
       newSearchParams.delete('zoom_auth_success');
       needsUserRefetch = true;
+      updateParams = true;
     } else if (zoomError) {
       const decodedError = decodeURIComponent(zoomError);
-      setErrorMessage(`Failed to connect Zoom account: ${decodedError || 'Unknown error'}. Please try again.`);
+      setErrorMessage(`Failed to connect Zoom account: ${decodedError || 'Unknown error'}. Please try again.`); // Use general error message
       newSearchParams.delete('zoom_auth_error');
+      updateParams = true;
     }
 
     // Only update search params if they have actually changed.
@@ -404,6 +403,7 @@ const Settings = () => {
 
   const handleConnectGoogle = async () => {
     console.log('[SettingsPage] handleConnectGoogle called.');
+
     if (!isAuthLoaded) {
       console.log('[SettingsPage] Clerk auth not loaded yet. Aborting Google connection attempt.');
       setErrorMessage('Authentication system is still loading. Please try again in a moment.');
@@ -421,15 +421,8 @@ const Settings = () => {
 
     try {
       const response = await apiClient.get<{ authUrl: string }>('/auth/google'); // Use relative path
-      const authUrl = response.data.authUrl;
-
-      if (authUrl) {
-        window.location.href = authUrl;
-        // No need to set loading to false here, page will redirect
-      } else {
-        throw new Error('Did not receive Google auth URL from server.');
-      }
-    } catch (error: any) {
+      window.location.href = response.data.authUrl;
+    } catch (error: any) { 
       console.error('Failed to get Google Auth URL:', error);
       setErrorMessage(error.response?.data?.message || error.message || 'Failed to initiate Google connection. Please try again.');
       setIsGoogleLoading(false); // Set loading false on error
@@ -439,6 +432,7 @@ const Settings = () => {
   // New handler for Zoom connection
   const handleConnectZoom = async () => {
     console.log('[SettingsPage] handleConnectZoom called.');
+
     if (!isAuthLoaded) {
       console.log('[SettingsPage] Clerk auth not loaded yet. Aborting Zoom connection attempt.');
       setErrorMessage('Authentication system is still loading. Please try again in a moment.');
@@ -456,14 +450,7 @@ const Settings = () => {
 
     try {
       const response = await apiClient.get<{ authUrl: string }>('/auth/zoom'); // Call the new Zoom endpoint
-      const authUrl = response.data.authUrl;
-
-      if (authUrl) {
-        window.location.href = authUrl;
-        // No need to set loading to false here, page will redirect
-      } else {
-        throw new Error('Did not receive Zoom auth URL from server.');
-      }
+      window.location.href = response.data.authUrl;
     } catch (error: any) {
       console.error('Failed to get Zoom Auth URL:', error);
       setErrorMessage(error.response?.data?.message || error.message || 'Failed to initiate Zoom connection. Please try again.');
@@ -514,7 +501,7 @@ const Settings = () => {
       });
 
       // Assuming the backend responds with a success message or relevant data
-      setCsvSuccessMessage(response.data.message || 'Employees uploaded successfully!');
+      setSuccessMessage(response.data.message || 'Employees uploaded successfully!');
       setSelectedFile(null); // Clear the selected file
       // Optionally, refetch employee list or other relevant data
       queryClient.invalidateQueries({ queryKey: ['employees'] }); // Invalidate employee list query
@@ -574,20 +561,15 @@ const Settings = () => {
       const response = await apiClient.post('/users/clerk-invite', invitationData);
       return response.data;
     },
-    onSuccess: (data: any) => {
-      setInviteUserSuccessMessage(`Invitation sent to ${inviteEmail} with role ${selectedAppRole}.`);
+    onSuccess: (/* removed unused data param */) => {
+      setInviteUserSuccessMessage('User invited successfully!');
+      setInviteUserError(null);
+      // Optionally clear form or close modal after success
       closeInviteUserModal();
-      // queryClient.invalidateQueries(['usersList']); // Example
     },
-    onError: (error: Error) => {
-      console.error("Error inviting user:", error);
-      let errorDetail = error.message || 'Failed to send invitation.';
-      if ((error as any).response?.data?.error) {
-        errorDetail = (error as any).response.data.error;
-      } else if ((error as any).response?.data?.message) {
-        errorDetail = (error as any).response.data.message;
-      }
-      setInviteUserError(errorDetail);
+    onError: (error) => {
+      setInviteUserError(error.message || 'An unknown error occurred while inviting user');
+      setInviteUserSuccessMessage(null); // Clear success message on error
     },
     onSettled: () => {
       setIsInvitingUser(false);
@@ -890,8 +872,8 @@ const Settings = () => {
               <div className=""> {/* Removed p-6 */}
                 <h3 className="text-md font-medium text-gray-700">Import Employees via CSV</h3>
                 <p className="text-sm text-gray-500 mt-1">Upload a CSV file to add multiple employees.</p>
-                {csvSuccessMessage && (<div className="mt-3 mb-3 p-3 bg-green-100 text-green-700 text-sm rounded-md">{csvSuccessMessage}</div>)}
-                {csvErrorMessage && (<div className="mt-3 mb-3 p-3 bg-red-100 text-red-700 text-sm rounded-md">{csvErrorMessage}</div>)}
+                {successMessage && (<div className="mt-3 mb-3 p-3 bg-green-100 text-green-700 text-sm rounded-md">{successMessage}</div>)}
+                {errorMessage && (<div className="mt-3 mb-3 p-3 bg-red-100 text-red-700 text-sm rounded-md">{errorMessage}</div>)}
             <div className="mt-4">
               <label htmlFor="csvFileInput" className="sr-only">Choose CSV file</label>
                   <input type="file" id="csvFileInput" name="csvFileInput" accept=".csv" onChange={handleFileChange} 

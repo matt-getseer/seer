@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CaretLeft, CaretDown, Calendar, DownloadSimple, Export, Smiley } from '@phosphor-icons/react'
+import { CaretLeft, CaretDown, Calendar, DownloadSimple, Export } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
 import { 
   BarChart, 
@@ -10,11 +10,6 @@ import {
   Tooltip, 
   Legend, 
   ResponsiveContainer,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
   AreaChart,
   Area
 } from 'recharts'
@@ -82,7 +77,7 @@ const commentData = [
 ]
 
 const Sentiment = () => {
-  const [timeRange, setTimeRange] = useState('Last 6 months')
+  const [timeRange] = useState('Last 6 months')
   
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">

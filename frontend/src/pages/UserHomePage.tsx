@@ -1,38 +1,14 @@
-import { useState, useEffect, memo } from 'react';
+import React from 'react';
 // import apiClient from '../api/client'; // No longer needed for direct fetch
 import { format } from 'date-fns';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
+// import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts'; // Removed LineChart, Line
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import { EnvelopeSimple, Phone, Calendar, /*MapPin,*/ Building, Spinner, WarningCircle, Users } from '@phosphor-icons/react'; // MapPin not used in current JSX
-import { useAppContext } from '../context/AppContext'; // <-- Import useAppContext
+import { useAppContext, Meeting as AppContextMeeting } from '../context/AppContext'; // Keep AppContextMeeting import
 
-// Types (can be shared or adapted from EmployeeProfile.tsx)
-// EmployeeSelfProfile and Meeting types can be removed if AppUser from context is used directly
-// and already defines these structures, or import AppUser type itself.
-// For now, keeping them to ensure the component's internal structure for rendering is clear.
-
-type EmployeeSelfProfile = {
-  id: number;
-  name: string;
-  title: string;
-  email: string;
-  startDate: string;
-  country?: string;
-  phone?: string; 
-  team?: {
-    id: number;
-    name: string;
-    department: string;
-  };
-  healthScore?: number; 
-};
-
-interface Meeting {
-  id: number;
-  title: string | null;
-  scheduledTime: string; 
-  platform: string | null;
-  status: string;
-}
+// Removed unused/duplicated local types
+// type EmployeeSelfProfile = { ... };
+// interface Meeting { ... };
 
 // Mock data (can be kept or removed if real data for these charts comes from employeeProfile)
 const mockAnalysisHistory = [
@@ -108,6 +84,9 @@ const UserHomePage = () => {
   const { employeeProfile, meetings } = currentUser;
 
   // ---- Start of EmployeeProfile.tsx like rendering ----
+  // TODO: This section largely duplicates the structure and some logic from frontend/src/components/EmployeeProfile.tsx.
+  // Consider refactoring to use the EmployeeProfile component directly or by extracting shared sub-components
+  // to reduce code duplication and improve maintainability.
   // This section should mirror the JSX structure of EmployeeProfileContent
   // using `employeeProfile` and `meetings` data.
 
@@ -251,9 +230,9 @@ const UserHomePage = () => {
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(meeting.status)}`}>
                         {meeting.status}
                       </span>
-                      {/* Add link to meeting overview if available: e.g., <Link to={`/meetings/${meeting.id}`}>View</Link> */}
                     </div>
                   </div>
+                  {/* Add link to meeting overview if available: e.g., <Link to={`/meetings/${meeting.id}`}>View</Link> */}
                   {meeting.platform && <p className="mt-1 text-sm text-gray-500">Platform: {meeting.platform}</p>}
                 </li>
               ))}

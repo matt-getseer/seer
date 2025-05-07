@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { meetingService } from '../api/client';
+import React, { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useMeeting } from '../hooks/useQueryHooks';
 import { AxiosError } from 'axios';

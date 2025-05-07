@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CaretLeft, CaretDown, Calendar, DownloadSimple, Export, Brain } from '@phosphor-icons/react'
+import { CaretLeft, CaretDown, Calendar, DownloadSimple, Export } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
 import { 
   BarChart, 
@@ -25,45 +25,6 @@ const competencyData = [
   { skill: 'Leadership', score: 76, previousScore: 72, change: '+4' },
   { skill: 'Teamwork', score: 92, previousScore: 89, change: '+3' },
   { skill: 'Adaptability', score: 81, previousScore: 75, change: '+6' },
-]
-
-const roleCompetencyData = [
-  {
-    role: 'Software Engineer',
-    'Technical Knowledge': 90,
-    'Problem Solving': 86,
-    'Communication': 72,
-    'Leadership': 65,
-    'Teamwork': 88,
-    'Adaptability': 80,
-  },
-  {
-    role: 'Product Manager',
-    'Technical Knowledge': 75,
-    'Problem Solving': 92,
-    'Communication': 90,
-    'Leadership': 85,
-    'Teamwork': 88,
-    'Adaptability': 82,
-  },
-  {
-    role: 'UX Designer',
-    'Technical Knowledge': 72,
-    'Problem Solving': 88,
-    'Communication': 85,
-    'Leadership': 70,
-    'Teamwork': 90,
-    'Adaptability': 86,
-  },
-  {
-    role: 'Sales Executive',
-    'Technical Knowledge': 65,
-    'Problem Solving': 80,
-    'Communication': 95,
-    'Leadership': 78,
-    'Teamwork': 85,
-    'Adaptability': 90,
-  }
 ]
 
 // Radar chart data
@@ -101,7 +62,7 @@ const keyMetrics = [
 ]
 
 const CoreCompetency = () => {
-  const [timeRange, setTimeRange] = useState('Last 6 months')
+  const [timeRange] = useState('Last 6 months')
   
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">

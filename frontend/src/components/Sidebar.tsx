@@ -14,45 +14,13 @@ import {
 } from '@phosphor-icons/react'
 import { UserButton, useUser } from '@clerk/clerk-react'
 import { useAppContext } from '../context/AppContext'
+import { reportCategories } from '../constants/reportConstants'
 
 interface SidebarProps {
   onSearchClick: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: (collapsed: boolean) => void;
 }
-
-export const reportCategories = [
-  { 
-    name: 'Team Performance', 
-    url: '/reports/team-performance',
-    slug: 'team-performance'
-  },
-  { 
-    name: 'Engagement', 
-    url: '/reports/engagement',
-    slug: 'engagement'
-  },
-  { 
-    name: 'Sentiment', 
-    url: '/reports/sentiment',
-    slug: 'sentiment'
-  },
-  { 
-    name: 'Core Competency', 
-    url: '/reports/core-competency',
-    slug: 'core-competency'
-  },
-  { 
-    name: 'Top Performers', 
-    url: '/reports/top-performers',
-    slug: 'top-performers'
-  },
-  { 
-    name: 'Employees at Risk', 
-    url: '/reports/employees-at-risk',
-    slug: 'employees-at-risk'
-  }
-]
 
 // Memoized NavLink component that will render consistently
 const NavLinkItem = memo(({ 
