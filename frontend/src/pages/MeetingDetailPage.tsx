@@ -157,12 +157,12 @@ const MeetingDetailPage: React.FC = () => {
       </div>
       
       {/* Participants - Simple display */}
-       <div className="bg-white shadow overflow-hidden sm:rounded-lg p-4 md:p-6">
+       <div className="bg-white overflow-hidden border border-gray-200 sm:rounded-lg p-4 md:p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-3">Participants</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
                 <p className="text-gray-500">Manager</p>
-                <p className="text-gray-900 font-medium">{meeting.manager?.name || 'N/A'}</p>
+                <p className="text-gray-900 font-medium">{meeting.manager ? (meeting.manager.name || `Manager ID: ${meeting.manager.id}`) : 'N/A'}</p>
                 <p className="text-gray-600">{meeting.manager?.email || ''}</p>
             </div>
              <div>
@@ -175,13 +175,13 @@ const MeetingDetailPage: React.FC = () => {
        </div>
 
       {/* Insights */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg p-4 md:p-6">
+      <div className="bg-white border border-gray-200 overflow-hidden sm:rounded-lg p-4 md:p-6">
         <h2 className="text-xl font-semibold text-gray-800 mb-4">Meeting Insights</h2>
         {renderInsights()}
       </div>
 
       {/* Transcript */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg p-4 md:p-6">
+      <div className="bg-white border border-gray-200 overflow-hidden sm:rounded-lg p-4 md:p-6">
         <h2 className="text-xl font-semibold text-gray-800 mb-4">Transcript</h2>
         {meeting.transcript ? (
           <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
@@ -194,7 +194,7 @@ const MeetingDetailPage: React.FC = () => {
       
       {/* Optional: Add link to recording if URL exists */}
        {meeting.audioFileUrl && (
-           <div className="bg-white shadow overflow-hidden sm:rounded-lg p-4 md:p-6">
+           <div className="bg-white border border-gray-200 overflow-hidden sm:rounded-lg p-4 md:p-6">
              <h2 className="text-xl font-semibold text-gray-800 mb-4">Recording</h2>
                 <a 
                     href={meeting.audioFileUrl} 

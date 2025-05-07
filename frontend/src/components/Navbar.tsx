@@ -1,7 +1,7 @@
 import { Question, CaretRight } from '@phosphor-icons/react'
 import { FC, useState, useEffect, useCallback, useMemo, memo } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { UserButton, useClerk, OrganizationSwitcher } from '@clerk/clerk-react'
+import { UserButton, useClerk } from '@clerk/clerk-react'
 import { employeeService } from '../api/client'
 
 // Cache for employee name lookups
@@ -184,17 +184,6 @@ const Navbar: FC = memo(() => {
               <button className="p-1.5 text-gray-500 hover:text-gray-600">
                 <Question className="h-5 w-5" />
               </button>
-              <OrganizationSwitcher 
-                hidePersonal
-                afterLeaveOrganizationUrl="/"
-                afterSelectOrganizationUrl="/organizations/:id"
-                appearance={{
-                  elements: {
-                    rootBox: "flex items-center",
-                    organizationSwitcherTrigger: "flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100"
-                  }
-                }}
-              />
             </div>
           </div>
         </div>

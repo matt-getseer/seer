@@ -4,9 +4,10 @@ import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/au
 import { inviteBotToMeeting } from '../services/meetingBaasService';
 import { getAuthenticatedGoogleClient } from '../services/googleAuthService';
 import { createCalendarEvent } from '../services/googleCalendarService';
-import { createZoomMeeting } from '../services/zoomAuthService';
+import { createZoomMeeting, getAuthenticatedZoomClient } from '../services/zoomAuthService';
 import axios from 'axios';
 import { getAccessibleMeetings } from '../services/accessControlService';
+import { formatInTimeZone } from 'date-fns-tz';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -173,6 +174,13 @@ router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithU
     const meetingTypeFormatted = formatMeetingType(meetingType);
     const meetingTitle = `${meetingTypeFormatted} with ${employeeName} & ${managerName}`;
 
+    // Convert incoming UTC ISO strings to local time strings for the target timezone
+    // The format 'yyyy-MM-dd\'T\'HH:mm:ss' is crucial for Google and Zoom.
+    // Note: The original startDateTime and endDateTime are UTC. We are converting them
+    // to the *wall clock time* in the user's specified `timeZone`.
+    const localStartDateTime = formatInTimeZone(new Date(startDateTime), timeZone, 'yyyy-MM-dd\'T\'HH:mm:ss');
+    const localEndDateTime = formatInTimeZone(new Date(endDateTime), timeZone, 'yyyy-MM-dd\'T\'HH:mm:ss');
+
     // --- Platform-Specific Scheduling Logic ---
     if (platform === 'Zoom') {
         console.log(`Scheduling Zoom meeting for manager ${managerId}, employee ${employeeId}`);
@@ -189,9 +197,9 @@ router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithU
         // Call Zoom service
         const zoomMeeting = await createZoomMeeting(managerId, {
             topic: meetingTitle,
-            start_time: startDateTime, // Pass ISO string directly
+            start_time: localStartDateTime, // Use local time string
             duration: durationMinutes,
-            timezone: timeZone,
+            timezone: timeZone, // Pass the original IANA timezone
             agenda: description || '', // Use description as agenda
         });
 
@@ -214,10 +222,10 @@ router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithU
             authClient,
             meetingTitle,
             description || '',
-            startDateTime, // Pass ISO string
-            endDateTime,   // Pass ISO string
-            attendeesEmails, // Pass array of emails
-            timeZone
+            localStartDateTime, // Use local time string
+            localEndDateTime,   // Use local time string
+            attendeesEmails, 
+            timeZone // Pass the original IANA timezone
         );
 
         // Original checks after event creation
@@ -246,7 +254,7 @@ router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithU
     meetingRecord = await prisma.meeting.create({
       data: {
         title: meetingTypeFormatted, // Use formatted meeting type as title in DB
-        scheduledTime: new Date(startDateTime),
+        scheduledTime: new Date(startDateTime), // Store the original UTC time in DB
         platform: platform, // Save the correct platform
         meetingUrl: meetingUrl, // Save the obtained URL
         status: 'PENDING_BOT_INVITE',

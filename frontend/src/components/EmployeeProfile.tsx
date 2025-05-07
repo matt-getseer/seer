@@ -185,7 +185,7 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
       </div>
       
       {/* Profile header */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+      <div className="bg-white border border-gray-200 overflow-hidden sm:rounded-lg">
         <div className="px-4 py-5 sm:px-6 flex justify-between items-start">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">{employee.name}</h2>
@@ -281,7 +281,7 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
       {/* --- ADDED SECTIONS START --- */}
 
       {/* Historical Performance Chart */}
-      <div className="bg-white shadow sm:rounded-lg">
+      <div className="bg-white border border-gray-200 sm:rounded-lg">
         <div className="px-4 py-5 sm:px-6">
           <h3 className="text-lg font-medium text-gray-900">Historical Performance</h3>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">Overall Health Score Trend</p>
@@ -300,7 +300,7 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
       </div>
 
       {/* Current Skills Radar Chart */}
-      <div className="bg-white shadow sm:rounded-lg">
+      <div className="bg-white border border-gray-200 sm:rounded-lg">
         <div className="px-4 py-5 sm:px-6">
           <h3 className="text-lg font-medium text-gray-900">Current Skill Assessment</h3>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">Based on recent feedback</p>
@@ -321,7 +321,7 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
       {/* Strengths, Support Areas, Recommendations */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Strengths */}
-        <div className="bg-white shadow sm:rounded-lg">
+        <div className="bg-white border border-gray-200 sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
             <h3 className="text-lg font-medium text-gray-900">Strengths</h3>
           </div>
@@ -338,7 +338,7 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
         </div>
 
         {/* Areas for Support */}
-        <div className="bg-white shadow sm:rounded-lg">
+        <div className="bg-white border border-gray-200 sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
             <h3 className="text-lg font-medium text-gray-900">Areas for Support</h3>
           </div>
@@ -355,7 +355,7 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
         </div>
 
         {/* Recommendations */}
-        <div className="bg-white shadow sm:rounded-lg">
+        <div className="bg-white border border-gray-200 sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
             <h3 className="text-lg font-medium text-gray-900">Recommendations</h3>
           </div>
@@ -375,7 +375,7 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
       {/* --- ADDED SECTIONS END --- */}
 
       {/* Meetings Section */}
-      <div className="bg-white shadow sm:rounded-lg">
+      <div className="bg-white border border-gray-200 sm:rounded-lg">
         <div className="px-4 py-5 sm:px-6">
           <h3 className="text-lg font-medium text-gray-900">Meetings</h3>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">

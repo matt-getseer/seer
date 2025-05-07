@@ -3,8 +3,8 @@ import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
 import { Link as LinkIcon, CheckCircle, WarningCircle, X } from '@phosphor-icons/react'; // Example icon, Added X
 import { userService } from '../api/client'; // Keep named import for userService
 import apiClient from '../api/client'; // Add default import for apiClient
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'; // Import QueryClient and useMutation
-import { useAuth } from '@clerk/clerk-react'; // Import useAuth
+import { useQuery, useQueryClient, useMutation, UseMutationOptions } from '@tanstack/react-query'; // Import QueryClient and useMutation, UseMutationOptions
+import { useAuth } from '@clerk/clerk-react'; // useOrganization has been removed
 import { Dialog, Transition } from '@headlessui/react'; // Added Dialog and Transition
 
 // Define expected user data shape
@@ -44,6 +44,16 @@ interface SelectableTeamData {
 // Define possible tab values
 type SettingsTab = 'Users' | 'Teams' | 'Integrations' | 'Employees';
 
+// Define possible UserRoles for the application
+const APP_USER_ROLES = ['ADMIN', 'MANAGER', 'USER'] as const;
+type AppUserRole = typeof APP_USER_ROLES[number];
+
+interface InvitationData {
+  email: string;
+  appRole: AppUserRole;
+  organizationId: string;
+}
+
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -67,10 +77,18 @@ const Settings = () => {
   const [managerToAssign, setManagerToAssign] = useState<number | null>(null); // Stores the ID of the manager to assign, or null for "Assign to me"
   const [assignManagerModalSaveLoading, setAssignManagerModalSaveLoading] = useState(false);
   const [assignManagerModalSaveError, setAssignManagerModalSaveError] = useState<string | null>(null);
-  const [assignManagerModalSuccessMessage, setAssignManagerModalSuccessMessage] = useState<string | null>(null);
+  const [assignManagerModalSaveSuccessMessage, setAssignManagerModalSuccessMessage] = useState<string | null>(null);
 
-  const queryClient = useQueryClient(); // Get query client instance
-  const { isSignedIn, isLoaded: isAuthLoaded } = useAuth(); // Get isSignedIn and isLoaded from useAuth
+  // State for User Invitation Modal
+  const [isInviteUserModalOpen, setIsInviteUserModalOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [selectedAppRole, setSelectedAppRole] = useState<AppUserRole>('USER');
+  const [inviteUserError, setInviteUserError] = useState<string | null>(null);
+  const [inviteUserSuccessMessage, setInviteUserSuccessMessage] = useState<string | null>(null);
+  const [isInvitingUser, setIsInvitingUser] = useState(false);
+
+  const queryClient = useQueryClient();
+  const { isSignedIn, isLoaded: isAuthLoaded, orgId } = useAuth(); // orgId is from useAuth
 
   // Update tabItems to be defined before being used in isValidTab and state init
   const tabItems = [
@@ -486,6 +504,70 @@ const Settings = () => {
     }
   };
 
+  // User Invitation Modal Handlers
+  const openInviteUserModal = () => {
+    setIsInviteUserModalOpen(true);
+    setInviteEmail('');
+    setSelectedAppRole('USER');
+    setInviteUserError(null);
+    setInviteUserSuccessMessage(null);
+  };
+
+  const closeInviteUserModal = () => {
+    setIsInviteUserModalOpen(false);
+  };
+
+  const handleInviteUser = async () => {
+    if (!inviteEmail.trim() || !selectedAppRole) {
+      setInviteUserError('Email and role are required.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) {
+        setInviteUserError('Please enter a valid email address.');
+        return;
+    }
+    if (!orgId) {
+        setInviteUserError('Organization ID not found. Ensure you are part of an active organization.');
+        return;
+    }
+
+    setIsInvitingUser(true);
+    setInviteUserError(null);
+    setInviteUserSuccessMessage(null);
+
+    inviteUserMutation.mutate({
+        email: inviteEmail,
+        appRole: selectedAppRole,
+        organizationId: orgId
+    });
+  };
+
+  // Mutation for inviting user via backend API - CORRECTED STRUCTURE
+  const inviteUserMutation = useMutation<any, Error, InvitationData>({ // Pass a single options object
+    mutationFn: async (invitationData: InvitationData) => { // mutationFn is a property
+      const response = await apiClient.post('/users/clerk-invite', invitationData);
+      return response.data;
+    },
+    onSuccess: (data: any) => {
+      setInviteUserSuccessMessage(`Invitation sent to ${inviteEmail} with role ${selectedAppRole}.`);
+      closeInviteUserModal();
+      // queryClient.invalidateQueries(['usersList']); // Example
+    },
+    onError: (error: Error) => {
+      console.error("Error inviting user:", error);
+      let errorDetail = error.message || 'Failed to send invitation.';
+      if ((error as any).response?.data?.error) {
+        errorDetail = (error as any).response.data.error;
+      } else if ((error as any).response?.data?.message) {
+        errorDetail = (error as any).response.data.message;
+      }
+      setInviteUserError(errorDetail);
+    },
+    onSettled: () => {
+      setIsInvitingUser(false);
+    },
+  });
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Settings</h1>
@@ -518,11 +600,47 @@ const Settings = () => {
       {/* Tab Content */}
       <div>
         {activeTab === 'Users' && (
-          <>
-            {/* Managers List Card - ADMINS ONLY */}
+          <div className="space-y-6"> {/* Added a wrapping div for spacing if multiple cards appear in Users tab */}
+            {/* User Management and Invite Button - ADMINS ONLY */}
             {userData && userData.role === 'ADMIN' && (
-              <div className="">
-                <div className="">
+              <div className="bg-white shadow sm:rounded-lg">
+                <div className="px-4 py-5 sm:p-6">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">User Invitations</h3>
+                    <button
+                      type="button"
+                      onClick={openInviteUserModal}
+                      className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      Invite User
+                    </button>
+                  </div>
+                  {/* Feedback messages for invite user action */}
+                  {inviteUserSuccessMessage && (
+                    <div className="mt-4 p-3 bg-green-100 text-green-700 text-sm rounded-md">
+                      {inviteUserSuccessMessage}
+                    </div>
+                  )}
+                  {inviteUserError && (
+                    <div className="mt-4 p-3 bg-red-100 text-red-700 text-sm rounded-md">
+                      <WarningCircle size={20} className="inline mr-2" />
+                      {inviteUserError}
+                    </div>
+                  )}
+                   <div className="mt-6">
+                     <p className="text-sm text-gray-500">
+                       Invite new users to the organization and assign their application role.
+                     </p>
+                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Managers List Card - ADMINS ONLY (existing) */}
+            {userData && userData.role === 'ADMIN' && (
+              <div className="bg-white shadow sm:rounded-lg"> {/* Added card styling for consistency */}
+                <div className="px-4 py-5 sm:p-6"> {/* Added padding for consistency */}
+                  <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Current Managers</h3> {/* Added title */}
                   {isLoadingManagers && (
                     <div className="mt-4 text-sm text-gray-500">Loading managers...</div>
                   )}
@@ -574,7 +692,13 @@ const Settings = () => {
                 </div>
               </div>
             )}
-          </>
+            {/* If user is not admin and on Users tab, show a message or different content */}
+            {userData && userData.role !== 'ADMIN' && (
+                <div className="bg-white shadow sm:rounded-lg p-6">
+                    <p className="text-sm text-gray-600">User management and invitations are available for administrators.</p>
+                </div>
+            )}
+          </div>
         )}
 
         {activeTab === 'Teams' && (
@@ -796,7 +920,7 @@ const Settings = () => {
                     )}
                     {assignManagerModalSaveLoading && <p className="mt-3 text-sm text-blue-600">Saving changes...</p>}
                     {assignManagerModalSaveError && <div className="mt-3 p-2 bg-red-50 text-red-700 text-sm rounded-md"><WarningCircle size={16} className="inline mr-1" /> {assignManagerModalSaveError}</div>}
-                    {assignManagerModalSuccessMessage && <div className="mt-3 p-2 bg-green-50 text-green-700 text-sm rounded-md"><CheckCircle size={16} className="inline mr-1" /> {assignManagerModalSuccessMessage}</div>}
+                    {assignManagerModalSaveSuccessMessage && <div className="mt-3 p-2 bg-green-50 text-green-700 text-sm rounded-md"><CheckCircle size={16} className="inline mr-1" /> {assignManagerModalSaveSuccessMessage}</div>}
                   </div>
                   <div className="mt-6 flex justify-end space-x-3">
                     <button type="button" className="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2" 
@@ -810,6 +934,105 @@ const Settings = () => {
           </div>
         </Dialog>
       </Transition>
+
+      {/* Invite User Modal */}
+      <Transition.Root show={isInviteUserModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-10" onClose={closeInviteUserModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 z-10 overflow-y-auto">
+            <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                  <div>
+                    <div className="mt-3 text-center sm:mt-2">
+                      <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">
+                        Invite New User
+                      </Dialog.Title>
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <label htmlFor="invite-email" className="block text-sm font-medium text-gray-700 text-left">
+                            Email address
+                          </label>
+                          <div className="mt-1">
+                            <input
+                              type="email"
+                              name="invite-email"
+                              id="invite-email"
+                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+                              placeholder="you@example.com"
+                              value={inviteEmail}
+                              onChange={(e) => setInviteEmail(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label htmlFor="app-role" className="block text-sm font-medium text-gray-700 text-left">
+                            Application Role
+                          </label>
+                          <div className="mt-1">
+                            <select
+                              id="app-role"
+                              name="app-role"
+                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+                              value={selectedAppRole}
+                              onChange={(e) => setSelectedAppRole(e.target.value as AppUserRole)}
+                            >
+                              {APP_USER_ROLES.map(role => (
+                                <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1).toLowerCase()}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        {inviteUserError && (
+                           <div className="mt-2 p-3 bg-red-50 text-red-600 text-sm rounded-md">
+                                <WarningCircle size={18} className="inline mr-1" /> {inviteUserError}
+                           </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-2 sm:text-sm disabled:opacity-50"
+                      onClick={handleInviteUser}
+                      disabled={isInvitingUser}
+                    >
+                      {isInvitingUser ? 'Sending...' : 'Send Invitation'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-1 sm:mt-0 sm:text-sm"
+                      onClick={closeInviteUserModal}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
 
     </div>
   );

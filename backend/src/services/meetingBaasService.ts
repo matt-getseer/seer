@@ -25,7 +25,7 @@ export const inviteBotToMeeting = async (params: InviteBotParams) => {
     throw new Error('Meeting BaaS API Key is not configured.');
   }
 
-  const { meetingUrl, botName = 'Performance Notetaker', entryMessage = 'Hello! I am joining this meeting to take notes.' } = params;
+  const { meetingUrl, botName = 'Seer', entryMessage = 'Hello! I am joining this meeting to minutes and generate action plans.' } = params;
 
   try {
     console.log(`Attempting to invite bot to: ${meetingUrl}`);
@@ -35,7 +35,7 @@ export const inviteBotToMeeting = async (params: InviteBotParams) => {
         meeting_url: meetingUrl,
         reserved: false, // Assuming we want instantly available bots
         bot_name: botName,
-        // bot_image: "URL_TO_YOUR_BOT_IMAGE", // Optional: Add your branding
+        bot_image: 'C:\Users\matt\Documents\seer\frontend\public\favicon.png', // Optional: Add your branding
         entry_message: entryMessage,
         speech_to_text: 'Gladia', // Or configure based on user preference/settings
         // deduplication_key: null // Optional: Prevent duplicate bots
