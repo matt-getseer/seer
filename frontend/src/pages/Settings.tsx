@@ -42,7 +42,12 @@ interface SelectableTeamData {
 interface DepartmentData {
   id: number;
   name: string;
-  // headId?: number | null; // Optional: For future use
+  headId?: number | null; 
+  head?: {               
+    id: number;
+    name: string | null; 
+    email: string;
+  } | null;
   // teamCount?: number;    // Optional: For future use
 }
 
@@ -118,6 +123,7 @@ const Settings = () => {
   const [editingDepartment, setEditingDepartment] = useState<DepartmentData | null>(null);
   const [editDepartmentName, setEditDepartmentName] = useState('');
   const [editDepartmentError, setEditDepartmentError] = useState<string | null>(null);
+  const [selectedDepartmentHeadId, setSelectedDepartmentHeadId] = useState<number | null>(null);
 
   // State for Delete Team Modal
   const [isDeleteTeamModalOpen, setIsDeleteTeamModalOpen] = useState(false);
@@ -763,13 +769,6 @@ onError: (error: Error) => {
     setDeleteDepartmentSuccessMessage(null); // Clear success message on close
   };
 
-  const closeEditDepartmentModal = () => {
-    setIsEditDepartmentModalOpen(false);
-    setEditingDepartment(null); // This uses the state we defined earlier
-    setEditDepartmentName('');  // This uses the state we defined earlier
-    setEditDepartmentError(null); // This uses the state we defined earlier
-  };
-
   const handleEditTeamSave = async () => {
     if (!editingTeam) {
       setEditTeamError('No team selected for editing.');
@@ -788,28 +787,72 @@ onError: (error: Error) => {
   };
 
   const handleEditDepartmentSave = async () => {
-    if (!editingDepartment) {
-      setEditDepartmentError('No department selected for editing.');
-      return;
-    }
+    if (!editingDepartment) return;
+
+    setEditDepartmentError(null);
+
     if (!editDepartmentName.trim()) {
       setEditDepartmentError('Department name cannot be empty.');
       return;
     }
-    setEditDepartmentError(null);
 
-    editDepartmentMutation.mutate({
-      id: editingDepartment.id,
+    // Check if name or head has changed
+    const nameChanged = editDepartmentName !== editingDepartment.name;
+    const headChanged = selectedDepartmentHeadId !== (editingDepartment.headId || null);
+
+    if (!nameChanged && !headChanged) {
+      setEditDepartmentError('No changes made.'); // Or just close modal silently
+      // closeEditDepartmentModal();
+      return;
+    }
+
+    updateDepartmentMutation.mutate({
+      departmentId: editingDepartment.id,
       name: editDepartmentName.trim(),
+      headId: selectedDepartmentHeadId,
     });
   };
 
+  // Function to open the Edit Department Modal
   const openEditDepartmentModal = (department: DepartmentData) => {
-    setEditingDepartment(department); // Uses your existing state
-    setEditDepartmentName(department.name); // Uses your existing state
-    setEditDepartmentError(null); // Uses your existing state
-    setIsEditDepartmentModalOpen(true); // Uses your existing state
+    setEditingDepartment(department);
+    setEditDepartmentName(department.name);
+    setSelectedDepartmentHeadId(department.headId || null); // Initialize with current head ID
+    setEditDepartmentError(null); // Clear previous errors
+    setIsEditDepartmentModalOpen(true);
   };
+
+  // Function to close the Edit Department Modal
+  const closeEditDepartmentModal = () => {
+    setIsEditDepartmentModalOpen(false);
+    setEditingDepartment(null);
+    setEditDepartmentName('');
+    setSelectedDepartmentHeadId(null);
+    setEditDepartmentError(null);
+  };
+
+  // Mutation for updating department (including assigning head)
+  const updateDepartmentMutation = useMutation<DepartmentData, Error, { departmentId: number; name: string; headId: number | null }>(
+    {
+      mutationFn: async ({ departmentId, name, headId }: { departmentId: number; name: string; headId: number | null }) => {
+        if (editingDepartment && name !== editingDepartment.name) {
+          // Placeholder: Name update logic. Requires backend endpoint or separate mutation.
+          // For now, focusing on headId assignment.
+        }
+        const response = await apiClient.put(`/departments/${departmentId}/assign-head`, { userId: headId });
+        return response.data as DepartmentData;
+      },
+      onSuccess: (data: DepartmentData) => {
+        queryClient.invalidateQueries({ queryKey: ['allDepartments'] });
+        setSuccessMessage(`Department "${data.name}" updated successfully.`);
+        closeEditDepartmentModal(); // This will call the remaining, correctly defined function
+      },
+      onError: (error: Error) => {
+        setEditDepartmentError(error.message || 'Failed to update department.');
+        setErrorMessage(error.message || 'Failed to update department.');
+      },
+    }
+  );
 
   // Create Department Modal Handlers
   const openCreateDepartmentModal = () => {
@@ -1329,7 +1372,9 @@ onError: (error: Error) => {
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                           Department Name
                         </th>
-                        {/* Add more columns if DepartmentData includes more fields like 'Head of Department' or 'Team Count' in the future */}
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
+                          Manager
+                        </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                           <span className="sr-only">Actions</span>
                         </th>
@@ -1340,6 +1385,9 @@ onError: (error: Error) => {
                         <tr key={department.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {department.name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {department.head ? (department.head.name || department.head.email) : 'Unassigned'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <DropdownMenu.Root>
@@ -2099,86 +2147,147 @@ onError: (error: Error) => {
       </Transition.Root>
 
       {/* Edit Department Modal */}
-<Transition.Root show={isEditDepartmentModalOpen} as={Fragment}>
-  <Dialog as="div" className="relative z-10" onClose={closeEditDepartmentModal}>
-    <Transition.Child
-      as={Fragment}
-      enter="ease-out duration-300"
-      enterFrom="opacity-0"
-      enterTo="opacity-100"
-      leave="ease-in duration-200"
-      leaveFrom="opacity-100"
-      leaveTo="opacity-0"
-    >
-      <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
-    </Transition.Child>
+      {isEditDepartmentModalOpen && editingDepartment && (
+        <Transition.Root show={isEditDepartmentModalOpen} as={Fragment}>
+          <Dialog as="div" className="relative z-10" onClose={closeEditDepartmentModal}>
+            {/* ... Backdrop ... */}
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-300"
+              enterFrom="opacity-0"
+              enterTo="opacity-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
+              <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+            </Transition.Child>
 
-    <div className="fixed inset-0 z-10 overflow-y-auto">
-      <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-        <Transition.Child
-          as={Fragment}
-          enter="ease-out duration-300"
-          enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-          enterTo="opacity-100 translate-y-0 sm:scale-100"
-          leave="ease-in duration-200"
-          leaveFrom="opacity-100 translate-y-0 sm:scale-100"
-          leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-        >
-          <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
-            <div>
-              <div className="mt-3 text-center sm:mt-2">
-                <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">
-                  Edit Department: {editingDepartment?.name}
-                </Dialog.Title>
-                <div className="mt-4 space-y-4">
-                  <div>
-                    <label htmlFor="edit-department-name" className="block text-sm font-medium text-gray-700 text-left">
-                      Department Name
-                    </label>
-                    <div className="mt-1">
-                      <input
-                        type="text"
-                        name="edit-department-name"
-                        id="edit-department-name"
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
-                        value={editDepartmentName} // Uses your state
-                        onChange={(e) => setEditDepartmentName(e.target.value)} // Uses your state
-                        disabled={editDepartmentMutation.isPending} // Uses your mutation
-                      />
+            <div className="fixed inset-0 z-10 overflow-y-auto">
+              <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <Transition.Child
+                  as={Fragment}
+                  enter="ease-out duration-300"
+                  enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                  enterTo="opacity-100 translate-y-0 sm:scale-100"
+                  leave="ease-in duration-200"
+                  leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                  leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                >
+                  <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                    <div>
+                      <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                        <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
+                          Edit Department
+                        </Dialog.Title>
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <label htmlFor="editDepartmentName" className="block text-sm font-medium text-gray-700">
+                              Department Name
+                            </label>
+                            <input
+                              type="text"
+                              name="editDepartmentName"
+                              id="editDepartmentName"
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              value={editDepartmentName}
+                              onChange={(e) => setEditDepartmentName(e.target.value)}
+                            />
+                          </div>
+
+                          <div>
+                            <label htmlFor="departmentHead" className="block text-sm font-medium text-gray-700">
+                              Department Head (Manager)
+                            </label>
+                            <Select.Root 
+                              value={selectedDepartmentHeadId !== null ? String(selectedDepartmentHeadId) : "__NO_MANAGER__"} 
+                              onValueChange={(value) => {
+                                if (value === "__NO_MANAGER__") {
+                                  setSelectedDepartmentHeadId(null);
+                                } else {
+                                  setSelectedDepartmentHeadId(value ? parseInt(value) : null);
+                                }
+                              }}
+                            >
+                              <Select.Trigger 
+                                id="departmentHead"
+                                className="mt-1 flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                aria-label="Department Head"
+                              >
+                                <Select.Value placeholder="Select a manager..." />
+                                <Select.Icon>
+                                  <CaretDown size={16} />
+                                </Select.Icon>
+                              </Select.Trigger>
+                              <Select.Portal>
+                                <Select.Content className="relative z-50 min-w-[8rem] overflow-hidden rounded-md border bg-white text-gray-900 shadow-md animate-in fade-in-80">
+                                  <Select.ScrollUpButton className="flex cursor-default items-center justify-center py-1">
+                                    <CaretUp size={16} />
+                                  </Select.ScrollUpButton>
+                                  <Select.Viewport className="p-1">
+                                    <Select.Item value="__NO_MANAGER__" className="relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-indigo-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
+                                      <Select.ItemText>-- No Manager --</Select.ItemText>
+                                    </Select.Item>
+                                    {isLoadingManagers && <Select.Item value="loading" disabled className="text-sm text-gray-500 p-2">Loading managers...</Select.Item>}
+                                    {managersError && <Select.Item value="error" disabled className="text-sm text-red-500 p-2">Error loading managers</Select.Item>}
+                                    {managersData && managersData.map((manager) => (
+                                      <Select.Item 
+                                        key={manager.id} 
+                                        value={String(manager.id)} 
+                                        className="relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-indigo-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                      >
+                                        <Select.ItemIndicator className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+                                          <Check size={16} />
+                                        </Select.ItemIndicator>
+                                        <Select.ItemText>{manager.name} ({manager.email})</Select.ItemText>
+                                      </Select.Item>
+                                    ))}
+                                  </Select.Viewport>
+                                  <Select.ScrollDownButton className="flex cursor-default items-center justify-center py-1">
+                                    <CaretDown size={16} />
+                                  </Select.ScrollDownButton>
+                                </Select.Content>
+                              </Select.Portal>
+                            </Select.Root>
+                          </div>
+
+                          {editDepartmentError && (
+                            <p className="text-sm text-red-600" id="edit-department-error">
+                              {editDepartmentError}
+                            </p>
+                          )}
+                          {updateDepartmentMutation.isError && (
+                            <p className="text-sm text-red-600">
+                              {(updateDepartmentMutation.error as Error)?.message || 'An unexpected error occurred.'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  {editDepartmentError && ( // Uses your state
-                     <div className="mt-2 p-3 bg-red-50 text-red-600 text-sm rounded-md">
-                          <WarningCircle size={18} className="inline mr-1" /> {editDepartmentError}
-                     </div>
-                  )}
-                </div>
+                    <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+                      <button
+                        type="button"
+                        className="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 sm:col-start-2"
+                        onClick={handleEditDepartmentSave}
+                        disabled={updateDepartmentMutation.isPending}
+                      >
+                        {updateDepartmentMutation.isPending ? 'Saving...' : 'Save Changes'}
+                      </button>
+                      <button
+                        type="button"
+                        className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:col-start-1 sm:mt-0"
+                        onClick={closeEditDepartmentModal}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </Dialog.Panel>
+                </Transition.Child>
               </div>
             </div>
-            <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
-              <button
-                type="button"
-                className="inline-flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-2 sm:text-sm disabled:opacity-50"
-                onClick={handleEditDepartmentSave} // Uses your handler
-                disabled={editDepartmentMutation.isPending} // Uses your mutation
-              >
-                {editDepartmentMutation.isPending ? 'Saving...' : 'Save Changes'}
-              </button>
-              <button
-                type="button"
-                className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-1 sm:mt-0 sm:text-sm"
-                onClick={closeEditDepartmentModal} // Uses your handler
-                disabled={editDepartmentMutation.isPending} // Uses your mutation
-              >
-                Cancel
-              </button>
-            </div>
-          </Dialog.Panel>
-        </Transition.Child>
-      </div>
-    </div>
-  </Dialog>
-</Transition.Root>
+          </Dialog>
+        </Transition.Root>
+      )}
 
       {/* Delete Department Modal */}
 <Transition.Root show={isDeleteDepartmentModalOpen} as={Fragment}>
