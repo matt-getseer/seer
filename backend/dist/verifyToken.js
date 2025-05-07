@@ -33,14 +33,6 @@ async function verifyToken() {
                 email: user.email,
                 name: user.name
             });
-            // Check if user has interviews
-            const interviews = await prisma.interview.findMany({
-                where: { userId: user.id }
-            });
-            console.log(`User has ${interviews.length} interviews`);
-            if (interviews.length > 0) {
-                console.log('Sample interview:', interviews[0]);
-            }
         }
     }
     catch (error) {
