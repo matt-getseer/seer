@@ -255,7 +255,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\matt\\Documents\\seer\\backend\\generated\\prisma",
+      "value": "/Users/home/Documents/seer/backend/generated/prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -264,12 +264,12 @@ const config = {
     "binaryTargets": [
       {
         "fromEnvVar": null,
-        "value": "windows",
+        "value": "darwin",
         "native": true
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\matt\\Documents\\seer\\backend\\prisma\\schema.prisma",
+    "sourceFilePath": "/Users/home/Documents/seer/backend/prisma/schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
@@ -283,18 +283,17 @@ const config = {
     "db"
   ],
   "activeProvider": "postgresql",
-  "postinstall": false,
   "inlineDatasources": {
     "db": {
       "url": {
         "fromEnvVar": "DATABASE_URL",
-        "value": null
+        "value": "prisma+postgres://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlfa2V5IjoiYzYxZjJmYjAtNmU1NS00ZjIzLWI4YmQtOTQ5YzgyZDU0OGZhIiwidGVuYW50X2lkIjoiZWFlYzFkOGU1ZWU4MTRkMGNhZjUwZmUxNDQ2MDY5MDc1NTUxYTg1ZTMwMzFmMzVhOWZiZmFlZGMwZjJjNzY5NyIsImludGVybmFsX3NlY3JldCI6IjkwMzVhZjYwLTNhMTItNDE5Mi1hZGQ3LTUwZGY5ODIzOGVjMyJ9.cFB8UVGf8FBmAUrZ9Czu70YlHQPqKl6uGlK0ZGM31cw"
       }
     }
   },
   "inlineSchema": "generator client {\n  provider = \"prisma-client-js\"\n  output   = \"../generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\n// MODEL ORDERING: Based on your last provided schema that worked up to Employee.\n// If issues arise, consider reordering to: Team, Organization, User, Department, Employee, Meeting etc.\n\nmodel Organization {\n  id                  String       @id @db.Uuid\n  clerkOrganizationId String       @unique\n  name                String?\n  createdAt           DateTime     @default(now())\n  updatedAt           DateTime     @updatedAt\n  Team                Team[]\n  departments         Department[]\n  User                User[]\n\n  @@index([clerkOrganizationId])\n}\n\nmodel Department {\n  id             Int          @id @default(autoincrement())\n  name           String\n  organizationId String       @db.Uuid\n  headId         Int?\n  createdAt      DateTime     @default(now())\n  updatedAt      DateTime     @updatedAt\n  organization   Organization @relation(fields: [organizationId], references: [id])\n  head           User?        @relation(\"DepartmentHead\", fields: [headId], references: [id])\n  teams          Team[]\n\n  @@unique([name, organizationId])\n  @@index([organizationId])\n  @@index([headId])\n}\n\nmodel Team {\n  id             Int          @id @default(autoincrement())\n  name           String\n  organizationId String       @db.Uuid\n  Organization   Organization @relation(fields: [organizationId], references: [id])\n  departmentId   Int\n  department     Department   @relation(fields: [departmentId], references: [id])\n  userId         Int? // Keeping TeamManager relation commented for now\n  user           User?        @relation(\"TeamManager\", fields: [userId], references: [id])\n  Employee       Employee[] // Using your casing from previous schema\n\n  createdAt DateTime @default(now()) // <--- ADD THIS LINE\n  updatedAt DateTime @updatedAt // <--- ADD THIS LINE\n}\n\nmodel User {\n  id                 Int           @id @default(autoincrement())\n  email              String        @unique\n  name               String?\n  password           String\n  createdAt          DateTime      @default(now())\n  updatedAt          DateTime      @updatedAt\n  clerkId            String?       @unique\n  // Scalar fields for google/zoom tokens would go here from your backup if you have them\n  googleAccessToken  String? // Example\n  googleRefreshToken String? // Example\n  googleTokenExpiry  DateTime? // Example\n  zoomAccessToken    String? // Example\n  zoomRefreshToken   String? // Example\n  zoomTokenExpiry    DateTime? // Example\n  organizationId     String?       @db.Uuid\n  Organization       Organization? @relation(fields: [organizationId], references: [id])\n  departmentsHeaded  Department[]  @relation(\"DepartmentHead\")\n  role               UserRole      @default(USER)\n  Employee           Employee[] // Using your casing\n  meetings           Meeting[]     @relation(\"ManagerMeetings\") // Relation to Meeting\n\n  teams Team[] @relation(\"TeamManager\") // Keeping commented for now\n\n  @@index([organizationId])\n}\n\nmodel Employee {\n  id        Int       @id @default(autoincrement())\n  name      String\n  title     String\n  email     String    @unique\n  teamId    Int\n  createdAt DateTime  @default(now())\n  updatedAt DateTime  @updatedAt\n  userId    Int\n  startDate DateTime?\n  country   String?\n  managerId Int?\n\n  Employee       Employee?  @relation(\"EmployeeToEmployee\", fields: [managerId], references: [id])\n  other_Employee Employee[] @relation(\"EmployeeToEmployee\")\n  team           Team       @relation(fields: [teamId], references: [id])\n  user           User       @relation(fields: [userId], references: [id])\n  meetings       Meeting[]  @relation(\"EmployeeMeetings\") // Relation to Meeting\n\n  @@index([managerId])\n}\n\nmodel Meeting {\n  id                    Int         @id @default(autoincrement())\n  title                 String?\n  scheduledTime         DateTime\n  durationMinutes       Int?\n  platform              String?\n  audioFileUrl          String?\n  status                String      @default(\"SCHEDULED\")\n  managerId             Int\n  employeeId            Int\n  createdAt             DateTime    @default(now())\n  updatedAt             DateTime    @updatedAt\n  meetingBaasId         String?     @unique\n  googleCalendarEventId String?\n  meetingUrl            String?\n  meetingType           MeetingType @default(ONE_ON_ONE)\n\n  employee Employee @relation(\"EmployeeMeetings\", fields: [employeeId], references: [id])\n  manager  User     @relation(\"ManagerMeetings\", fields: [managerId], references: [id])\n\n  insights   MeetingInsight[] // Keep commented for relations to models not yet added\n  transcript Transcript? // Keep commented for relations to models not yet added\n\n  @@index([managerId])\n  @@index([employeeId])\n}\n\nmodel Transcript {\n  id           Int      @id @default(autoincrement())\n  meetingId    Int      @unique\n  content      String\n  languageCode String?\n  createdAt    DateTime @default(now())\n  updatedAt    DateTime @updatedAt\n  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)\n}\n\nmodel MeetingInsight {\n  id             Int      @id @default(autoincrement())\n  meetingId      Int\n  type           String\n  content        String\n  relevanceScore Float?\n  metadata       Json?\n  createdAt      DateTime @default(now())\n  updatedAt      DateTime @updatedAt\n  meeting        Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)\n\n  @@index([meetingId])\n}\n\nmodel OAuthState {\n  id                  String   @id @db.Uuid\n  stateValue          String   @unique\n  clerkOrganizationId String\n  createdAt           DateTime @default(now())\n\n  @@index([createdAt])\n  @@index([stateValue])\n}\n\nenum UserRole {\n  ADMIN\n  MANAGER\n  USER\n}\n\nenum MeetingType {\n  ONE_ON_ONE\n  SIX_MONTH_REVIEW\n  TWELVE_MONTH_REVIEW\n}\n",
   "inlineSchemaHash": "3416e3efe9e6a569e9e0987fc177e6192f234dc267a02c55d0a876d5311f441a",
-  "copyEngine": true
+  "copyEngine": false
 }
 config.dirname = '/'
 

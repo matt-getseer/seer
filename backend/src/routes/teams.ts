@@ -179,7 +179,7 @@ const getTeamById = async (req: AuthenticatedRequest, res: Response): Promise<Re
         organizationId: (await prisma.user.findUnique({where: {id: req.user.userId}}))?.organizationId ?? undefined
       },
       include: {
-        employees: {
+        Employee: {
           select: { id: true, name: true, title: true, email: true, startDate: true }
         },
         department: true
@@ -300,7 +300,7 @@ const updateTeam = async (req: AuthenticatedRequest, res: Response): Promise<Res
       where: { id: teamIdToUpdate },
       data: updateData,
       include: {
-        employees: {
+        Employee: {
           select: { id: true, name: true, title: true, email: true, startDate: true }
         },
         department: true 

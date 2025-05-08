@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AxiosError } from 'axios'
 import { MagnifyingGlass, ArrowUp, ArrowDown } from '@phosphor-icons/react'
@@ -21,12 +21,11 @@ type SortConfig = {
 type Team = {
   id: number
   name: string
-  department: string
-  employees: Employee[]
+  department: { id: number; name: string; }
+  Employee: Employee[]
   createdAt: string
   updatedAt: string
   userId: number
-  interviewCount?: number
 }
 
 type DepartmentGroup = {
@@ -39,6 +38,17 @@ const Teams = () => {
   const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState('')
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
+
+  // ADDED FOR DEBUGGING - Log when loading is complete
+  useEffect(() => {
+    if (!loading) {
+      console.log('[Teams.tsx] Data AFTER loading complete:', {
+        teams,
+        queryError,
+        firstTeamObject: teams.length > 0 ? teams[0] : 'No teams in array'
+      });
+    }
+  }, [loading, teams, queryError]);
 
   const error = queryError 
     ? (
@@ -80,9 +90,9 @@ const Teams = () => {
 
     const currentFilteredTeams = teams.filter(team => {
       const teamMatches = team.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          team.department.toLowerCase().includes(searchTerm.toLowerCase())
+                          (team.department && team.department.name.toLowerCase().includes(searchTerm.toLowerCase()))
       
-      const employeesArray = team.employees || [];
+      const employeesArray = team.Employee || [];
       const employeeMatches = employeesArray.some(employee => 
         employee.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
         employee.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -94,11 +104,11 @@ const Teams = () => {
 
     const grouped: { [key: string]: Team[] } = {};
     currentFilteredTeams.forEach(team => {
-      const department = team.department;
-      if (!grouped[department]) {
-        grouped[department] = [];
+      const departmentName = team.department ? team.department.name : 'Unknown Department';
+      if (!grouped[departmentName]) {
+        grouped[departmentName] = [];
       }
-      grouped[department].push(team);
+      grouped[departmentName].push(team);
     });
 
     return Object.entries(grouped)
@@ -178,7 +188,7 @@ const Teams = () => {
         const renderableDepartmentGroups = departmentsWithFilteredTeams
           .map(deptGroup => ({
             ...deptGroup,
-            teams: deptGroup.teams.filter(team => (team.employees || []).length > 0),
+            teams: deptGroup.teams.filter(team => (team.Employee || []).length > 0),
           }))
           .filter(deptGroup => deptGroup.teams.length > 0);
 
@@ -210,12 +220,12 @@ const Teams = () => {
                             <h3 className="text-xl font-semibold text-gray-900">{team.name}</h3>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm text-gray-500">{(team.employees || []).length} employees</p>
+                            <p className="text-sm text-gray-500">{(team.Employee || []).length} employees</p>
                           </div>
                         </div>
                       </div>
                       <div className="px-6 py-4">
-                        {team.employees && team.employees.length > 0 ? (
+                        {team.Employee && team.Employee.length > 0 ? (
                           <table className="min-w-full divide-y divide-gray-200">
                             <thead>
                               <tr>
@@ -237,7 +247,7 @@ const Teams = () => {
                               </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                              {sortEmployees(team.employees || []).map((employee) => (
+                              {sortEmployees(team.Employee || []).map((employee) => (
                                 <tr key={employee.id} className="hover:bg-gray-50">
                                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                     <button 

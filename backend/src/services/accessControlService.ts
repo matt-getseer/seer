@@ -50,13 +50,19 @@ export async function getAccessibleTeams(currentUser: User): Promise<Team[]> {
     return prisma.team.findMany({
       where: { organizationId: currentUser.organizationId }, // Admins see all in their org
       include: {
-        employees: {
+        Employee: {
           select: {
             id: true,
             name: true,
             title: true,
             email: true,
             startDate: true
+          }
+        },
+        department: {
+          select: {
+            id: true,
+            name: true
           }
         }
       }
@@ -120,24 +126,27 @@ export async function getAccessibleTeams(currentUser: User): Promise<Team[]> {
         },
       },
       include: {
-        employees: {
+        Employee: {
           select: {
             id: true,
             name: true,
             title: true,
             email: true,
             startDate: true,
-            user: { select: { id: true, name: true, email: true, role: true }} // Added user details
+            user: { select: { id: true, name: true, email: true, role: true }}
           }
         },
-        department: { // Include department info for context
-            select: { id: true, name: true }
+        department: {
+          select: {
+            id: true,
+            name: true
+          }
         },
-        user: { // Include team manager info
-            select: { id: true, name: true, email: true }
+        user: {
+          select: { id: true, name: true, email: true }
         }
       },
-      orderBy: { name: 'asc' } // Optional: order teams by name
+      orderBy: { name: 'asc' }
     });
   }
 
