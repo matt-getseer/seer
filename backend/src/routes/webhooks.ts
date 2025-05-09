@@ -472,11 +472,20 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
 
         // --- START: App Role Logic for user.created ---
         let appRoleForCreation: UserRole = UserRole.USER; // Default
-        if (userCreatedData.public_metadata?.app_role && isValidAppUserRole(userCreatedData.public_metadata.app_role)) {
-          appRoleForCreation = userCreatedData.public_metadata.app_role as UserRole;
-          console.log(`User creation for ${userCreatedData.id}: app_role '${appRoleForCreation}' found in public_metadata.`);
+
+        // Check if any organization exists. If not, this is the first user of the first organization.
+        const existingOrganizations = await prisma.organization.count();
+        if (existingOrganizations === 0) {
+          appRoleForCreation = UserRole.MANAGER;
+          console.log(`User creation for ${userCreatedData.id}: No organizations exist. Setting role to MANAGER.`);
         } else {
-          console.log(`User creation for ${userCreatedData.id}: No valid app_role in public_metadata, defaulting to '${UserRole.USER}'.`);
+          // If organizations exist, check public_metadata or default to USER
+          if (userCreatedData.public_metadata?.app_role && isValidAppUserRole(userCreatedData.public_metadata.app_role)) {
+            appRoleForCreation = userCreatedData.public_metadata.app_role as UserRole;
+            console.log(`User creation for ${userCreatedData.id}: app_role '${appRoleForCreation}' found in public_metadata.`);
+          } else {
+            console.log(`User creation for ${userCreatedData.id}: Organizations exist, no valid app_role in public_metadata, defaulting to '${UserRole.USER}'.`);
+          }
         }
         // --- END: App Role Logic ---
 

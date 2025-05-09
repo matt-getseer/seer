@@ -56,6 +56,11 @@ const mockRecommendations = [
   "Consider cross-training with the Product team"
 ];
 
+// New Mock Data for additional sections
+const mockActionItems = Array(5).fill("MOCKDATA");
+const mockNewStrengths = Array(5).fill("MOCKDATA");
+const mockNewAreasForSupport = Array(5).fill("MOCKDATA");
+
 // Define Meeting type locally for this component (can be moved to a shared types file later)
 interface Meeting {
   id: number;
@@ -259,104 +264,56 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
           </dl>
         </div>
       </div>
-      
-      {/* --- ADDED SECTIONS START --- */}
 
-      {/* Historical Performance Chart */}
-      <div className="bg-white border border-gray-200 sm:rounded-lg">
-        <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg font-medium text-gray-900">Historical Performance</h3>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">Overall Health Score Trend</p>
-        </div>
-        <div className="border-t border-gray-200 px-4 py-5 sm:px-6 h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={mockAnalysisHistory} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" fontSize={12} />
-              <YAxis domain={[60, 100]} fontSize={12}/>
-              <Tooltip />
-              <Area type="monotone" dataKey="healthScore" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} name="Health Score" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Current Skills Radar Chart */}
-      <div className="bg-white border border-gray-200 sm:rounded-lg">
-        <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg font-medium text-gray-900">Current Skill Assessment</h3>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">Based on recent feedback</p>
-        </div>
-        <div className="border-t border-gray-200 px-4 py-5 sm:px-6 h-80 flex justify-center items-center">
-          <ResponsiveContainer width="100%" height="100%">
-             <RadarChart cx="50%" cy="50%" outerRadius="80%" data={mockCurrentSkillsData}>
-              <PolarGrid />
-              <PolarAngleAxis dataKey="skill" fontSize={12} />
-              {/* <PolarRadiusAxis angle={30} domain={[0, 100]} /> */}
-              <Radar name={employee.name} dataKey="value" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
-              <Tooltip />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Strengths, Support Areas, Recommendations */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Strengths */}
+      {/* User-modified Strengths and Areas for Support block (Action Items removed, grid is md:grid-cols-2) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        {/* Strengths (New Style) */}
         <div className="bg-white border border-gray-200 sm:rounded-lg">
-          <div className="px-4 py-5 sm:px-6">
+          <div className="px-4 pt-5 pb-0 sm:px-6">
             <h3 className="text-lg font-medium text-gray-900">Strengths</h3>
           </div>
-          <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
-            <ul className="space-y-2">
-              {mockStrengths.map((strength, index) => (
-                <li key={index} className="text-sm text-gray-700 flex items-start">
-                  <span className="text-green-500 mr-2 mt-1">&#10003;</span> {/* Checkmark */}
-                  {strength}
-                </li>
-              ))}
-            </ul>
+          <div className="px-4 py-5 sm:px-6">
+            {mockNewStrengths.length > 0 ? (
+              <div className="">
+                <ul className="space-y-2">
+                  {mockNewStrengths.map((item, index) => (
+                    <li key={index} className="p-3 bg-green-50 border border-green-200 rounded-md text-sm text-gray-700">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="mt-4 text-gray-500 italic text-sm">No strengths identified.</p>
+            )}
           </div>
         </div>
 
-        {/* Areas for Support */}
+        {/* Areas for Support (New Style) */}
         <div className="bg-white border border-gray-200 sm:rounded-lg">
-          <div className="px-4 py-5 sm:px-6">
+          <div className="px-4 pt-5 pb-0 sm:px-6">
             <h3 className="text-lg font-medium text-gray-900">Areas for Support</h3>
           </div>
-          <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
-            <ul className="space-y-2">
-              {mockSupportAreas.map((area, index) => (
-                <li key={index} className="text-sm text-gray-700 flex items-start">
-                  <span className="text-yellow-500 mr-2 mt-1">&#8226;</span> {/* Bullet */}
-                  {area}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        {/* Recommendations */}
-        <div className="bg-white border border-gray-200 sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg font-medium text-gray-900">Recommendations</h3>
-          </div>
-          <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
-            <ul className="space-y-2">
-              {mockRecommendations.map((rec, index) => (
-                <li key={index} className="text-sm text-gray-700 flex items-start">
-                   <span className="text-blue-500 mr-2 mt-1">&#10148;</span> {/* Arrow */}
-                  {rec}
-                </li>
-              ))}
-            </ul>
+            {mockNewAreasForSupport.length > 0 ? (
+              <div className="">
+                <ul className="space-y-2">
+                  {mockNewAreasForSupport.map((item, index) => (
+                    <li key={index} className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-gray-700">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="mt-4 text-gray-500 italic text-sm">No areas for support identified.</p>
+            )}
           </div>
         </div>
       </div>
+      {/* End of "Areas for Support (New Style)" card */}
 
-      {/* --- ADDED SECTIONS END --- */}
-
-      {/* Meetings Section */}
+      {/* Meetings Section (MOVED HERE) */}
       <div className="bg-white border border-gray-200 sm:rounded-lg">
         <div className="px-4 py-5 sm:px-6">
           <h3 className="text-lg font-medium text-gray-900">Meetings</h3>
@@ -384,9 +341,9 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
             ) : (
               <ul className="divide-y divide-gray-200">
                 {meetings.map((meeting) => (
-                  <li 
-                    key={meeting.id} 
-                    onClick={() => navigate(`/meetings/${meeting.id}`)} 
+                  <li
+                    key={meeting.id}
+                    onClick={() => navigate(`/meetings/${meeting.id}`)}
                     className="px-6 py-4 hover:bg-gray-50 cursor-pointer grid grid-cols-6 gap-4 items-center"
                   >
                     {/* Title (wider column) */}
@@ -408,12 +365,14 @@ const EmployeeProfileContent = memo(({ employee, onClose }: {
                       </span>
                     </div>
                   </li>
-                ))}
+                ))} 
               </ul>
             )}
           </div>
         </div>
       </div>
+      {/* End of Meetings Section */}
+
     </div>
   );
 });

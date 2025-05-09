@@ -44,7 +44,8 @@ const extractUserInfo = async (req, res, next) => {
             req.user = {
                 userId: user.id,
                 clerkId: user.clerkId || clerkId,
-                email: user.email
+                email: user.email,
+                organizationId: user.organizationId
             };
             next();
         }
