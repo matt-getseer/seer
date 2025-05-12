@@ -108,6 +108,7 @@ model Meeting {
   id                    Int         @id @default(autoincrement())
   title                 String?
   scheduledTime         DateTime
+  timeZone              String?     // Store the IANA timezone (e.g., "Europe/London", "America/New_York")
   durationMinutes       Int?
   platform              String?
   audioFileUrl          String?

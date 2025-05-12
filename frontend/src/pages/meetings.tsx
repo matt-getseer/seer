@@ -14,7 +14,8 @@ interface HookMeeting extends AppMeeting { // Or define separately if very diffe
     id: number;
     name: string | null;
   };
-  durationMinutes?: number | null; 
+  durationMinutes?: number | null;
+  timeZone?: string | null; // Add timeZone field
 }
 
 // Define sort configuration
@@ -244,24 +245,30 @@ const MeetingsPage: React.FC = () => {
                             const durationMs = ('durationMinutes' in meeting ? (meeting as HookMeeting).durationMinutes || 0 : 0) * 60 * 1000;
                             const endTime = new Date(scheduledTime.getTime() + durationMs);
                             
-                            if (status === 'IN_WAITING_ROOM' && now > endTime) {
-                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">DID NOT HAPPEN</span>;
+                            // Use the meeting's timeZone if available, otherwise use the browser's timezone
+                            const meetingTimeZone = (meeting as HookMeeting).timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+                            
+                            // Helper function for timezone-aware date comparison
+                            const compareWithTimezone = (date1: Date, date2: Date): number => {
+                              // For accurate timezone comparison, we would ideally use date-fns-tz here
+                              // But for browser compatibility, we'll use a simple comparison
+                              return date1.getTime() - date2.getTime();
+                            };
+                            
+                            // Check various status conditions
+                            if (status === 'DID_NOT_HAPPEN') {
+                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Did Not Happen</span>;
+                            } else if (status === 'COMPLETED') {
+                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>;
+                            } else if (status === 'IN_PROGRESS') {
+                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">In Progress</span>;
+                            } else if (compareWithTimezone(now, scheduledTime) < 0) {
+                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Scheduled</span>;
+                            } else if (compareWithTimezone(now, endTime) > 0) {
+                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Missed</span>;
+                            } else {
+                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Unknown ({status})</span>;
                             }
-                            const initialStatuses = ['SCHEDULED', 'PENDING_BOT_INVITE', 'BOT_INVITED'];
-                            if (initialStatuses.includes(status) && now > scheduledTime && !(status === 'IN_WAITING_ROOM' && now > endTime)) {
-                               return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{status.toUpperCase()}</span>;
-                            }
-                            if (status === 'GENERATING_INSIGHTS' || status === 'CALL_ENDED') {
-                              return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><Spinner size={12} className="animate-spin mr-1.5" />PROCESSING...</span>;
-                            }
-                            if (status === 'COMPLETED') {
-                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">COMPLETED</span>;
-                            }
-                            if (status.startsWith('ERROR')) {
-                              return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">ERROR</span>;
-                            }
-                            // Default rendering
-                            return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">{status.toUpperCase()}</span>;
                           })()}
                       </td>
                     </tr>

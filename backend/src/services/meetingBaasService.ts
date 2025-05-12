@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const MEETINGBAAS_API_URL = 'https://api.meetingbaas.com';
 const API_KEY = process.env.MEETINGBAAS_API_KEY;
+const BACKEND_URL = process.env.BACKEND_URL || process.env.NGROK_URL || 'http://localhost:3001';
 
 if (!API_KEY) {
   console.error('MEETINGBAAS_API_KEY environment variable is not set.');
@@ -13,8 +14,10 @@ interface InviteBotParams {
   meetingUrl: string;
   botName?: string;
   entryMessage?: string;
-  // Add other parameters as needed based on Meeting BaaS API docs
-  // e.g., transcription provider, custom bot image, etc.
+  // Using correct field names based on MeetingBaaS API documentation
+  startDateTime?: Date | string; // Date object or ISO string
+  endDateTime?: Date | string;   // Date object or ISO string
+  webhookUrl?: string; // Add webhook URL parameter
 }
 
 /**
@@ -25,21 +28,45 @@ export const inviteBotToMeeting = async (params: InviteBotParams) => {
     throw new Error('Meeting BaaS API Key is not configured.');
   }
 
-  const { meetingUrl, botName = 'Seer', entryMessage = 'Hello! I am joining this meeting to minutes and generate action plans.' } = params;
+  const { 
+    meetingUrl, 
+    botName = 'Seer', 
+    entryMessage = 'Hello! I am joining this meeting to minutes and generate action plans.',
+    startDateTime,
+    endDateTime,
+    webhookUrl = `${BACKEND_URL}/api/webhooks/meetingbaas` // Default webhook URL
+  } = params;
 
   try {
     console.log(`Attempting to invite bot to: ${meetingUrl}`);
+    const requestBody = {
+      meeting_url: meetingUrl,
+      reserved: false, // Assuming we want instantly available bots
+      bot_name: botName,
+      entry_message: entryMessage,
+      speech_to_text: 'Gladia', // Or configure based on user preference/settings
+      webhook_url: webhookUrl, // Add the webhook URL to the request body
+      // deduplication_key: null // Optional: Prevent duplicate bots
+    };
+
+    // Add scheduled start time if provided
+    // The API expects a Unix timestamp in seconds
+    if (startDateTime) {
+      const startTimeMs = typeof startDateTime === 'string' 
+        ? new Date(startDateTime).getTime() 
+        : startDateTime.getTime();
+      
+      // Convert milliseconds to seconds for the API
+      const startTimeSeconds = Math.floor(startTimeMs / 1000);
+      
+      Object.assign(requestBody, { start_time: startTimeSeconds });
+    }
+
+    console.log(`Using webhook URL: ${webhookUrl}`); // Log the webhook URL being used
+
     const response = await axios.post(
       `${MEETINGBAAS_API_URL}/bots`,
-      {
-        meeting_url: meetingUrl,
-        reserved: false, // Assuming we want instantly available bots
-        bot_name: botName,
-        bot_image: 'C:\Users\matt\Documents\seer\frontend\public\favicon.png', // Optional: Add your branding
-        entry_message: entryMessage,
-        speech_to_text: 'Gladia', // Or configure based on user preference/settings
-        // deduplication_key: null // Optional: Prevent duplicate bots
-      },
+      requestBody,
       {
         headers: {
           'Content-Type': 'application/json',
@@ -49,8 +76,6 @@ export const inviteBotToMeeting = async (params: InviteBotParams) => {
     );
 
     console.log('Meeting BaaS Bot Invite Response:', response.data);
-    // The response likely contains a bot ID or meeting ID from Meeting BaaS
-    // which might be useful to store or log.
     return response.data; // Return the response data (e.g., bot info)
   } catch (error) {
     // Add type checking for the error

@@ -59,10 +59,12 @@ router.post('/record', authenticate, extractUserInfo, async (req: RequestWithUse
   let meetingBaasId: string | undefined = undefined; // Define variable in outer scope
   try {
     // 1. Create initial meeting record in DB
+    const systemTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     meetingRecord = await prisma.meeting.create({
       data: {
         title: title || `Meeting with Employee ${employeeId}`,
         scheduledTime: new Date(),
+        timeZone: systemTimeZone, // Store the system timezone
         platform: extractPlatform(meetingUrl),
         status: 'PENDING_BOT_INVITE',
         managerId: managerId,
@@ -72,7 +74,9 @@ router.post('/record', authenticate, extractUserInfo, async (req: RequestWithUse
 
     // 2. Call Meeting BaaS to invite the bot
     console.log(`Inviting bot for meeting ID: ${meetingRecord.id}`);
-    const botInviteResponse = await inviteBotToMeeting({ meetingUrl });
+    const botInviteResponse = await inviteBotToMeeting({ 
+      meetingUrl
+    });
 
     // --- Store the Meeting BaaS ID --- 
     // Use type assertion - replace 'bot_id' if actual key differs
@@ -255,6 +259,7 @@ router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithU
       data: {
         title: meetingTypeFormatted, // Use formatted meeting type as title in DB
         scheduledTime: new Date(startDateTime), // Store the original UTC time in DB
+        timeZone: timeZone, // Store the timezone provided by the client
         platform: platform, // Save the correct platform
         meetingUrl: meetingUrl, // Save the obtained URL
         status: 'PENDING_BOT_INVITE',
@@ -270,7 +275,10 @@ router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithU
 
     // Invite Meeting BaaS Bot
     console.log(`Inviting Meeting BaaS bot to ${meetingUrl} for meeting ID: ${meetingRecord.id}`);
-    const botInviteResponse = await inviteBotToMeeting({ meetingUrl: meetingUrl });
+    const botInviteResponse = await inviteBotToMeeting({ 
+      meetingUrl: meetingUrl,
+      startDateTime: new Date(startDateTime) // Pass the start date/time directly
+    });
 
     meetingBaasId = (botInviteResponse as any)?.bot_id; // Extract BaaS ID
     if (!meetingBaasId) {

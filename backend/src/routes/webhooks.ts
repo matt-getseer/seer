@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { WebhookEvent, UserJSON, OrganizationJSON, OrganizationMembershipJSON, DeletedObjectJSON, users, OrganizationMembership } from '@clerk/clerk-sdk-node';
 import { Webhook } from 'svix';
 import { v4 as uuidv4 } from 'uuid';
+import { formatInTimeZone } from 'date-fns-tz';
 
 // Load .env file
 dotenv.config();
@@ -91,9 +92,58 @@ router.post('/meetingbaas', async (req: Request, res: Response) => {
         if (payload.data.status?.code) {
           const newStatus = payload.data.status.code.toUpperCase(); // e.g., IN_WAITING_ROOM
           console.log(`Updating meeting ${meeting.id} status to: ${newStatus}`);
+          
+          // If the new status is 'IN_WAITING_ROOM', store the current time and check if meeting should be marked as "DID NOT HAPPEN"
+          if (newStatus === 'IN_WAITING_ROOM') {
+            // Get meeting timezone or use UTC as fallback
+            const meetingTimeZone = meeting.timeZone || 'UTC';
+            const scheduledTime = meeting.scheduledTime;
+            const durationMinutes = meeting.durationMinutes || 60; // Default to 1 hour if not specified
+            
+            // Calculate end time in the meeting's timezone
+            const endTime = new Date(scheduledTime.getTime() + durationMinutes * 60 * 1000);
+            
+            // Get current time in UTC
+            const now = new Date();
+            
+            console.log(`Meeting scheduled time: ${scheduledTime}, End time: ${endTime}, Now: ${now}`);
+            console.log(`Meeting timezone: ${meetingTimeZone}`);
+            
+            // Compare dates with timezone awareness
+            try {
+              // Convert now to the meeting's timezone for comparison
+              const nowInMeetingTz = formatInTimeZone(now, meetingTimeZone, 'yyyy-MM-dd\'T\'HH:mm:ssXXX');
+              const endTimeInMeetingTz = formatInTimeZone(endTime, meetingTimeZone, 'yyyy-MM-dd\'T\'HH:mm:ssXXX');
+              
+              console.log(`Now in meeting timezone: ${nowInMeetingTz}, End time in meeting timezone: ${endTimeInMeetingTz}`);
+              
+              // If the current time is already after the end of the meeting window, mark as "DID NOT HAPPEN"
+              if (new Date(nowInMeetingTz) > new Date(endTimeInMeetingTz)) {
+                console.log(`Meeting ${meeting.id} is marked as "DID NOT HAPPEN" because current time is after the end time in the meeting timezone`);
+                await prisma.meeting.update({
+                  where: { id: meeting.id },
+                  data: { status: 'DID_NOT_HAPPEN' },
+                });
+                return res.status(200).json({ message: 'Meeting marked as DID_NOT_HAPPEN due to timing.' });
+              }
+            } catch (error) {
+              console.error(`Error comparing dates with timezone: ${error}`);
+              // Fallback to simple comparison if date-fns-tz throws an error
+              if (now > endTime) {
+                console.log(`Meeting ${meeting.id} is marked as "DID NOT HAPPEN" (fallback comparison)`);
+                await prisma.meeting.update({
+                  where: { id: meeting.id },
+                  data: { status: 'DID_NOT_HAPPEN' },
+                });
+                return res.status(200).json({ message: 'Meeting marked as DID_NOT_HAPPEN due to timing (fallback).' });
+              }
+            }
+          }
+          
+          // Update meeting with the status from MeetingBaaS if not already handled
           await prisma.meeting.update({
             where: { id: meeting.id },
-            data: { status: newStatus }, 
+            data: { status: newStatus },
           });
         } else {
           console.warn(`Received bot.status_change event without status code for meeting ${meeting.id}`);
