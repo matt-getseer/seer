@@ -1,5 +1,3 @@
-import React from 'react'; // Keep React import for React.ReactNode if used in future
-
 export interface ReportCategory {
   id: string;
   name: string;

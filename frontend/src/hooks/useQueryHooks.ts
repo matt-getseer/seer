@@ -1,6 +1,5 @@
-import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
+import { useQuery, UseQueryOptions } from '@tanstack/react-query';
 import { employeeService, teamService, meetingService } from '../api/client';
-import { AxiosError } from 'axios';
 import { useOrganization, useAuth } from '@clerk/clerk-react';
 
 /**

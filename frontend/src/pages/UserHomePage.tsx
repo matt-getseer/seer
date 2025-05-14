@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 // import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts'; // Removed LineChart, Line
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import { EnvelopeSimple, Phone, Calendar, /*MapPin,*/ Building, Spinner, WarningCircle, Users } from '@phosphor-icons/react'; // MapPin not used in current JSX
-import { useAppContext, Meeting as AppContextMeeting } from '../context/AppContext'; // Keep AppContextMeeting import
+import { useAppContext } from '../context/AppContext'; // Remove AppContextMeeting import
 
 // Removed unused/duplicated local types
 // type EmployeeSelfProfile = { ... };
@@ -43,7 +43,7 @@ const UserHomePage = () => {
   const formatMeetingTime = (isoString: string) => {
     try {
       return format(new Date(isoString), 'PPpp');
-    } catch (e) {
+    } catch {
       return "Invalid Date";
     }
   };

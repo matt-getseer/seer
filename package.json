@@ -1,5 +1,26 @@
 {
   "dependencies": {
     "@prisma/client": "^6.7.0"
-  }
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
+  },
+  "name": "seer",
+  "version": "1.0.0",
+  "description": "A full-stack task management application built with modern technologies.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matt-getseer/seer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/matt-getseer/seer/issues"
+  },
+  "homepage": "https://github.com/matt-getseer/seer#readme"
 }

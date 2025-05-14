@@ -1,6 +1,25 @@
 import { PrismaClient, User, Team, Employee, Meeting, UserRole, Department, Prisma } from '@prisma/client';
+import featureFlags, { DEFAULT_ORGANIZATION_ID } from '../config/featureFlags.js';
+import { withOrganizationFilter } from '../utils/queryBuilder.js';
 
 const prisma = new PrismaClient();
+
+// Define a minimal User type for getEffectiveOrganizationId
+interface UserWithOrgId {
+  organizationId: string | null;
+  // Add other fields if strictly necessary for the function's logic, but it seems only orgId is used.
+}
+
+/**
+ * Get the appropriate organization ID based on feature flags
+ * If organizations are disabled, return the default organization ID
+ */
+export function getEffectiveOrganizationId(user: UserWithOrgId): string {
+  if (!featureFlags.ENABLE_ORGANIZATIONS) {
+    return DEFAULT_ORGANIZATION_ID;
+  }
+  return user.organizationId || DEFAULT_ORGANIZATION_ID;
+}
 
 // Helper function to get all user IDs in a manager's hierarchy
 async function getManagerialHierarchy(managerUserId: number): Promise<number[]> {
@@ -45,10 +64,16 @@ async function getManagerialHierarchy(managerUserId: number): Promise<number[]> 
 }
 
 export async function getAccessibleTeams(currentUser: User): Promise<Team[]> {
+  // Get effective organization ID based on feature flags
+  const orgId = getEffectiveOrganizationId(currentUser);
+
   if (currentUser.role === UserRole.ADMIN) {
-    if (!currentUser.organizationId) return []; // Admin must belong to an org
+    // When organizations feature is disabled, don't filter by org
+    // When enabled, check that user has an org
+    if (featureFlags.ENABLE_ORGANIZATIONS && !currentUser.organizationId) return [];
+
     return prisma.team.findMany({
-      where: { organizationId: currentUser.organizationId }, // Admins see all in their org
+      where: withOrganizationFilter({}, orgId),
       include: {
         Employee: {
           select: {
@@ -70,19 +95,20 @@ export async function getAccessibleTeams(currentUser: User): Promise<Team[]> {
   }
 
   if (currentUser.role === UserRole.MANAGER) {
-    if (!currentUser.organizationId) return []; // Manager must belong to an org
+    // When organizations feature is disabled, don't filter by org
+    // When enabled, check that user has an org
+    if (featureFlags.ENABLE_ORGANIZATIONS && !currentUser.organizationId) return [];
 
     // Logic for teams managed via hierarchy
     const managerUserIdsInHierarchy = await getManagerialHierarchy(currentUser.id);
     let teamIdsFromHierarchy: number[] = [];
     if (managerUserIdsInHierarchy.length > 0) {
       const teamsManagedInHierarchy = await prisma.team.findMany({
-        where: {
+        where: withOrganizationFilter({
           userId: {
             in: managerUserIdsInHierarchy,
-          },
-          organizationId: currentUser.organizationId, // Ensure teams are within the same org
-        },
+          }
+        }, orgId),
         select: { id: true },
       });
       teamIdsFromHierarchy = teamsManagedInHierarchy.map(team => team.id);
@@ -91,22 +117,20 @@ export async function getAccessibleTeams(currentUser: User): Promise<Team[]> {
     // New logic for teams in departments headed by the current user
     let teamIdsFromHeadedDepartments: number[] = [];
     const headedDepartments = await prisma.department.findMany({
-      where: {
+      where: withOrganizationFilter({
         headId: currentUser.id,
-        organizationId: currentUser.organizationId, // Ensure departments are within the same org
-      },
+      }, orgId),
       select: { id: true },
     });
 
     if (headedDepartments.length > 0) {
       const departmentIds = headedDepartments.map(dept => dept.id);
       const teamsInHeadedDepartments = await prisma.team.findMany({
-        where: {
+        where: withOrganizationFilter({
           departmentId: {
             in: departmentIds,
-          },
-          organizationId: currentUser.organizationId, // Ensure teams are within the same org
-        },
+          }
+        }, orgId),
         select: { id: true },
       });
       teamIdsFromHeadedDepartments = teamsInHeadedDepartments.map(team => team.id);
@@ -151,19 +175,22 @@ export async function getAccessibleTeams(currentUser: User): Promise<Team[]> {
   }
 
   if (currentUser.role === UserRole.USER) {
-    if (!currentUser.organizationId) return []; // User must belong to an org
+    // When organizations feature is disabled, don't filter by org
+    // When enabled, check that user has an org
+    if (featureFlags.ENABLE_ORGANIZATIONS && !currentUser.organizationId) return [];
+    
     // Find the employee record for the current user
     const employee = await prisma.employee.findFirst({
-      where: { userId: currentUser.id, team: { organizationId: currentUser.organizationId } }, // User's team must be in their org
+      where: { 
+        userId: currentUser.id,
+        team: withOrganizationFilter({}, orgId)
+      },
       select: { teamId: true }
     });
 
     if (employee && employee.teamId) {
       return prisma.team.findMany({
-        where: { id: employee.teamId, organizationId: currentUser.organizationId } // Team must be in their org
-        // No longer including the 'employees' field here for the USER role's own team view,
-        // as the EmployeeProfile page for the user themselves primarily uses employee.team.name/department
-        // which comes from the getAccessibleEmployees call.
+        where: withOrganizationFilter({ id: employee.teamId }, orgId)
       });
     }
     return []; // User is not associated with any team or not an employee
@@ -174,10 +201,18 @@ export async function getAccessibleTeams(currentUser: User): Promise<Team[]> {
 }
 
 export async function getAccessibleEmployees(currentUser: User): Promise<Employee[]> {
+  // Get effective organization ID based on feature flags
+  const orgId = getEffectiveOrganizationId(currentUser);
+
   if (currentUser.role === UserRole.ADMIN) {
-    if (!currentUser.organizationId) return []; // Admin must belong to an org
+    // When organizations feature is disabled, don't filter by org
+    // When enabled, check that user has an org
+    if (featureFlags.ENABLE_ORGANIZATIONS && !currentUser.organizationId) return [];
+    
     return prisma.employee.findMany({
-      where: { user: { organizationId: currentUser.organizationId } }, // Employees must be in admin's org
+      where: { 
+        user: withOrganizationFilter({}, orgId)
+      },
       include: {
         user: true, // To get user details like role
         team: true,
@@ -199,7 +234,11 @@ export async function getAccessibleEmployees(currentUser: User): Promise<Employe
     let teamIdsFromHierarchy: number[] = [];
     if (managerUserIdsInHierarchy.length > 0) {
       const teamsManagedInHierarchy = await prisma.team.findMany({
-        where: { userId: { in: managerUserIdsInHierarchy }, organizationId: currentUser.organizationId },
+        where: withOrganizationFilter({
+          userId: {
+            in: managerUserIdsInHierarchy,
+          }
+        }, orgId),
         select: { id: true },
       });
       teamIdsFromHierarchy = teamsManagedInHierarchy.map(team => team.id);
@@ -208,13 +247,19 @@ export async function getAccessibleEmployees(currentUser: User): Promise<Employe
     // New logic for teams in departments headed by the current user
     let teamIdsFromHeadedDepartments: number[] = [];
     const headedDepartments = await prisma.department.findMany({
-      where: { headId: currentUser.id, organizationId: currentUser.organizationId },
+      where: withOrganizationFilter({
+        headId: currentUser.id,
+      }, orgId),
       select: { id: true },
     });
     if (headedDepartments.length > 0) {
       const departmentIds = headedDepartments.map(dept => dept.id);
       const teamsInHeadedDepartments = await prisma.team.findMany({
-        where: { departmentId: { in: departmentIds }, organizationId: currentUser.organizationId },
+        where: withOrganizationFilter({
+          departmentId: {
+            in: departmentIds,
+          }
+        }, orgId),
         select: { id: true },
       });
       teamIdsFromHeadedDepartments = teamsInHeadedDepartments.map(team => team.id);
@@ -242,9 +287,7 @@ export async function getAccessibleEmployees(currentUser: User): Promise<Employe
       include: {
         user: true,
         team: {
-            include: {
-                department: { select: { id: true, name: true}}
-            }
+            include: {}
         },
         Employee: { select: { id: true, name: true, email: true, user: { select: { id:true, name: true, email: true}}}}, // Manager
         other_Employee: { select: { id: true, name: true, email: true, user: { select: { id:true, name: true, email: true}}}} // Direct reports

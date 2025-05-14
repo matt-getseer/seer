@@ -1,7 +1,19 @@
 import { CreateOrganization as ClerkCreateOrganization } from '@clerk/clerk-react'
+import { useFeatureFlags } from '../../context/FeatureFlagContext'
+import { Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
 // import { useNavigate } from 'react-router-dom' // Removed unused import
 
 const CreateOrganization = () => {
+  const { isOrganizationsEnabled } = useFeatureFlags();
+  
+  // If organizations feature is disabled, redirect to home page
+  if (!isOrganizationsEnabled()) {
+    // Log reason for redirect to help with debugging
+    console.log('[CreateOrganization] Organizations feature is disabled, redirecting to home');
+    return <Navigate to="/" replace />;
+  }
+
   // const navigate = useNavigate() // Removed unused variable
 
   return (

@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node';
-import { findOrCreateUser } from '../utils/clerkUserHandler';
+import { findOrCreateUser } from '../utils/clerkUserHandler.js';
+import { RequestWithUser } from './types.js'; // Added .js extension
+import { UserRole } from '@prisma/client'; // Import UserRole
 
 // Clerk middleware setup with debug logging
 console.log('Setting up Clerk authentication middleware');
@@ -16,66 +18,75 @@ if (!process.env.CLERK_SECRET_KEY) {
 const clerkAuth = ClerkExpressRequireAuth();
 
 // Extended Request interface with Clerk user data
-export interface RequestWithUser extends Request {
-  auth?: {
-    userId: string;
-    sessionId: string;
-  };
-  user?: {
-    userId: number;
-    clerkId: string;
-    email?: string;
-    organizationId?: string | null;
-  };
-}
+// export interface RequestWithUser extends Request {
+//   auth?: {
+//     userId: string;
+//     sessionId: string;
+//   };
+//   user?: {
+//     userId: number;
+//     clerkId: string;
+//     email?: string;
+//     organizationId?: string | undefined;
+//     id?: number;
+//     role?: string;
+//     [key: string]: any;
+//   };
+// }
 
-// Our auth middleware using Clerk
-export const authenticate = (req: RequestWithUser, res: Response, next: NextFunction) => {
-  console.log('Authenticate middleware called, headers:', req.headers.authorization ? 'Authorization present' : 'No authorization header');
-  
-  // Check if Clerk is properly configured
-  if (!process.env.CLERK_SECRET_KEY) {
-    console.error('Authentication failed: CLERK_SECRET_KEY not set');
-    return res.status(500).json({ error: 'Server authentication configuration error' });
-  }
-  
-  // Pass through to Clerk's authentication middleware
-  return clerkAuth(req, res, next);
-};
+// Middleware for Clerk authentication
+export const authenticate = clerkAuth;
 
 // Middleware to extract user info from Clerk and add to our database context
-export const extractUserInfo = async (req: RequestWithUser, res: Response, next: NextFunction) => {
+export const extractUserInfo = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    console.log('Extract user info middleware called');
-    if (!req.auth) {
-      console.log('No auth object found on request');
-      return res.status(401).json({ error: 'Authentication required' });
+    console.log('[AuthMiddleware] Extract user info middleware called');
+    // Use the imported RequestWithUser for type assertion
+    const reqWithAuth = req as RequestWithUser;
+
+    if (!reqWithAuth.auth?.userId) {
+      console.warn('[AuthMiddleware] Authentication required: Clerk user ID (req.auth.userId) missing.');
+      return res.status(401).json({ error: 'Authentication required: Clerk user ID missing.' });
     }
     
-    // Extract Clerk auth info
-    const { userId: clerkId } = req.auth;
-    console.log('Clerk user ID found:', clerkId);
+    const clerkId = reqWithAuth.auth.userId;
+    console.log('[AuthMiddleware] Clerk user ID found:', clerkId);
     
-    // Find or create the user in our database
     try {
-      const user = await findOrCreateUser(clerkId);
-      console.log('User found or created:', user.id);
+      // findOrCreateUser now returns a user with guaranteed email and role (UserRole.MANAGER for new users)
+      const userFromDb = await findOrCreateUser(clerkId); 
       
-      // Add to request for later use
-      req.user = {
-        userId: user.id,
-        clerkId: user.clerkId || clerkId,
-        email: user.email,
-        organizationId: user.organizationId
+      // Safeguard checks, though findOrCreateUser should guarantee these.
+      if (!userFromDb.email) {
+        console.error('[AuthMiddleware] Critical error: User email not found after findOrCreateUser for clerkId:', clerkId);
+        return res.status(500).json({ error: 'User data incomplete: email missing after DB operation.' });
+      }
+      // userFromDb.role is now guaranteed by findOrCreateUser to be UserRole type.
+      if (!userFromDb.role) { 
+        console.error('[AuthMiddleware] Critical error: User role not found after findOrCreateUser for clerkId:', clerkId);
+        return res.status(500).json({ error: 'User data incomplete: role missing after DB operation.' });
+      }
+
+      // Populate req.user according to the RequestWithUser interface from types.ts
+      reqWithAuth.user = {
+        id: userFromDb.id,
+        clerkId: userFromDb.clerkId || clerkId, // Use clerkId from DB, fallback to auth if needed
+        email: userFromDb.email,               // Ensured to be string by findOrCreateUser
+        role: userFromDb.role,                 // Ensured to be UserRole by findOrCreateUser
+        organizationId: userFromDb.organizationId === null ? undefined : userFromDb.organizationId,
       };
+      console.log('[AuthMiddleware] req.user populated:', { id: reqWithAuth.user.id, email: reqWithAuth.user.email, role: reqWithAuth.user.role, organizationId: reqWithAuth.user.organizationId });
       
       next();
     } catch (error) {
-      console.error('Error finding or creating user:', error);
-      return res.status(500).json({ error: 'Failed to process user information' });
+      // Log the error from findOrCreateUser or subsequent processing
+      console.error('[AuthMiddleware] Error during findOrCreateUser or populating req.user:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process user information.';
+      return res.status(500).json({ error: errorMessage });
     }
   } catch (error) {
-    console.error('Error extracting user info:', error);
-    return res.status(500).json({ error: 'Server error' });
+    // This outer catch handles errors like req.auth not being present or other unexpected errors.
+    console.error('[AuthMiddleware] Unexpected error in extractUserInfo middleware:', error);
+    return res.status(500).json({ error: 'Server error during user authentication process.' });
   }
 }; 

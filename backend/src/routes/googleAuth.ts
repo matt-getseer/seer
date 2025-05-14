@@ -1,9 +1,9 @@
 import express, { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth'; // Assuming middleware path
-import { getGoogleAuthUrl, oauth2Client } from '../services/googleAuthService'; // Import oauth2Client
+import { authenticate, extractUserInfo } from '../middleware/auth.js'; // Added .js
+import { RequestWithUser } from '../middleware/types.js'; // Import RequestWithUser directly from types.js
+import { getGoogleAuthUrl, oauth2Client } from '../services/googleAuthService.js'; // Added .js
 import dotenv from 'dotenv';
-import { GetTokenResponse } from 'google-auth-library/build/src/auth/oauth2client'; // Import specific type
 
 dotenv.config();
 
@@ -16,12 +16,12 @@ const FRONTEND_REDIRECT_URL = process.env.FRONTEND_URL || 'http://localhost:5173
 // GET /api/auth/google - Redirects user to Google consent screen
 router.get('/google', authenticate, extractUserInfo, (req: RequestWithUser, res: Response) => {
   // Get user ID from middleware
-  if (!req.user?.userId) {
+  if (!req.user?.id) {
     return res.status(401).json({ message: 'Authentication required.' });
   }
 
   try {
-    const userId = req.user.userId;
+    const userId = req.user.id;
     // Return the auth URL instead of redirecting
     const authUrl = getGoogleAuthUrl(userId);
     console.log(`Generated Google Auth URL for user ${userId}: ${authUrl}`);
@@ -60,13 +60,12 @@ router.get('/google/callback', async (req: Request, res: Response) => {
   try {
     // Exchange authorization code for tokens
     console.log(`Exchanging code for tokens for user ${userId}...`);
-    const { tokens }: GetTokenResponse = await oauth2Client.getToken(code);
+    const { tokens } = await oauth2Client.getToken(code);
     console.log(`Tokens received for user ${userId}:`, {
       access_token_present: !!tokens.access_token,
       refresh_token_present: !!tokens.refresh_token,
       expiry_date: tokens.expiry_date
     });
-
 
     if (!tokens.access_token) {
        throw new Error('Failed to retrieve access token from Google.');

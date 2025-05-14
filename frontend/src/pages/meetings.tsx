@@ -91,7 +91,7 @@ const MeetingsPage: React.FC = () => {
 
   // Memoized sorting logic (uses combined filteredMeetings)
   const sortedMeetings = useMemo(() => {
-    let sortableItems = [...filteredMeetings];
+    const sortableItems = [...filteredMeetings];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         let aValue: any;
@@ -246,7 +246,7 @@ const MeetingsPage: React.FC = () => {
                             const endTime = new Date(scheduledTime.getTime() + durationMs);
                             
                             // Use the meeting's timeZone if available, otherwise use the browser's timezone
-                            const meetingTimeZone = (meeting as HookMeeting).timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+                            const _meetingTimeZone = (meeting as HookMeeting).timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
                             
                             // Helper function for timezone-aware date comparison
                             const compareWithTimezone = (date1: Date, date2: Date): number => {

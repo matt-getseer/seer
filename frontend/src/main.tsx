@@ -4,6 +4,7 @@ import App from './App.tsx'
 import './index.css'
 import { ClerkProvider } from '@clerk/clerk-react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { FeatureFlagProvider } from './context/FeatureFlagContext'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,7 +35,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         signInFallbackRedirectUrl="/"
         signUpFallbackRedirectUrl="/"
       >
-        <App />
+        <FeatureFlagProvider>
+          <App />
+        </FeatureFlagProvider>
       </ClerkProvider>
     </QueryClientProvider>
   </React.StrictMode>,

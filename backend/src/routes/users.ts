@@ -1,8 +1,9 @@
 import express, { Request, Response, NextFunction, RequestHandler } from 'express';
 import { PrismaClient, Prisma, UserRole, User as PrismaUser } from '@prisma/client';
-import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
-import { clerkClient } from '@clerk/clerk-sdk-node'; // Added Clerk SDK client
-import { getAccessibleEmployees, getAccessibleMeetings } from '../services/accessControlService'; // Import new services
+import { authenticate, extractUserInfo } from '../middleware/auth.js';
+import { RequestWithUser } from '../middleware/types.js';
+import { clerkClient } from '@clerk/clerk-sdk-node';
+import { getAccessibleEmployees, getAccessibleMeetings, getEffectiveOrganizationId } from '../services/accessControlService.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -24,8 +25,11 @@ function isValidUserRole(role: any): role is UserRole {
 }
 
 // Get all users
-const getAllUsers: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
+const getAllUsers: RequestHandler = async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
+    if (!req.user?.role || req.user.role !== UserRole.ADMIN) {
+      return res.status(403).json({ error: 'Forbidden: Admin role required.'});
+    }
     const users = await prisma.user.findMany({
       select: userSelectFields
     });
@@ -40,8 +44,7 @@ const getUserById = async (req: RequestWithUser, res: Response, next: NextFuncti
   try {
     const { id } = req.params;
     
-    // Only allow admins or the user themselves to access user data
-    if (req.user?.userId !== Number(id)) {
+    if (req.user?.role !== UserRole.ADMIN && req.user?.id !== Number(id)) {
       return res.status(403).json({ error: 'Not authorized to access this user data' });
     }
     
@@ -64,13 +67,13 @@ const getUserById = async (req: RequestWithUser, res: Response, next: NextFuncti
 // Get the current authenticated user
 const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
-    if (!req.user?.userId) {
+    if (!req.user?.id) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     // Fetch the raw Prisma user to get role and auth tokens
     const prismaUser = await prisma.user.findUnique({
-      where: { id: req.user.userId },
+      where: { id: req.user.id },
       select: {
         id: true,
         email: true,
@@ -81,6 +84,7 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
         googleRefreshToken: true,
         zoomRefreshToken: true,
         role: true,
+        organizationId: true, // Added to fetch organizationId
         // Do NOT select password or other sensitive tokens unless explicitly needed by services
       },
     });
@@ -96,6 +100,27 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
 
     let employeeProfile = null;
     let meetings = [];
+    let managerTeamId: number | undefined = undefined; // Variable to hold the manager's team ID
+
+    // If the user is a MANAGER, find their teamId
+    if (prismaUser.role === UserRole.MANAGER) {
+      const effectiveOrgId = getEffectiveOrganizationId(prismaUser); // Get effective org ID
+      const managedTeam = await prisma.team.findFirst({
+        where: {
+          userId: prismaUser.id,          // Find the team managed by THIS specific user
+          organizationId: effectiveOrgId, // Within their effective organization
+        },
+        select: {
+          id: true,
+        },
+      });
+      if (managedTeam) {
+        managerTeamId = managedTeam.id;
+      } else {
+        // Optional: Log if no default team is found for the organization
+        console.warn(`No team directly assigned to manager ${prismaUser.id} in organization ID: ${effectiveOrgId}. This manager may not be able to invite users until a team is assigned to them.`);
+      }
+    }
 
     // Fetch employee profile details if the user has a role (especially for USER role)
     // Admins/Managers might also get their "employee" view this way if they are also employees.
@@ -119,6 +144,7 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
       hasZoomAuth: !!prismaUser.zoomRefreshToken,
       employeeProfile: employeeProfile, // Add employee profile
       meetings: meetings, // Add meetings
+      teamId: managerTeamId, // Added manager's teamId to the response
     };
 
     res.json(responseData);
@@ -130,24 +156,11 @@ const getCurrentUser = async (req: RequestWithUser, res: Response, next: NextFun
 // New handler to get all managers (Admin only)
 const getAllManagers: RequestHandler = async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
-    // Ensure user is authenticated and user info is extracted
-    if (!req.user?.userId) {
+    if (!req.user?.id) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    // Fetch the current user from DB to check their role
-    const currentUser = await prisma.user.findUnique({
-      where: { id: req.user.userId },
-      select: { role: true }
-    });
-
-    if (!currentUser) {
-      // This should ideally not happen if authentication middleware is effective
-      return res.status(404).json({ error: 'Authenticated user not found' });
-    }
-
-    // Check if the current user is an ADMIN
-    if (currentUser.role !== UserRole.ADMIN) {
+    if (req.user.role !== UserRole.ADMIN) {
       return res.status(403).json({ error: 'Forbidden: Only admins can access the list of managers.' });
     }
 
@@ -172,16 +185,11 @@ const getAllManagers: RequestHandler = async (req: RequestWithUser, res: Respons
 // Update assigned teams for a manager (Admin only)
 const updateManagerAssignedTeams = async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
-    if (!req.user?.userId) {
+    if (!req.user?.id) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const requestingUser = await prisma.user.findUnique({
-      where: { id: req.user.userId },
-      select: { role: true }
-    });
-
-    if (!requestingUser || requestingUser.role !== UserRole.ADMIN) {
+    if (req.user.role !== UserRole.ADMIN) {
       return res.status(403).json({ error: 'Forbidden: Only admins can update team assignments.' });
     }
 
@@ -213,7 +221,7 @@ const updateManagerAssignedTeams = async (req: RequestWithUser, res: Response, n
       //    This means setting Team.userId to the ID of the admin making the change.
       await tx.team.updateMany({
         where: { userId: numericManagerId },
-        data: { userId: req.user!.userId },
+        data: { userId: req.user!.id },
       });
 
       // 2. Assign the new set of teams to this manager ID
@@ -249,12 +257,12 @@ const updateUserAppRole = async (req: RequestWithUser, res: Response, next: Next
     const targetUserId = parseInt(req.params.userId, 10);
     const { role: newAppRole } = req.body;
 
-    if (!adminMakingRequest || !adminMakingRequest.userId) {
+    if (!adminMakingRequest || !adminMakingRequest.id) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     const adminUser = await prisma.user.findUnique({
-      where: { id: adminMakingRequest.userId },
+      where: { id: adminMakingRequest.id },
       select: { role: true },
     });
 
@@ -270,7 +278,7 @@ const updateUserAppRole = async (req: RequestWithUser, res: Response, next: Next
       return res.status(400).json({ error: `Invalid role provided. Must be one of: ${Object.values(UserRole).join(', ')}` });
     }
     
-    if (targetUserId === adminMakingRequest.userId) {
+    if (targetUserId === adminMakingRequest.id) {
         return res.status(400).json({ error: "Admins cannot change their own application role using this endpoint." });
     }
 
@@ -300,11 +308,11 @@ const inviteUserToClerkOrganization = async (req: RequestWithUser, res: Response
     const adminMakingRequest = req.user;
     const { email: emailAddress, appRole, organizationId } = req.body; // appRole is your ADMIN/MANAGER/USER
 
-    if (!adminMakingRequest || !adminMakingRequest.userId || !adminMakingRequest.clerkId) {
+    if (!adminMakingRequest || !adminMakingRequest.id || !adminMakingRequest.clerkId) {
       return res.status(401).json({ error: 'Not authenticated or admin Clerk ID missing.' });
     }
 
-    const adminUser = await prisma.user.findUnique({ where: { id: adminMakingRequest.userId } });
+    const adminUser = await prisma.user.findUnique({ where: { id: adminMakingRequest.id } });
     if (!adminUser || adminUser.role !== UserRole.ADMIN) {
       return res.status(403).json({ error: 'Forbidden: Only admins can invite users.' });
     }

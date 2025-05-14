@@ -16,6 +16,7 @@ import { setTokenGetter } from './api/client'
 import CreateOrganization from '@/pages/organizations/CreateOrganization'
 import MinimalLayout from './layouts/MinimalLayout'
 import { AppProvider, useAppContext } from './context/AppContext'
+import { useFeatureFlags } from './context/FeatureFlagContext'
 
 // Lazy load report pages
 const TeamPerformance = lazy(() => import('./pages/reports/TeamPerformance'))
@@ -31,7 +32,7 @@ const MeetingOverviewPage = lazy(() => import('./pages/meetingoverview'))
 
 // Navigation setup component
 const NavigationSetup = memo(({ children }: { children: React.ReactNode }) => {
-  const { isLoaded, isSignedIn, getToken } = useAuth()
+  const { isLoaded, isSignedIn, getToken } = useAuth();
 
   useEffect(() => {
     if (!isLoaded) {
@@ -40,32 +41,32 @@ const NavigationSetup = memo(({ children }: { children: React.ReactNode }) => {
     }
     console.log(`[NavigationSetup] Clerk loaded. isSignedIn: ${isSignedIn}`);
 
-    // Create a stable token getter function that doesn't change on re-renders
-    const stableTokenGetter = async () => {
-      console.log('[stableTokenGetter] Attempting to get token...');
-      if (!isSignedIn) {
-        console.log('[stableTokenGetter] Not signed in according to useAuth, returning null.');
-        return null;
-      }
+    // This function will be called by the API client interceptor
+    const clerkTokenProvider = async () => {
+      console.log('[clerkTokenProvider] Attempting to get token via useAuth().getToken().');
       try {
-        const token = await getToken();
+        // getToken() should return null if the user is not authenticated
+        // or if the token cannot be retrieved for other reasons (e.g., session expired).
+        const token = await getToken(); 
         if (token) {
-          console.log('[stableTokenGetter] Token retrieved successfully (first 15 chars):', token.substring(0, 15) + '...');
+          console.log('[clerkTokenProvider] Token retrieved successfully (first 15 chars):', token.substring(0, 15) + '...');
         } else {
-          console.log('[stableTokenGetter] getToken() returned null or undefined.');
+          // This is an expected case if the user is not signed in or session is invalid.
+          console.log('[clerkTokenProvider] getToken() returned null or undefined. User might not be authenticated.');
         }
         return token;
       } catch (error) {
-        console.error('[stableTokenGetter] Error calling getToken():', error);
-        return null;
+        // This would catch errors during the token retrieval process itself.
+        console.error('[clerkTokenProvider] Error calling getToken():', error);
+        return null; // Ensure null is returned on error to prevent breaking the interceptor.
       }
     };
 
-    setTokenGetter(stableTokenGetter);
-    console.log('[NavigationSetup] Token getter has been set.');
-  }, [isLoaded, isSignedIn, getToken]);
+    setTokenGetter(clerkTokenProvider);
+    console.log('[NavigationSetup] Token getter has been set using clerkTokenProvider.');
+  }, [isLoaded, getToken, isSignedIn]); // Added isSignedIn back as it might affect when getToken is valid or should be called
 
-  return <>{children}</>
+  return <>{children}</>;
 });
 
 // Component to clear problematic redirects from localStorage
@@ -93,7 +94,7 @@ const MainLayout = memo(({ children, sidebarCollapsed, setSidebarCollapsed, setS
   setSidebarCollapsed: (collapsed: boolean) => void;
   setSearchModalOpen: (open: boolean) => void;
 }) => {
-  const { isLoaded } = useUser();
+  useUser();
 
   const handleSearchClick = useCallback(() => {
     setSearchModalOpen(true);
@@ -124,8 +125,14 @@ const MainLayout = memo(({ children, sidebarCollapsed, setSidebarCollapsed, setS
 const OrganizationCheckWrapper = memo(({ children }: { children: React.ReactNode }) => {
   const { organization, isLoaded } = useOrganization();
   const location = useLocation();
+  const { isOrganizationsEnabled } = useFeatureFlags();
 
-  console.log('[OrganizationCheckWrapper] State:', { isLoaded, hasOrg: !!organization, pathname: location.pathname });
+  console.log('[OrganizationCheckWrapper] State:', { 
+    isLoaded, 
+    hasOrg: !!organization, 
+    pathname: location.pathname,
+    isOrganizationsEnabled: isOrganizationsEnabled()
+  });
 
   if (!isLoaded) {
     console.log('[OrganizationCheckWrapper] Not loaded, showing spinner.');
@@ -134,6 +141,12 @@ const OrganizationCheckWrapper = memo(({ children }: { children: React.ReactNode
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
     );
+  }
+
+  // When organizations feature is disabled, bypass organization checks
+  if (!isOrganizationsEnabled()) {
+    console.log('[OrganizationCheckWrapper] Organizations feature disabled, bypassing organization checks.');
+    return <>{children}</>;
   }
 
   // After loading, check if org exists and if we are not on the creation page
@@ -155,8 +168,14 @@ interface RoleProtectProps {
 }
 
 const RoleProtect = ({ allowedRoles, children }: RoleProtectProps) => {
-  const { currentUser, isLoadingUser } = useAppContext(); // <-- Use REAL useAppContext
+  const { currentUser, isLoadingUser } = useAppContext();
+  const { isAdminRoleEnabled } = useFeatureFlags();
   const location = useLocation();
+
+  // Filter out ADMIN role if the admin feature flag is disabled
+  const effectiveAllowedRoles = isAdminRoleEnabled() 
+    ? allowedRoles 
+    : allowedRoles.filter(role => role !== 'ADMIN');
 
   if (isLoadingUser) {
     return (
@@ -166,7 +185,15 @@ const RoleProtect = ({ allowedRoles, children }: RoleProtectProps) => {
     );
   }
 
-  if (!currentUser || !currentUser.role || !allowedRoles.includes(currentUser.role)) {
+  // Handle case where ADMIN role is removed from allowed roles but user is ADMIN
+  if (currentUser?.role === 'ADMIN' && !isAdminRoleEnabled()) {
+    // Treat ADMIN as MANAGER when admin role is disabled
+    if (effectiveAllowedRoles.includes('MANAGER')) {
+      return <>{children}</>;
+    }
+  }
+
+  if (!currentUser || !currentUser.role || !effectiveAllowedRoles.includes(currentUser.role)) {
     // Redirect to home page if role not allowed or no user
     // The home page (/) will then decide what to show based on role
     return <Navigate to="/" state={{ from: location }} replace />;
@@ -255,7 +282,7 @@ const AppRoutes = () => {
                 {/* Check for organization before rendering main layouts/routes */}
                 <OrganizationCheckWrapper>
                   <Routes> {/* Nested Routes for organization-dependent paths */}
-                    {/* Org Creation: Special case handled by Org Check Wrapper */}
+                    {/* Org Creation: Special case handled by Org Check Wrapper and also conditionally rendered based on feature flag */}
                     <Route 
                       path="/organizations/new" 
                       element={

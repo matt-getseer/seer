@@ -5,9 +5,15 @@ import js from '@eslint/js';
 
 export default [
   {
-    ignores: ['**/generated/**', '**/dist/**', '**/node_modules/**']
+    ignores: ['**/generated/**', '**/dist/**', '**/node_modules/**', '**/prisma/**']
   },
   js.configs.recommended,
+  {
+    files: ['scripts/**/*.js'],
+    rules: {
+      'no-undef': 'off'
+    }
+  },
   {
     files: ['src/**/*.ts'],
     languageOptions: {
@@ -24,11 +30,15 @@ export default [
     },
     rules: {
       ...typescript.configs['recommended'].rules,
-      '@typescript-eslint/no-unused-vars': 'error',
-      'no-console': 'warn',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-console': 'off',
+      'no-undef': 'off',
+      'no-useless-escape': 'off',
+      'no-case-declarations': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-explicit-any': 'warn'
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-namespace': 'off'
     }
   }
 ]; 

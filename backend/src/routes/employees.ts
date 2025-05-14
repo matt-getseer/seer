@@ -1,10 +1,13 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { PrismaClient, Employee as PrismaEmployee, Prisma, Team, User } from '@prisma/client';
-import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
-import { getAccessibleEmployees } from '../services/accessControlService';
+import { authenticate, extractUserInfo } from '../middleware/auth.js';
+import { RequestWithUser } from '../middleware/types.js';
+import { getAccessibleEmployees } from '../services/accessControlService.js';
 import multer, { Multer } from 'multer';
 import { parse } from 'csv-parse';
 import { Readable } from 'stream';
+import { withOrganizationFilter, getQueryOrganizationId } from '../utils/queryBuilder.js';
+import { getOrganizationId } from '../config/featureFlags.js';
 
 // Define a type for our CSV Row structure for better type safety
 interface EmployeeCsvRow {
@@ -23,12 +26,6 @@ interface TypedPrismaClient extends PrismaClient {
   employee: any;
   team: any;
   interview: any;
-}
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    userId: number;
-  };
 }
 
 // Define types for our models
@@ -53,11 +50,11 @@ const router = express.Router();
 const prisma = new PrismaClient() as TypedPrismaClient;
 
 // Get all employees for a team
-const getTeamEmployees = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+const getTeamEmployees = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { teamId } = req.params;
 
-    if (!req.user?.userId) {
+    if (!req.user?.id) {
       res.status(401).json({ error: 'User not authenticated' });
       return;
     }
@@ -65,7 +62,7 @@ const getTeamEmployees = async (req: AuthenticatedRequest, res: Response, next: 
     const employees = await prisma.employee.findMany({
       where: {
         teamId: parseInt(teamId),
-        userId: req.user.userId
+        userId: req.user.id
       }
     });
 
@@ -76,13 +73,51 @@ const getTeamEmployees = async (req: AuthenticatedRequest, res: Response, next: 
 };
 
 // Create a new employee
-const createEmployee = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+const createEmployee = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<Response | void> => {
   try {
     const { name, title, email, teamId, startDate } = req.body;
 
-    if (!req.user?.userId) {
-      res.status(401).json({ error: 'User not authenticated' });
-      return;
+    if (!req.user?.id || !req.user.role || !req.user.organizationId) {
+      return res.status(401).json({ error: 'User not authenticated or missing role/organization information.' });
+    }
+    const currentUserRole = req.user.role;
+    const currentUserOrganizationId = req.user.organizationId;
+
+    // Authorization: Only ADMIN or MANAGER can create employees
+    if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MANAGER') {
+      return res.status(403).json({ error: 'Forbidden: Only admins or managers can create employees.' });
+    }
+
+    // Validate input fields
+    if (!name || !title || !email || teamId === undefined) {
+        return res.status(400).json({ error: 'Missing required fields: name, title, email, teamId.' });
+    }
+    if (typeof teamId !== 'number') {
+        return res.status(400).json({ error: 'Invalid teamId format, must be a number.'});
+    }
+
+    // Validate teamId: Ensure team exists and belongs to the user's organization
+    const team = await prisma.team.findFirst({
+        where: {
+            id: teamId,
+            organizationId: currentUserOrganizationId,
+        }
+    });
+    if (!team) {
+        return res.status(404).json({ error: 'Team not found in your organization or invalid teamId.' });
+    }
+    
+    // Check for existing employee with the same email in the organization
+    const existingEmployee = await prisma.employee.findFirst({
+        where: { 
+            email: email,
+            team: { // Check via team relationship
+                organizationId: currentUserOrganizationId
+            }
+        }
+    });
+    if (existingEmployee) {
+        return res.status(409).json({ error: `Employee with email '${email}' already exists in your organization.` });
     }
 
     const employee = await prisma.employee.create({
@@ -90,25 +125,31 @@ const createEmployee = async (req: AuthenticatedRequest, res: Response, next: Ne
         name,
         title,
         email,
-        startDate: new Date(startDate),
-        teamId: parseInt(teamId),
-        userId: req.user.userId
+        startDate: startDate ? new Date(startDate) : null, // Ensure startDate is Date or null
+        teamId: teamId, // Use validated teamId
+        userId: req.user.id // Employee record linked to user creating it
       }
     });
 
     res.status(201).json(employee);
   } catch (error) {
+    console.error("Error creating employee:", error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        // Example: P2002 for unique constraint violation if email + org isn't handled above perfectly
+        // or P2003 for foreign key constraint (e.g. teamId doesn't exist despite check)
+        return res.status(400).json({ error: 'Database error while creating employee.', details: error.code });
+    }
     next(error);
   }
 };
 
 // Update an employee
-const updateEmployee = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+const updateEmployee = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
     const { name, title, email, teamId, startDate } = req.body;
 
-    if (!req.user?.userId) {
+    if (!req.user?.id) {
       res.status(401).json({ error: 'User not authenticated' });
       return;
     }
@@ -116,7 +157,7 @@ const updateEmployee = async (req: AuthenticatedRequest, res: Response, next: Ne
     const employee = await prisma.employee.updateMany({
       where: {
         id: parseInt(id),
-        userId: req.user.userId
+        userId: req.user.id
       },
       data: {
         name,
@@ -145,11 +186,11 @@ const updateEmployee = async (req: AuthenticatedRequest, res: Response, next: Ne
 };
 
 // Delete an employee
-const deleteEmployee = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+const deleteEmployee = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
 
-    if (!req.user?.userId) {
+    if (!req.user?.id) {
       res.status(401).json({ error: 'User not authenticated' });
       return;
     }
@@ -157,7 +198,7 @@ const deleteEmployee = async (req: AuthenticatedRequest, res: Response, next: Ne
     const employee = await prisma.employee.deleteMany({
       where: {
         id: parseInt(id),
-        userId: req.user.userId
+        userId: req.user.id
       }
     });
 
@@ -172,68 +213,71 @@ const deleteEmployee = async (req: AuthenticatedRequest, res: Response, next: Ne
   }
 };
 
-// Get an employee by id
-const getEmployeeById = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+// Get a specific employee by ID
+const getEmployeeById = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const targetEmployeeId = parseInt(req.params.id);
 
-    if (!req.user?.userId) {
+    if (!req.user?.id) {
       res.status(401).json({ error: 'User not authenticated' });
       return;
     }
 
-    // 1. Get the current user object (needed for accessControlService)
-    const currentUser = await prisma.user.findUnique({
-      where: { id: req.user.userId }
+    // Get organization ID using utility that respects feature flags
+    const organizationId = getQueryOrganizationId(req as RequestWithUser);
+    
+    // Find the employee with proper organization filter
+    const employee = await prisma.employee.findFirst({
+      where: withOrganizationFilter({
+        id: targetEmployeeId,
+        team: { // Organization filter is applied to the team
+          userId: req.user.id
+        }
+      }, organizationId),
+      include: {
+        team: {
+          include: {
+            department: true
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        Employee: { // Manager
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
     });
 
-    if (!currentUser) {
-      // This case should ideally not happen if authenticate middleware works
-      res.status(401).json({ error: 'Authenticated user not found in database' });
+    if (!employee) {
+      res.status(404).json({ error: 'Employee not found or not accessible' });
       return;
     }
 
-    // 2. Get all employees accessible to this user using the existing service function
-    const accessibleEmployees = await getAccessibleEmployees(currentUser);
-
-    // 3. Check if the targetEmployeeId is in the list of accessible employees
-    //    The `getAccessibleEmployees` function already includes the necessary details like `team`.
-    const targetEmployee = accessibleEmployees.find(emp => emp.id === targetEmployeeId);
-
-    if (!targetEmployee) {
-      // To provide a more specific error, we can check if the employee exists at all.
-      const employeeExists = await prisma.employee.findUnique({
-        where: { id: targetEmployeeId }
-      });
-      if (!employeeExists) {
-        res.status(404).json({ error: 'Employee not found' });
-      } else {
-        res.status(403).json({ error: 'Unauthorized to view this employee' });
-      }
-      return;
-    }
-
-    // 4. If found and accessible, return it.
-    //    `targetEmployee` from `getAccessibleEmployees` should have the required structure.
-    res.json(targetEmployee);
-
+    res.json(employee);
   } catch (error) {
-    // Log the error for server-side inspection
-    console.error(`Error in getEmployeeById for ID ${req.params.id}:`, error);
-    next(error); // Pass to global error handler
+    next(error);
   }
 };
 
 // Get all employees for the authenticated user
-const getAllEmployees = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+const getAllEmployees = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
-    if (!req.user?.userId) {
+    if (!req.user?.id) {
       res.status(401).json({ error: 'User not authenticated' });
       return;
     }
 
     const currentUser = await prisma.user.findUnique({
-      where: { id: req.user.userId }
+      where: { id: req.user.id }
     });
 
     if (!currentUser) {
@@ -251,10 +295,10 @@ const getAllEmployees = async (req: AuthenticatedRequest, res: Response, next: N
 };
 
 // Get meetings for a specific employee (filtered by the logged-in manager)
-const getEmployeeMeetings = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+const getEmployeeMeetings = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { employeeId } = req.params;
-    const managerId = req.user?.userId;
+    const managerId = req.user?.id;
 
     if (!managerId) {
       res.status(401).json({ error: 'User not authenticated' });
@@ -266,12 +310,16 @@ const getEmployeeMeetings = async (req: AuthenticatedRequest, res: Response, nex
        return;
     }
 
+    // Get organization ID using utility that respects feature flags
+    const organizationId = getQueryOrganizationId(req as RequestWithUser);
+
     // Verify the manager has access to this employee (optional but good practice)
+    // Use the withOrganizationFilter utility to apply organization filtering
     const employeeCheck = await prisma.employee.findFirst({
-      where: {
+      where: withOrganizationFilter({
         id: parseInt(employeeId),
         userId: managerId
-      }
+      }, organizationId)
     });
 
     if (!employeeCheck) {
@@ -280,11 +328,12 @@ const getEmployeeMeetings = async (req: AuthenticatedRequest, res: Response, nex
     }
 
     // Fetch meetings for this employee where the current user is the manager
+    // Apply organization filtering for consistent security boundaries
     const meetings = await prisma.meeting.findMany({
-      where: {
+      where: withOrganizationFilter({
         employeeId: parseInt(employeeId),
         managerId: managerId
-      },
+      }, organizationId),
       select: { // Select only necessary fields for the list
         id: true,
         title: true,
@@ -342,11 +391,11 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
     // If cb(null, false) was used, req.file is undefined, and we send a 400.
     return res.status(400).json({ message: 'No CSV file uploaded or file type was not accepted. Only .csv files are allowed.' });
   }
-  if (!req.user?.userId) {
+  if (!req.user?.id) {
     return res.status(401).json({ error: 'User not authenticated.' });
   }
 
-  const currentUserId = req.user.userId;
+  const currentUserId = req.user.id;
 
   // Fetch the user's organizationId
   let userOrganizationId: string | null = null;
@@ -566,5 +615,200 @@ router.post('/upload-csv', authenticate, extractUserInfo, upload.single('file'),
     return res.status(500).json({ message: 'Failed to process CSV file.', error: error.message });
   }
 });
+
+// Bulk upload employees from CSV
+const bulkUploadEmployees = async (req: RequestWithFile, res: Response, next: NextFunction): Promise<Response | void> => {
+  try {
+    if (!req.user?.id || !req.user.role || !req.user.organizationId) {
+      return res.status(401).json({ error: 'User not authenticated or missing role/organization information.' });
+    }
+    const currentUserRole = req.user.role;
+    const currentUserOrganizationId = req.user.organizationId;
+
+    if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MANAGER') {
+      return res.status(403).json({ error: 'Forbidden: Only admins or managers can bulk upload employees.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No CSV file uploaded.' });
+    }
+    if (req.file.mimetype !== 'text/csv') {
+      return res.status(400).json({ message: 'Invalid file type. Only .csv files are allowed.' });
+    }
+
+    const employeesToCreate: Prisma.EmployeeCreateManyInput[] = [];
+    const errors: string[] = [];
+    let rowCount = 0;
+
+    const readable = Readable.from(req.file.buffer.toString('utf8'));
+    const parser = readable.pipe(parse({ 
+        columns: true, 
+        skip_empty_lines: true,
+        trim: true,
+        cast: (value, context) => {
+            if (context.column === 'employee_start_date') {
+                if (value === '' || value === null) return undefined; // Handle empty string as undefined
+                const date = new Date(value);
+                return isNaN(date.getTime()) ? undefined : date; // Return undefined if date is invalid
+            }
+            return value;
+        }
+    }));
+
+    for await (const row of parser) {
+      rowCount++;
+      const csvRow = row as EmployeeCsvRow;
+
+      if (!csvRow.employee_name || !csvRow.employee_title || !csvRow.employee_email || !csvRow.team_name || !csvRow.team_department) {
+        errors.push(`Row ${rowCount}: Missing required fields (name, title, email, team_name, team_department).`);
+        continue;
+      }
+
+      try {
+        // Find or create department
+        let department = await prisma.department.findFirst({
+          where: { name: csvRow.team_department, organizationId: currentUserOrganizationId }, // Use current user's orgId
+        });
+        if (!department) {
+          department = await prisma.department.create({
+            data: { name: csvRow.team_department, organizationId: currentUserOrganizationId }, // Use current user's orgId
+          });
+        }
+
+        // Find or create team, linking to the found/created department and current user's org
+        let team = await prisma.team.findFirst({
+          where: { name: csvRow.team_name, departmentId: department.id, organizationId: currentUserOrganizationId }, // Use current user's orgId
+        });
+        if (!team) {
+          team = await prisma.team.create({
+            data: {
+              name: csvRow.team_name,
+              departmentId: department.id,
+              organizationId: currentUserOrganizationId, // Use current user's orgId
+              // userId: currentUserId, // Assign current uploader as manager of this new team by default? Or null?
+                                   // For bulk upload, perhaps new teams don't get a manager immediately or get a default system one.
+                                   // Current logic in other parts of teams.ts might assign a manager differently.
+                                   // For now, let it be null unless a specific manager_email is handled.
+            },
+          });
+        }
+        
+        // Manager assignment based on manager_email (Optional)
+        let managerUserIdForTeam: number | null = team.userId; // Default to existing team manager if any
+        if (csvRow.manager_email) {
+            const managerUser = await prisma.user.findUnique({ where: { email: csvRow.manager_email }});
+            if (managerUser && managerUser.organizationId === currentUserOrganizationId && managerUser.role === 'MANAGER') {
+                 // If manager is found, from same org, and is a MANAGER, assign this manager to the team if team doesn't have one
+                 // Or, if product logic dictates, overwrite team manager if one is specified in CSV
+                 // For now, let's assume we only set if team.userId is null OR if overwriting is desired policy.
+                 // Let's say we will update the team's manager if one is provided in CSV
+                 if (team.userId !== managerUser.id) {
+                    await prisma.team.update({ where: { id: team.id }, data: { userId: managerUser.id }});
+                    managerUserIdForTeam = managerUser.id;
+                 } else {
+                    managerUserIdForTeam = team.userId; // Keep existing if same or no change needed
+                 }
+            } else if (managerUser) {
+                errors.push(`Row ${rowCount}: Manager email '${csvRow.manager_email}' found, but user is not a MANAGER or not in your organization.`);
+            } else {
+                errors.push(`Row ${rowCount}: Manager email '${csvRow.manager_email}' not found.`);
+            }
+        }
+
+        // Prepare employee data
+        const employeeData: Prisma.EmployeeCreateManyInput = {
+          name: csvRow.employee_name,
+          title: csvRow.employee_title,
+          email: csvRow.employee_email,
+          teamId: team.id,
+          userId: req.user.id, // The user performing the upload becomes the Employee.userId (owner/creator)
+          // organizationId: currentUserOrganizationId, // REMOVED - Employee linked to Org via Team
+          startDate: csvRow.employee_start_date ? new Date(csvRow.employee_start_date) : null,
+          country: csvRow.employee_country,
+        };
+
+        // Check for existing employee by email in the same organization (via team)
+        const existingEmployee = await prisma.employee.findFirst({
+            where: { 
+                email: csvRow.employee_email, 
+                team: { 
+                    organizationId: currentUserOrganizationId 
+                }
+            }
+        });
+
+        if (existingEmployee) {
+            errors.push(`Row ${rowCount}: Employee with email '${csvRow.employee_email}' already exists in your organization.`);
+            continue;
+        }
+
+        employeesToCreate.push(employeeData);
+      } catch (dbError: any) {
+        errors.push(`Row ${rowCount}: Error processing - ${dbError.message}`);
+      }
+    }
+
+    if (errors.length > 0 && employeesToCreate.length === 0) {
+      return res.status(400).json({ message: 'CSV processing failed. See errors.', errors, createdCount: 0 });
+    }
+    
+    let createdCount = 0;
+    if (employeesToCreate.length > 0) {
+        const result = await prisma.employee.createMany({
+            data: employeesToCreate,
+            skipDuplicates: true, // Should not be needed due to manual check, but as a safeguard
+        });
+        createdCount = result.count;
+    }
+
+    if (errors.length > 0) {
+        return res.status(207).json({ 
+            message: 'CSV processed with some errors.', 
+            errors, 
+            createdCount 
+        });
+    }
+
+    res.status(201).json({ message: 'Employees uploaded successfully.', createdCount });
+
+  } catch (error: any) {
+    console.error('Error during bulk employee upload:', error);
+    next(error);
+  }
+};
+
+// Get all selectable employees (e.g., for a dropdown filter)
+// Basic version: accessible employees based on the user's role
+const getSelectableEmployees = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<Response | void> => {
+    try {
+        if (!req.user?.id) {
+            return res.status(401).json({ error: 'User not authenticated' });
+        }
+
+        const userMakingRequest = await prisma.user.findUnique({
+            where: { id: req.user.id },
+            // select: { role: true, organizationId: true } // Already on req.user
+        });
+
+        if (!userMakingRequest) {
+            return res.status(404).json({ error: 'Authenticated user not found in database.' });
+        }
+
+        const employees = await getAccessibleEmployees(userMakingRequest as User); 
+
+        const selectableEmployees = employees.map(emp => ({
+            id: emp.id,
+            name: emp.name,
+            email: emp.email,
+            title: emp.title
+        }));
+
+        res.json(selectableEmployees);
+
+    } catch (error) {
+        console.error('Error fetching selectable employees:', error);
+        next(error); // Pass to global error handler
+    }
+};
 
 export default router; 

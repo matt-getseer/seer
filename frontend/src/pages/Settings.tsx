@@ -10,6 +10,7 @@ import { useAppContext, AppUser } from '../context/AppContext'; // Keep AppUser 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Select from '@radix-ui/react-select'; // Added Radix UI Select import
 import { DotsThreeVertical, Pencil, UserPlus, Trash } from '@phosphor-icons/react'; // Icons for dropdown
+import { useFeatureFlags } from '../context/FeatureFlagContext';
 
 // Define expected user data shape
 interface UserData {
@@ -19,6 +20,7 @@ interface UserData {
   hasGoogleAuth: boolean;
   hasZoomAuth: boolean; // Add Zoom auth status
   role: string; // Ensure role is part of UserData
+  teamId?: number; // ADDED: Assume manager's teamId might be here
   // Add other fields if returned by /users/me
 }
 
@@ -58,10 +60,39 @@ type SettingsTab = 'Users' | 'Teams' | 'Integrations' | 'Employees' | 'Notificat
 const APP_USER_ROLES = ['ADMIN', 'MANAGER', 'USER'] as const;
 type AppUserRole = typeof APP_USER_ROLES[number];
 
-interface InvitationData {
+interface InvitationData { // This is for the Admin's invite modal
   email: string;
   appRole: AppUserRole;
   organizationId: string;
+}
+
+// NEW: Define InvitationStatus enum to match backend
+enum InvitationStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  REVOKED = 'REVOKED',
+  EXPIRED = 'EXPIRED'
+}
+
+// NEW: Define structure for an Invitation object (based on backend service)
+interface Invitation {
+  id: string;
+  email: string;
+  status: InvitationStatus;
+  expiresAt: string; // Assuming ISO string date
+  teamId: number;
+  managerId: number;
+  organizationId: string;
+  clerkInvitationId: string;
+  createdAt: string; // Assuming ISO string date
+  updatedAt: string; // Assuming ISO string date
+  teamName?: string; // Joined from Team table
+}
+
+// NEW: Define structure for sending a manager's invitation
+interface ManagerInvitationPayload {
+  email: string;
+  teamId: number;
 }
 
 const Settings = () => {
@@ -107,6 +138,11 @@ const Settings = () => {
   const [inviteUserSuccessMessage, setInviteUserSuccessMessage] = useState<string | null>(null);
   const [isInvitingUser, setIsInvitingUser] = useState(false);
 
+  // NEW: State for manager's invitations list
+  const [managerInvitations, setManagerInvitations] = useState<Invitation[]>([]);
+  const [isLoadingManagerInvitations, setIsLoadingManagerInvitations] = useState(false);
+  const [fetchManagerInvitationsError, setFetchManagerInvitationsError] = useState<string | null>(null);
+
   // State for manager list loading and error (mirroring query states)
   const [isManagerListLoading, setIsManagerListLoading] = useState(false);
   const [managerListError, setManagerListError] = useState<string | null>(null);
@@ -142,6 +178,56 @@ const Settings = () => {
 
   const queryClient = useQueryClient();
   const { isSignedIn, isLoaded: isAuthLoaded, orgId } = useAuth(); // orgId is from useAuth
+  const { isAdminRoleEnabled } = useFeatureFlags();
+
+  // NEW: Constant for max invitations a manager can have
+  const MAX_MANAGER_INVITATIONS = 3;
+
+  // NEW: Query to fetch manager's invitations
+  const { 
+    data: fetchedManagerInvitationsData, 
+    isLoading: queryIsLoadingManagerInvitations, 
+    error: queryFetchManagerInvitationsError,
+    refetch: refetchManagerInvitations
+  } = useQuery<Invitation[], Error, Invitation[], readonly unknown[]>({
+    queryKey: ['managerInvitations', currentUser?.id],
+    queryFn: async () => {
+      if (!currentUser || currentUser.role !== 'MANAGER') {
+        return [];
+      }
+      const response = await apiClient.get<Invitation[]>('/invitations');
+      return response.data;
+    },
+    enabled: !!currentUser && currentUser.role === 'MANAGER',
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+  
+  // Effects to update state based on query results
+  useEffect(() => {
+    setIsLoadingManagerInvitations(queryIsLoadingManagerInvitations);
+  }, [queryIsLoadingManagerInvitations]);
+
+  useEffect(() => {
+    if (fetchedManagerInvitationsData) {
+      setManagerInvitations(fetchedManagerInvitationsData);
+      setFetchManagerInvitationsError(null);
+    }
+  }, [fetchedManagerInvitationsData]);
+
+  useEffect(() => {
+    if (queryFetchManagerInvitationsError) {
+      setFetchManagerInvitationsError(queryFetchManagerInvitationsError.message || 'Failed to load your invitations.');
+      setManagerInvitations([]);
+    }
+  }, [queryFetchManagerInvitationsError]);
+
+  // NEW: Calculate active pending invitations for the current manager
+  const activePendingInvitationsCount = React.useMemo(() => {
+    if (currentUser?.role !== 'MANAGER' || !managerInvitations) {
+      return 0;
+    }
+    return managerInvitations.filter(inv => inv.status === InvitationStatus.PENDING).length;
+  }, [currentUser, managerInvitations]);
 
   // Update tabItems to be defined before being used in isValidTab and state init
   const allPossibleTabItems: Array<{ id: SettingsTab; label: string; icon?: React.ElementType }> = [
@@ -157,7 +243,12 @@ const Settings = () => {
     if (!currentUser) return []; // Or a default minimal set if preferred during loading
     if (currentUser.role === 'USER') {
       return allPossibleTabItems.filter(tab => tab.id === 'Integrations' || tab.id === 'Notifications');
+    } else if (currentUser.role === 'MANAGER') {
+      const managerTabsToExclude: SettingsTab[] = ['Teams', 'Departments', 'Employees'];
+      return allPossibleTabItems.filter(tab => !managerTabsToExclude.includes(tab.id));
     }
+    // For ADMIN or any other roles (if any exist beyond USER, MANAGER, ADMIN), show all tabs by default.
+    // If isAdminRoleEnabled is part of future logic for finer control, it can be integrated here.
     return allPossibleTabItems;
   }, [currentUser]);
 
@@ -337,7 +428,7 @@ const Settings = () => {
       }
     },
     // Enable if user is Admin or Manager. Adjust if only Admin should see/manage departments.
-    enabled: !!currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER'), 
+    enabled: !!currentUser && currentUser.role === 'ADMIN' && isAdminRoleEnabled(), 
     staleTime: 5 * 60 * 1000,
   });
 
@@ -617,45 +708,93 @@ const Settings = () => {
   };
 
   const handleInviteUser = async () => {
-    if (!inviteEmail.trim() || !selectedAppRole) {
-      setInviteUserError('Email and role are required.');
+    if (!inviteEmail.trim()) { // Basic email validation
+      setInviteUserError('Email is required.');
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) {
         setInviteUserError('Please enter a valid email address.');
         return;
     }
-    if (!orgId) {
-        setInviteUserError('Organization ID not found. Ensure you are part of an active organization.');
+
+    // Role-specific logic
+    if (currentUser?.role === 'MANAGER') {
+      // TODO: Ensure currentUser.teamId is reliably populated from AppContext for managers.
+      // This might require backend changes to /users/me to include the manager's primary teamId.
+      const managerTeamId = (currentUser as UserData)?.teamId; // Cast to UserData to access optional teamId
+
+      if (!managerTeamId) {
+        setInviteUserError('Your team information is missing or could not be loaded. Cannot send invitation.');
         return;
+      }
+      if (activePendingInvitationsCount >= MAX_MANAGER_INVITATIONS) {
+        setInviteUserError(`You have reached the maximum limit of ${MAX_MANAGER_INVITATIONS} active invitations.`);
+        return;
+      }
+      managerInviteMutation.mutate({ email: inviteEmail, teamId: managerTeamId });
+
+    } else if (hasAdminAccess()) { // Admin invite
+      if (!selectedAppRole) {
+        setInviteUserError('Role is required for admin invitations.');
+        return;
+      }
+      if (!orgId) { // Admins might operate across orgs or need specific orgId
+          setInviteUserError('Organization ID not found. Ensure you are part of an active organization.');
+          return;
+      }
+      adminInviteUserMutation.mutate({
+          email: inviteEmail,
+          appRole: selectedAppRole,
+          organizationId: orgId
+      });
+    } else {
+      setInviteUserError('You do not have permission to invite users.');
+      return;
     }
-
-    setIsInvitingUser(true);
-    setInviteUserError(null);
-    setInviteUserSuccessMessage(null);
-
-    inviteUserMutation.mutate({
-        email: inviteEmail,
-        appRole: selectedAppRole,
-        organizationId: orgId
-    });
   };
 
-  // Mutation for inviting user via backend API - CORRECTED STRUCTURE
-  const inviteUserMutation = useMutation<any, Error, InvitationData>({ // Pass a single options object
-    mutationFn: async (invitationData: InvitationData) => { // mutationFn is a property
+  // Mutation for inviting user via backend API - For ADMINS (existing, renamed for clarity)
+  const adminInviteUserMutation = useMutation<any, Error, InvitationData>({
+    mutationFn: async (invitationData: InvitationData) => {
+      setIsInvitingUser(true);
+      setInviteUserError(null);
+      setInviteUserSuccessMessage(null);
       const response = await apiClient.post('/users/clerk-invite', invitationData);
       return response.data;
     },
-    onSuccess: (/* removed unused data param */) => {
-      setInviteUserSuccessMessage('User invited successfully!');
+    onSuccess: (data: any) => {
+      setInviteUserSuccessMessage('User invited successfully! (Admin)');
       setInviteUserError(null);
-      // Optionally clear form or close modal after success
       closeInviteUserModal();
     },
-    onError: (error) => {
-      setInviteUserError(error.message || 'An unknown error occurred while inviting user');
-      setInviteUserSuccessMessage(null); // Clear success message on error
+    onError: (error: Error) => {
+      setInviteUserError(error.message || 'An unknown error occurred while inviting user (Admin)');
+      setInviteUserSuccessMessage(null);
+    },
+    onSettled: () => {
+      setIsInvitingUser(false);
+    },
+  });
+
+  // NEW: Mutation for manager inviting a team member
+  const managerInviteMutation = useMutation<any, Error, ManagerInvitationPayload>({
+    mutationFn: async (payload: ManagerInvitationPayload) => {
+      setIsInvitingUser(true);
+      setInviteUserError(null);
+      setInviteUserSuccessMessage(null);
+      const response = await apiClient.post('/invitations', payload);
+      return response.data;
+    },
+    onSuccess: (data: any) => {
+      setInviteUserSuccessMessage('Team member invited successfully!');
+      setInviteUserError(null);
+      queryClient.invalidateQueries({ queryKey: ['managerInvitations', currentUser?.id] });
+      closeInviteUserModal();
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || error.message || 'An unknown error occurred while inviting team member.';
+      setInviteUserError(errorMessage);
+      setInviteUserSuccessMessage(null);
     },
     onSettled: () => {
       setIsInvitingUser(false);
@@ -1065,6 +1204,19 @@ onError: (error: Error) => {
     );
   }
 
+  // Determine effective role - treat ADMIN as MANAGER when admin role is disabled
+  const effectiveRole = () => {
+    if (!isAdminRoleEnabled() && currentUser?.role === 'ADMIN') {
+      return 'MANAGER';
+    }
+    return currentUser?.role || null;
+  };
+
+  // Check if user has admin access based on role and feature flag
+  const hasAdminAccess = () => {
+    return currentUser?.role === 'ADMIN' && isAdminRoleEnabled();
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="mb-8">
@@ -1096,10 +1248,10 @@ onError: (error: Error) => {
 
       <div className="mt-8">
         {/* Conditional rendering of tab content */}
-        {activeTab === 'Users' && currentUser.role === 'ADMIN' && (
+        {activeTab === 'Users' && (hasAdminAccess() || (currentUser && currentUser.role === 'MANAGER')) && (
           <div>
             {/* User Management and Invite Button - ADMINS ONLY */}
-            {currentUser && currentUser.role === 'ADMIN' && (
+            {hasAdminAccess() && (
               <div className="bg-white shadow sm:rounded-lg mb-6">
                 <div className="px-4 py-5 sm:p-6">
                   <div className="flex justify-between items-center">
@@ -1133,8 +1285,51 @@ onError: (error: Error) => {
               </div>
             )}
 
+           {/* Team Member Invitation - MANAGERS ONLY (and not also an Admin who would see the above block) */}
+           {currentUser && currentUser.role === 'MANAGER' && !hasAdminAccess() && (
+             <div className="bg-white shadow sm:rounded-lg mb-6">
+               <div className="px-4 py-5 sm:p-6">
+                 <div className="flex justify-between items-center">
+                   <h3 className="text-lg leading-6 font-medium text-gray-900">Invite Team Member</h3>
+                   <button
+                     type="button"
+                     onClick={openInviteUserModal} // Reuse existing modal opener
+                     className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                     disabled={isLoadingManagerInvitations || (activePendingInvitationsCount >= MAX_MANAGER_INVITATIONS)}
+                   >
+                     Invite Team Member
+                   </button>
+                 </div>
+                 {/* Manager's Feedback messages for invite user action */}
+                 {inviteUserSuccessMessage && (
+                   <div className="mt-4 p-3 bg-green-100 text-green-700 text-sm rounded-md">
+                     {inviteUserSuccessMessage}
+                   </div>
+                 )}
+                 {inviteUserError && (
+                   <div className="mt-4 p-3 bg-red-100 text-red-700 text-sm rounded-md">
+                     <WarningCircle size={20} className="inline mr-2" />
+                     {inviteUserError}
+                   </div>
+                 )}
+                 <div className="mt-6">
+                   <p className="text-sm text-gray-500">
+                     {isLoadingManagerInvitations 
+                       ? 'Loading invitation status...'
+                       : fetchManagerInvitationsError 
+                         ? <span className="text-red-600">Error loading invitation status: {fetchManagerInvitationsError}</span>
+                         : `You have ${MAX_MANAGER_INVITATIONS - activePendingInvitationsCount} of ${MAX_MANAGER_INVITATIONS} invitations remaining.`
+                     }
+                     <br />
+                     Invited users will automatically be assigned the 'USER' role and added to your team.
+                   </p>
+                 </div>
+               </div>
+             </div>
+           )}
+
             {/* Managers List Card - ADMINS ONLY (existing) */}
-            {currentUser && currentUser.role === 'ADMIN' && (
+            {hasAdminAccess() && (
               <div className="bg-white shadow sm:rounded-lg"> {/* Added card styling for consistency */}
                 <div className="px-4 py-5 sm:p-6"> {/* Added padding for consistency */}
                   <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Current Managers</h3> {/* Added title */}
@@ -1189,19 +1384,14 @@ onError: (error: Error) => {
                 </div>
               </div>
             )}
-            {/* If user is not admin and on Users tab, show a message or different content */}
-            {currentUser && currentUser.role !== 'ADMIN' && (
-                <div className="bg-white shadow sm:rounded-lg p-6">
-                    <p className="text-sm text-gray-600">User management and invitations are available for administrators.</p>
-                </div>
-            )}
+            {/* The old !hasAdminAccess() message block has been removed */}
           </div>
         )}
 
-        {activeTab === 'Teams' && (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') && (
+        {activeTab === 'Teams' && (hasAdminAccess() || effectiveRole() === 'MANAGER') && (
           <>
             {/* === "All Teams" List Card - ADMINS ONLY === */}
-            {currentUser && currentUser.role === 'ADMIN' && (
+            {hasAdminAccess() && (
               <div className="">
                 {/* Add New Team Button */} 
                 <div className="mb-4 flex justify-start">
@@ -1333,10 +1523,10 @@ onError: (error: Error) => {
           </>
         )}
 
-{activeTab === 'Departments' && (currentUser.role === 'ADMIN') && ( // Adjust role check as needed
+{activeTab === 'Departments' && (hasAdminAccess() || effectiveRole() === 'ADMIN') && ( // Adjust role check as needed
   <>
     {/* === "All Departments" List Card - ADMINS/MANAGERS === */}
-    {currentUser && (currentUser.role === 'ADMIN') && ( // Double check role for safety
+    {hasAdminAccess() && ( // Double check role for safety
       <div className=""> {/* Outer container for department section */}
         {/* Add New Department Button */}
         <div className="mb-4 flex justify-start">
@@ -1432,10 +1622,10 @@ onError: (error: Error) => {
         </div>
       </div>
     )}
-    {currentUser && !(currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') && ( // If user is not Admin/Manager
-        <div className="bg-white shadow sm:rounded-lg p-6">
-            <p className="text-sm text-gray-600">Department management is available for administrators and managers.</p>
-        </div>
+    {!hasAdminAccess() && ( // If user is not Admin
+      <div className="bg-white shadow sm:rounded-lg p-6">
+        <p className="text-sm text-gray-600">Department management is available for administrators.</p>
+      </div>
     )}
   </>
 )}
@@ -1492,7 +1682,7 @@ onError: (error: Error) => {
           </>
         )}
 
-        {activeTab === 'Employees' && (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') && (
+        {activeTab === 'Employees' && (hasAdminAccess() || effectiveRole() === 'ADMIN' || effectiveRole() === 'MANAGER') && (
           <div className="employee-data-tab-content">
             {/* Upload Data Card - Remove card shell styling and inner padding */}
             <div className=""> 
@@ -1653,24 +1843,29 @@ onError: (error: Error) => {
                             />
                           </div>
                         </div>
-                        <div>
-                          <label htmlFor="app-role" className="block text-sm font-medium text-gray-700 text-left">
-                            Application Role
-                          </label>
-                          <div className="mt-1">
-                            <select
-                              id="app-role"
-                              name="app-role"
-                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
-                              value={selectedAppRole}
-                              onChange={(e) => setSelectedAppRole(e.target.value as AppUserRole)}
-                            >
-                              {APP_USER_ROLES.map(role => (
-                                <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1).toLowerCase()}</option>
-                              ))}
-                            </select>
+                        {/* Conditionally render role selection only if not a manager */}
+                        {currentUser && currentUser.role !== 'MANAGER' && (
+                          <div>
+                            <label htmlFor="app-role" className="block text-sm font-medium text-gray-700 text-left">
+                              Application Role
+                            </label>
+                            <div className="mt-1">
+                              <select
+                                id="app-role"
+                                name="app-role"
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+                                value={selectedAppRole}
+                                onChange={(e) => setSelectedAppRole(e.target.value as AppUserRole)}
+                                // The disabled prop below is now set to false because this block only renders for non-managers.
+                                disabled={false} 
+                              >
+                                {APP_USER_ROLES.map(role => (
+                                  <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1).toLowerCase()}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
-                        </div>
+                        )}
                         {inviteUserError && (
                            <div className="mt-2 p-3 bg-red-50 text-red-600 text-sm rounded-md">
                                 <WarningCircle size={18} className="inline mr-1" /> {inviteUserError}

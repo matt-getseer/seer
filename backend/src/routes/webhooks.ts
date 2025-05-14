@@ -1,14 +1,16 @@
 import express, { Request, Response } from 'express';
 import { PrismaClient, MeetingInsight, Prisma, MeetingType, UserRole } from '@prisma/client';
-import { sendNotificationEmail } from '../services/emailService';
-import { InsightData } from '../meeting-processing/types';
-import { processOneOnOneMeeting } from '../meeting-processing/oneOnOneProcessor';
-import { processReviewMeeting } from '../meeting-processing/reviewProcessor';
+import { sendNotificationEmail } from '../services/emailService.js';
+import { InsightData } from '../meeting-processing/types.js';
+import { processOneOnOneMeeting } from '../meeting-processing/oneOnOneProcessor.js';
+import { processReviewMeeting } from '../meeting-processing/reviewProcessor.js';
 import dotenv from 'dotenv';
 import { WebhookEvent, UserJSON, OrganizationJSON, OrganizationMembershipJSON, DeletedObjectJSON, users, OrganizationMembership } from '@clerk/clerk-sdk-node';
 import { Webhook } from 'svix';
 import { v4 as uuidv4 } from 'uuid';
 import { formatInTimeZone } from 'date-fns-tz';
+import featureFlags, { isOrganizationsEnabled, DEFAULT_ORGANIZATION_ID, getOrganizationId } from '../config/featureFlags.js';
+import { getOrCreateSystemDepartment } from '../routes/teams.js';
 
 // Load .env file
 dotenv.config();
@@ -18,6 +20,38 @@ const prisma = new PrismaClient();
 
 // Placeholder for the frontend URL - Add to .env later
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'; 
+
+/**
+ * Utility function to ensure the default organization exists
+ * This is important for properly assigning users when organizations feature is disabled
+ */
+async function ensureDefaultOrganizationExists(): Promise<string | null> {
+  try {
+    // Check if default organization exists
+    let defaultOrg = await prisma.organization.findUnique({
+      where: { clerkOrganizationId: DEFAULT_ORGANIZATION_ID }
+    });
+    
+    // If it doesn't exist, create it
+    if (!defaultOrg) {
+      console.log(`Default organization with Clerk ID ${DEFAULT_ORGANIZATION_ID} not found, creating it now.`);
+      defaultOrg = await prisma.organization.create({
+        data: {
+          id: uuidv4(),
+          clerkOrganizationId: DEFAULT_ORGANIZATION_ID,
+          name: 'Default Organization',
+          updatedAt: new Date()
+        }
+      });
+      console.log(`Created default organization with ID ${defaultOrg.id}`);
+    }
+    
+    return defaultOrg.id;
+  } catch (error) {
+    console.error('Error ensuring default organization exists:', error);
+    return null;
+  }
+}
 
 // Define structure for a single word in the transcript
 interface TranscriptWord {
@@ -329,10 +363,85 @@ if (!CLERK_WEBHOOK_SECRET) {
   // For now, we log an error. In a production environment, you might want to exit or prevent startup.
 }
 
-// Helper function (can be defined within this file or imported)
-function isValidAppUserRole(role: any): role is UserRole {
+// Check if the role from Clerk metadata is valid for our app
+const isValidAppUserRole = (role: any): boolean => {
   return Object.values(UserRole).includes(role);
+};
+
+// Define invitation status enum (matches Prisma schema)
+enum InvitationStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  REVOKED = 'REVOKED',
+  EXPIRED = 'EXPIRED'
 }
+
+// Add this new helper function
+const processInvitationAcceptance = async (
+  clerkInvitationId: string,
+  userId: number,
+  clerkUserId: string,
+  organizationId: string // This is our internal DB Organization ID
+) => {
+  try {
+    // Find the invitation in our database using raw query
+    // Ensure that the InvitationStatus enum is correctly referenced in the query
+    const invitations = await prisma.$queryRaw<any[]>` // Specify expected array type
+      SELECT * FROM "Invitation"
+      WHERE "clerkInvitationId" = ${clerkInvitationId}
+      AND "status"::text = ${InvitationStatus.PENDING}::text 
+      LIMIT 1
+    `;
+
+    if (!invitations || invitations.length === 0) {
+      console.warn(`Invitation with Clerk ID ${clerkInvitationId} not found or not pending.`);
+      return;
+    }
+
+    const invitation = invitations[0]; // Type will be inferred as any from queryRaw
+
+    await prisma.$transaction(async (tx) => {
+      // Update invitation status
+      await tx.invitation.update({
+        where: { id: invitation.id },
+        data: { status: InvitationStatus.ACCEPTED, updatedAt: new Date() },
+      });
+
+      // Find the Employee record of the inviting manager
+      let invitingManagerEmployeeId: number | null = null;
+      if (invitation.managerId) { // managerId on invitation is the User.id of the inviting manager
+        const invitingManagerAsEmployee = await tx.employee.findFirst({
+          where: { userId: invitation.managerId }, // Find Employee by their User.id
+          select: { id: true },
+        });
+        if (invitingManagerAsEmployee) {
+          invitingManagerEmployeeId = invitingManagerAsEmployee.id;
+        } else {
+          // This case should ideally not happen if managers always have an employee record.
+          // Log a warning, and the new employee will have a null managerId.
+          console.warn(`Could not find Employee record for inviting manager (User ID: ${invitation.managerId}) during invitation acceptance for ${invitation.email}.`);
+        }
+      }
+
+      // Create an employee record for the new team member
+      await tx.employee.create({
+        data: {
+          email: invitation.email,
+          teamId: invitation.teamId,
+          userId: userId, // User.id of the new user who accepted the invitation
+          managerId: invitingManagerEmployeeId, // This is now the Employee.id of the manager, or null
+          name: '', 
+          title: '', 
+        },
+      });
+    });
+
+    console.log(`Successfully processed invitation acceptance for Clerk ID ${clerkInvitationId}, User ID ${userId}`);
+  } catch (error) {
+    console.error(`Error processing invitation acceptance for Clerk ID ${clerkInvitationId}:`, error);
+    // Potentially re-throw or handle more gracefully depending on desired error management
+  }
+};
 
 export const handleClerkWebhook = async (req: Request, res: Response) => {
   if (!CLERK_WEBHOOK_SECRET) {
@@ -351,10 +460,34 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Missing Svix headers.' });
   }
 
-  // Get the raw body as a string. Ensure 'req.rawBody' is populated by express.raw middleware.
-  const body = (req as any).rawBody || (Buffer.isBuffer(req.body) ? req.body.toString() : JSON.stringify(req.body));
-  if (!body) {
-    console.warn('Clerk webhook body is empty.');
+  // When express.raw() is used and matches the content type,
+  // req.body should be a Buffer containing the raw body.
+  let bodyForVerification: string | undefined;
+
+  if (req.body instanceof Buffer) {
+      console.log("DEBUG: Using req.body (Buffer provided by express.raw) for verification.");
+      bodyForVerification = req.body.toString('utf8');
+  } else {
+      // Fallback if req.body is not a Buffer as expected from express.raw()
+      // This might indicate express.raw() didn't process this request body as expected.
+      console.warn('DEBUG: req.body was NOT a Buffer. express.raw() might not have processed this request.');
+      console.warn('DEBUG: Attempting to use req.rawBody or stringify req.body as a fallback.');
+      const rawBodyContent = (req as any).rawBody;
+      if (rawBodyContent) {
+          if (Buffer.isBuffer(rawBodyContent)) {
+              bodyForVerification = rawBodyContent.toString('utf8');
+          } else if (typeof rawBodyContent === 'string') {
+              bodyForVerification = rawBodyContent;
+          } else {
+              bodyForVerification = JSON.stringify(req.body);
+          }
+      } else {
+          bodyForVerification = JSON.stringify(req.body);
+      }
+  }
+
+  if (!bodyForVerification || bodyForVerification === '{}' && Object.keys(req.body).length === 0) { // Check for empty or stringified empty object
+    console.warn('Clerk webhook body is empty or could not be stringified meaningfully.');
     return res.status(400).json({ error: 'Empty request body.'});
   }
   
@@ -362,14 +495,22 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
   const wh = new Webhook(CLERK_WEBHOOK_SECRET);
   let evt: WebhookEvent;
 
+  // Log the headers and body BEFORE verification
+  console.log("DEBUG: Verifying Clerk webhook. Headers:", JSON.stringify(req.headers, null, 2));
+  // Only log a snippet of the body if it's very long, to avoid flooding logs
+  const bodySnippet = bodyForVerification.length > 500 ? bodyForVerification.substring(0, 497) + "..." : bodyForVerification;
+  console.log("DEBUG: Verifying Clerk webhook. Body for verification (snippet):", bodySnippet);
+
   try {
-    evt = wh.verify(body, {
+    evt = wh.verify(bodyForVerification, {
       'svix-id': svix_id,
       'svix-timestamp': svix_timestamp,
       'svix-signature': svix_signature,
     }) as WebhookEvent;
   } catch (err: any) {
     console.error('Error verifying Clerk webhook signature:', err.message);
+    const secretForLog = CLERK_WEBHOOK_SECRET ? `${CLERK_WEBHOOK_SECRET.substring(0, Math.min(3, CLERK_WEBHOOK_SECRET.length))}...${CLERK_WEBHOOK_SECRET.substring(Math.max(CLERK_WEBHOOK_SECRET.length - 3, 0))}` : "NOT SET";
+    console.error(`DEBUG: CLERK_WEBHOOK_SECRET used for verification (obfuscated): whsec_${secretForLog}`);
     return res.status(400).json({ error: 'Webhook signature verification failed.' });
   }
 
@@ -426,175 +567,241 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
         break;
 
       case 'organizationMembership.created':
-        const membershipCreatedData = evt.data as OrganizationMembershipJSON;
-        const clerkOrgIdForMembership = membershipCreatedData.organization.id;
-        const clerkUserIdForMembership = membershipCreatedData.public_user_data?.user_id;
-
-        if (!clerkOrgIdForMembership || !clerkUserIdForMembership) {
-          console.error('Invalid organizationMembership.created payload (missing org ID or user ID):', membershipCreatedData);
-          return res.status(400).json({ error: 'Invalid payload for organizationMembership.created' });
-        }
-
-        // --- START: App Role Logic for organizationMembership.created ---
-        let appRoleForMembership: UserRole = UserRole.USER; // Default
-        if (membershipCreatedData.public_metadata?.app_role && isValidAppUserRole(membershipCreatedData.public_metadata.app_role)) {
-          appRoleForMembership = membershipCreatedData.public_metadata.app_role as UserRole;
-          console.log(`Organization membership for user ${clerkUserIdForMembership}: app_role '${appRoleForMembership}' found in public_metadata.`);
-        } else {
-          console.log(`Organization membership for user ${clerkUserIdForMembership}: No valid app_role in public_metadata, defaulting to '${UserRole.USER}'.`);
-        }
-        // --- END: App Role Logic ---
-
         try {
-          let organization = await prisma.organization.findUnique({
-            where: { clerkOrganizationId: clerkOrgIdForMembership },
-          });
-
-          // if (!organization) console.warn(`Organization ${clerkOrgIdForMembership} not found initially. Attempting to create or re-query.`);
-          if (!organization && membershipCreatedData.organization.name) { // Corrected condition: only try create if name exists
-            try {
-              organization = await prisma.organization.create({
+          const membership = evt.data as OrganizationMembershipJSON;
+          console.log('Organization membership created:', membership.id, membership.organization.id, membership.public_user_data.identifier);
+          
+          // Check if there's any metadata about an invitation
+          const publicMetadata = membership.public_metadata || {};
+          
+          if (publicMetadata.invitation_id && publicMetadata.team_id && publicMetadata.manager_id) {
+            // This was created via our team invitation process
+            const invitationId = publicMetadata.invitation_id as string;
+            const teamId = parseInt(publicMetadata.team_id as string, 10);
+            const managerId = parseInt(publicMetadata.manager_id as string, 10);
+            // Safely handle app_role by checking if it's a valid UserRole
+            const appRoleRaw = publicMetadata.app_role as string;
+            const appRole = isValidAppUserRole(appRoleRaw) ? appRoleRaw as UserRole : UserRole.USER;
+            
+            // Find or create the user
+            let user = await prisma.user.findUnique({
+              where: { clerkId: membership.public_user_data.user_id },
+            });
+            
+            if (!user) {
+              // Extract email from user data
+              // In Clerk, emails are in public_user_data.email_addresses array
+              let primaryEmail = '';
+              
+              // Get email from first email address if available
+              try {
+                // Clerk types might not be fully accurate - use casting if needed
+                const userData = membership.public_user_data as any;
+                if (userData.email_addresses && userData.email_addresses.length > 0) {
+                  primaryEmail = userData.email_addresses[0].email_address;
+                }
+              } catch (e) {
+                console.error('Error extracting email from membership data:', e);
+              }
+              
+              if (!primaryEmail) {
+                console.error('Cannot create user: No primary email found in membership data');
+                return res.status(200).json({ received: true });
+              }
+              
+              // Create the user if not found
+              user = await prisma.user.create({
                 data: {
-                  id: uuidv4(),
-                  clerkOrganizationId: clerkOrgIdForMembership,
-                  name: membershipCreatedData.organization.name,
-                  updatedAt: new Date(),
+                  email: primaryEmail,
+                  name: `${membership.public_user_data.first_name || ''} ${membership.public_user_data.last_name || ''}`.trim(),
+                  password: '', // Empty as we use Clerk for auth
+                  clerkId: membership.public_user_data.user_id,
+                  organizationId: membership.organization.id, // This is Clerk's org ID
+                  role: appRole,
                 },
               });
-              console.log(`Organization ${clerkOrgIdForMembership} - ${membershipCreatedData.organization.name} created locally from membership event.`);
-            } catch (createError: any) {
-              if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === 'P2002') {
-                console.warn(`Create failed due to P2002 (unique constraint) for org ${clerkOrgIdForMembership}. Re-querying as it likely now exists.`);
-                organization = await prisma.organization.findUnique({
-                  where: { clerkOrganizationId: clerkOrgIdForMembership },
-                });
-                if (organization) {
-                  console.log(`Organization ${clerkOrgIdForMembership} found on re-query.`);
-                } else {
-                  console.error(`Organization ${clerkOrgIdForMembership} still not found after P2002 and re-query. This is unexpected.`);
-                }
-              } else {
-                console.error(`Failed to create missing organization ${clerkOrgIdForMembership} from membership event with non-P2002 error:`, createError);
-              }
             }
-          } else if (!organization) { // Log if still not found and name was missing for creation
-            console.warn(`Cannot create or find organization ${clerkOrgIdForMembership} as name is missing from membership event and not found locally.`);
+            
+            // Find our organization
+            const organization = await prisma.organization.findUnique({
+              where: { clerkOrganizationId: membership.organization.id },
+            });
+            
+            if (!organization) {
+              console.error(`Organization not found for Clerk Organization ID: ${membership.organization.id}`);
+              return res.status(200).json({ received: true });
+            }
+            
+            // Process the invitation acceptance
+            await processInvitationAcceptance(
+              invitationId,
+              user.id,
+              user.clerkId!,
+              organization.id
+            );
           }
           
-          let userToUpdate = await prisma.user.findUnique({
-            where: { clerkId: clerkUserIdForMembership },
-          });
-
-          if (userToUpdate) { // User exists, update them
-            await prisma.user.update({
-              where: { id: userToUpdate.id },
-              data: { 
-                organizationId: organization ? organization.id : userToUpdate.organizationId, // Link to org if found, else keep current
-                role: appRoleForMembership, // <<< SET THE APPLICATION ROLE HERE
-              },
-            });
-            console.log(`User ${clerkUserIdForMembership} linked to Organization ${clerkOrgIdForMembership} (local ID: ${organization?.id}) and app role set to ${appRoleForMembership}.`);
-          } else {
-            // User does not exist locally. This should ideally be handled by user.created first.
-            // If user must be created here, their email is required.
-            // Fetching from Clerk API would be necessary.
-             console.warn(`User ${clerkUserIdForMembership} not found locally during organizationMembership.created. User should ideally be created via user.created event first. Role from metadata might not be applied if created later without it.`);
-            // Example:
-            // const clerkUser = await users.getUser(clerkUserIdForMembership);
-            // const email = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId)?.emailAddress;
-            // if (email) { /* create user with email and appRoleForMembership */ } 
-          }
+          // Always return 200 to Clerk webhooks
+          return res.status(200).json({ received: true });
         } catch (error) {
-          console.error(`Error processing organizationMembership.created for User ${clerkUserIdForMembership} / Org ${clerkOrgIdForMembership}:`, error);
-          return res.status(500).json({ error: 'Failed to process organizationMembership.created event.' });
+          console.error('Error processing organization membership webhook:', error);
+          return res.status(200).json({ received: true });
         }
-        break;
 
       case 'user.created':
-        const userCreatedData = evt.data as UserJSON; // Cast to UserJSON for better type safety
+        console.log("LOG: Entered 'user.created' webhook case.");
+        const userCreatedData = evt.data as UserJSON; 
         if (!userCreatedData.id || !userCreatedData.email_addresses || userCreatedData.email_addresses.length === 0) {
-            console.error('Invalid user.created payload:', userCreatedData);
+            console.error("ERROR: Invalid user.created payload (missing id or email_addresses):", userCreatedData);
             return res.status(400).json({ error: 'Invalid payload for user.created'});
         }
         
         const primaryEmail = userCreatedData.email_addresses.find(e => e.id === userCreatedData.primary_email_address_id)?.email_address 
                            || userCreatedData.email_addresses[0].email_address;
 
-        // --- START: App Role Logic for user.created ---
-        let appRoleForCreation: UserRole = UserRole.USER; // Default
+        let appRoleForCreation: UserRole;
+        const userMetadataRole = userCreatedData.public_metadata?.app_role;
 
-        // Check if any organization exists. If not, this is the first user of the first organization.
-        const existingOrganizations = await prisma.organization.count();
-        if (existingOrganizations === 0) {
-          appRoleForCreation = UserRole.MANAGER;
-          console.log(`User creation for ${userCreatedData.id}: No organizations exist. Setting role to MANAGER.`);
+        if (userMetadataRole && typeof userMetadataRole === 'string' && isValidAppUserRole(userMetadataRole)) {
+          appRoleForCreation = userMetadataRole as UserRole;
         } else {
-          // If organizations exist, check public_metadata or default to USER
-          if (userCreatedData.public_metadata?.app_role && isValidAppUserRole(userCreatedData.public_metadata.app_role)) {
-            appRoleForCreation = userCreatedData.public_metadata.app_role as UserRole;
-            console.log(`User creation for ${userCreatedData.id}: app_role '${appRoleForCreation}' found in public_metadata.`);
-          } else {
-            console.log(`User creation for ${userCreatedData.id}: Organizations exist, no valid app_role in public_metadata, defaulting to '${UserRole.USER}'.`);
+          appRoleForCreation = UserRole.MANAGER;
+        }
+        console.log(`LOG: Determined appRoleForCreation: ${appRoleForCreation}`);
+        
+        let organizationIdToUse: string | null = null;
+        if (!isOrganizationsEnabled()) {
+          organizationIdToUse = await ensureDefaultOrganizationExists();
+          if (!organizationIdToUse) {
+            console.error("ERROR: Failed to ensure default organization exists. Cannot assign user to organization or create team.");
+            return res.status(500).json({ error: 'Failed to ensure default organization for user creation.' });
           }
         }
-        // --- END: App Role Logic ---
+        console.log(`LOG: Determined organizationIdToUse: ${organizationIdToUse}`);
 
-        await prisma.user.upsert({
-            where: { clerkId: userCreatedData.id },
-            update: { 
-                email: primaryEmail,
-                name: `${userCreatedData.first_name || ''} ${userCreatedData.last_name || ''}`.trim() || null,
-                role: appRoleForCreation, // <<< SET/UPDATE THE APPLICATION ROLE HERE
-            },
-            create: {
-                clerkId: userCreatedData.id,
-                email: primaryEmail,
-                name: `${userCreatedData.first_name || ''} ${userCreatedData.last_name || ''}`.trim() || null,
-                password: 'clerk-webhook-user', // Review if this placeholder password is truly needed
-                role: appRoleForCreation, // <<< SET THE APPLICATION ROLE HERE
-            }
-        });
-        console.log(`User created/updated via webhook: ${userCreatedData.id} with app role ${appRoleForCreation}`);
+        const userName = `${userCreatedData.first_name || ''} ${userCreatedData.last_name || ''}`.trim() || primaryEmail.split('@')[0] || 'New User';
 
-        // Attempt to link organization if user has memberships
         try {
-          // Assuming getOrganizationMembershipList might directly return the array
-          const organizationMemberships: OrganizationMembership[] = await users.getOrganizationMembershipList({ userId: userCreatedData.id });
+          const prismaUser = await prisma.user.upsert({
+              where: { clerkId: userCreatedData.id },
+              update: { 
+                email: primaryEmail, name: userName, role: appRoleForCreation,
+                ...(organizationIdToUse && { organizationId: organizationIdToUse })
+              },
+              create: {
+                clerkId: userCreatedData.id, email: primaryEmail, name: userName,
+                password: 'clerk-webhook-user', role: appRoleForCreation,
+                ...(organizationIdToUse && { organizationId: organizationIdToUse })
+              },
+              select: { id: true, name: true, email: true, role: true, organizationId: true } // Select more for logging
+          });
+          console.log("LOG: User upserted in DB:", JSON.stringify(prismaUser, null, 2)); // CRITICAL LOG
 
-          if (organizationMemberships && organizationMemberships.length > 0) {
-            const primaryOrgMembership: OrganizationMembership = organizationMemberships[0]; // Assuming first is primary/relevant
-            const clerkOrganizationId = primaryOrgMembership.organization.id;
+          // DEBUG LOG (keeping for context)
+          console.log(`DEBUG auto team creation check: appRoleForCreation=${appRoleForCreation}, isOrganizationsEnabled=${!isOrganizationsEnabled()}, organizationIdToUse=${organizationIdToUse}, prismaUser.id=${prismaUser.id}, prismaUser.name='${prismaUser.name}'`);
 
-            if (clerkOrganizationId) {
-              const org = await prisma.organization.findUnique({ 
-                where: { clerkOrganizationId: clerkOrganizationId } 
+          // --- START: Automatic Team Creation for new MANAGER in V1 ---
+          if (appRoleForCreation === UserRole.MANAGER && !isOrganizationsEnabled() && organizationIdToUse && prismaUser.id) {
+            console.log("LOG: Condition for auto team creation MET. Proceeding.");
+            try {
+              const existingTeam = await prisma.team.findFirst({
+                where: { userId: prismaUser.id, organizationId: organizationIdToUse },
+                select: { id: true }
               });
+              console.log("LOG: Checked for existing team for manager. Found:", existingTeam ? existingTeam.id : 'None');
 
-              if (org) {
-                // Update only if not already linked to this specific org, to avoid unnecessary writes
-                // And ensure not to overwrite other fields like 'role'
-                await prisma.user.updateMany({ 
-                  where: { 
-                    clerkId: userCreatedData.id,
-                    OR: [ // Link if not linked, or linked to a different org
-                        { organizationId: null },
-                        { organizationId: { not: org.id } }
-                    ]
-                  }, 
-                  data: { organizationId: org.id } 
+              if (!existingTeam) {
+                const teamName = `${prismaUser.name || 'Manager'}'s Team`;
+                console.log(`LOG: Attempting to create team with name: "${teamName}" for manager ID: ${prismaUser.id}`);
+                
+                const newTeam = await prisma.team.create({
+                  data: {
+                    name: teamName,
+                    Organization: { connect: { id: organizationIdToUse } },
+                    user: { connect: { id: prismaUser.id } },
+                  },
+                  select: { id: true }
                 });
-                console.log(`User ${userCreatedData.id} linked to organization ${clerkOrganizationId} (local ID: ${org.id}) during user.created webhook processing.`);
+                console.log(`LOG: Automatically created team ID: ${newTeam.id} for manager ${prismaUser.id}`);
+
+                console.log(`LOG: Attempting to create employee record for manager ID: ${prismaUser.id}, team ID: ${newTeam.id}`);
+                await prisma.employee.create({
+                  data: {
+                    userId: prismaUser.id,
+                    teamId: newTeam.id,
+                    email: prismaUser.email, // Use email from prismaUser
+                    name: prismaUser.name || 'Manager Name',
+                    title: 'Manager',
+                    managerId: null 
+                  }
+                });
+                console.log(`LOG: Automatically created employee record for manager ${prismaUser.id}`);
               } else {
-                  console.warn(`Organization ${clerkOrganizationId} for user ${userCreatedData.id} not found locally during user.created webhook. The organization.created event might be pending or failed.`);
+                console.log(`LOG: Manager ${prismaUser.id} already has team ${existingTeam.id}. Skipping automatic team creation.`);
               }
-            } else {
-              console.log(`No organization ID found in primary organization membership for user ${userCreatedData.id} during user.created webhook.`);
+            } catch (teamCreationError) {
+              console.error(`ERROR: Error during automatic team/employee creation for manager ${prismaUser.id}:`, teamCreationError);
+              // Optionally, decide if this error should also make the webhook return 500
+              // For now, it logs and continues, but the main upsert error below will catch broader issues.
             }
           } else {
-            console.log(`No organization memberships found for user ${userCreatedData.id} via getOrganizationMembershipList during user.created webhook. Will rely on organizationMembership.created event.`);
+            console.log("LOG: Condition for auto team creation NOT MET. Details:", {
+              roleIsManager: appRoleForCreation === UserRole.MANAGER,
+              orgsDisabled: !isOrganizationsEnabled(),
+              orgIdAvailable: !!organizationIdToUse,
+              prismaUserIdAvailable: !!prismaUser.id
+            });
           }
-        } catch (error) {
-          console.error(`Error fetching organization memberships for user ${userCreatedData.id} during user.created webhook:`, error);
+          // --- END: Automatic Team Creation ---
+
+        } catch (upsertOrTeamError) {
+          console.error(`ERROR during user upsert or subsequent auto-team logic for Clerk ID ${userCreatedData.id}:`, upsertOrTeamError);
+          console.error("Data state at time of error:", {
+            clerkId: userCreatedData.id, primaryEmail, userName, appRoleForCreation, organizationIdToUse
+          });
+          return res.status(500).json({ error: 'Failed to process user creation or initial setup.' });
+        }
+        
+        // Only attempt to link organization from Clerk if the organizations feature is enabled
+        if (isOrganizationsEnabled() && !organizationIdToUse) {
+          // Attempt to link organization if user has memberships
+          try {
+            // Assuming getOrganizationMembershipList might directly return the array
+            const organizationMemberships: OrganizationMembership[] = await users.getOrganizationMembershipList({ userId: userCreatedData.id });
+
+            if (organizationMemberships && organizationMemberships.length > 0) {
+              const primaryOrgMembership: OrganizationMembership = organizationMemberships[0]; // Assuming first is primary/relevant
+              const clerkOrganizationId = primaryOrgMembership.organization.id;
+
+              if (clerkOrganizationId) {
+                const org = await prisma.organization.findUnique({ 
+                  where: { clerkOrganizationId: clerkOrganizationId } 
+                });
+
+                if (org) {
+                  // Update only if not already linked to this specific org, to avoid unnecessary writes
+                  // And ensure not to overwrite other fields like 'role'
+                  await prisma.user.updateMany({ 
+                    where: { 
+                      clerkId: userCreatedData.id,
+                      OR: [ // Link if not linked, or linked to a different org
+                          { organizationId: null },
+                          { organizationId: { not: org.id } }
+                      ]
+                    }, 
+                    data: { organizationId: org.id } 
+                  });
+                  console.log(`User ${userCreatedData.id} linked to organization ${clerkOrganizationId} (local ID: ${org.id}) during user.created webhook processing.`);
+                } else {
+                    console.warn(`Organization ${clerkOrganizationId} for user ${userCreatedData.id} not found locally during user.created webhook. The organization.created event might be pending or failed.`);
+                }
+              }
+            } else {
+              console.log(`No organization memberships found for user ${userCreatedData.id} via getOrganizationMembershipList during user.created webhook. Will rely on organizationMembership.created event.`);
+            }
+          } catch (error) {
+            console.error(`Error fetching organization memberships for user ${userCreatedData.id} during user.created webhook:`, error);
+          }
         }
         break;
 
@@ -609,8 +816,9 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
         
         // --- START: App Role Logic for user.updated ---
         let roleUpdateData: { role?: UserRole } = {};
-        if (userUpdatedData.public_metadata?.app_role && isValidAppUserRole(userUpdatedData.public_metadata.app_role)) {
-          roleUpdateData.role = userUpdatedData.public_metadata.app_role as UserRole;
+        const updatedMetadataRole = userUpdatedData.public_metadata?.app_role;
+        if (updatedMetadataRole && typeof updatedMetadataRole === 'string' && isValidAppUserRole(updatedMetadataRole)) {
+          roleUpdateData.role = updatedMetadataRole as UserRole;
           console.log(`User update for ${userUpdatedData.id}: app_role '${roleUpdateData.role}' found in public_metadata. Will update.`);
         } else {
            console.log(`User update for ${userUpdatedData.id}: No app_role in public_metadata or invalid. App role will not be changed by this event alone.`);
@@ -723,9 +931,8 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
         console.log(`Received unhandled Clerk event type: ${eventType}`);
     }
   } catch (error) {
-    console.error(`Error processing Clerk webhook event ${eventType}:`, error);
+    console.error("ERROR: Top-level error in handleClerkWebhook:", error);
     // Return a 500 status code to indicate an internal server error to Clerk
-    // Clerk will then retry sending the webhook if it's configured to do so.
     return res.status(500).json({ error: 'Internal server error processing webhook.' });
   }
 

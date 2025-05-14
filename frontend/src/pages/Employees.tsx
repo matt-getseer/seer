@@ -277,7 +277,7 @@ const Employees = () => {
 
   // Sort the filtered employees - memoized
   const sortedAndFilteredEmployees = useMemo(() => {
-    let sortableItems = [...filteredEmployees];
+    const sortableItems = [...filteredEmployees];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         let aValue: any;

@@ -1,11 +1,17 @@
 import { SignUp as ClerkSignUp } from '@clerk/clerk-react'
+import { useFeatureFlags } from '../context/FeatureFlagContext'
 
 const SignUp = () => {
+  const { isOrganizationsEnabled } = useFeatureFlags();
+  
+  // Determine the redirect URL after signup based on the feature flag
+  const afterSignUpUrl = isOrganizationsEnabled() ? "/organizations/new" : "/";
+  
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <ClerkSignUp 
         signInUrl="/sign-in"
-        afterSignUpUrl="/organizations/new"
+        afterSignUpUrl={afterSignUpUrl}
         appearance={{
           layout: {
             socialButtonsVariant: "iconButton",

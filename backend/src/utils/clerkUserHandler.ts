@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 import { users, OrganizationMembership } from '@clerk/clerk-sdk-node';
 
 const prisma = new PrismaClient();
@@ -29,6 +29,13 @@ export async function findOrCreateUser(clerkUserId: string) {
 
     if (!user) {
       const userInfo = await getClerkUserInfo(clerkUserId);
+
+      // Ensure email is present
+      if (!userInfo.email) {
+        console.error(`No email found for Clerk user ${clerkUserId}. Cannot create or link user.`);
+        throw new Error(`User email not found for Clerk ID ${clerkUserId}.`);
+      }
+
       user = await prisma.user.findUnique({
         where: { email: userInfo.email },
       });
@@ -46,7 +53,8 @@ export async function findOrCreateUser(clerkUserId: string) {
             email: userInfo.email,
             name: userInfo.name,
             clerkId: clerkUserId,
-            password: 'clerk-auth-user', 
+            password: 'clerk-auth-user',
+            role: UserRole.MANAGER,
           },
         });
         wasUserNewlyCreated = true;

@@ -2,14 +2,17 @@
 
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 // --- DOTENV CONFIG FIRST ---
 console.log('Loading environment variables from index.ts...');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') }); // Path from /src to /backend/.env
 console.log('DEBUG from index.ts: After dotenv.config(), CLERK_SECRET_KEY is:', process.env.CLERK_SECRET_KEY);
 
 // --- THEN IMPORT THE CONFIGURED APP ---
-import app from './app'; // Import the app from app.ts
+import app from './app.js'; // Import the app from app.ts
 
 // --- Clerk Secret Key Check (Important to keep this early) ---
 const CLERK_SECRET_KEY_FROM_ENV = process.env.CLERK_SECRET_KEY;

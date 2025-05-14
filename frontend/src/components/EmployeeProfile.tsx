@@ -2,62 +2,10 @@ import { memo } from 'react';
 import Flag from 'react-world-flags';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import { useEmployee, useEmployeeMeetings } from '../hooks/useQueryHooks';
 import { ArrowLeft, EnvelopeSimple, Phone, Calendar, MapPin, Building, WarningCircle } from '@phosphor-icons/react';
 
-// Mock data for historical performance - would come from API in real implementation
-const mockAnalysisHistory = [
-  { month: 'Jan', healthScore: 72, technical: 68, communication: 75, teamwork: 73 },
-  { month: 'Feb', healthScore: 74, technical: 70, communication: 75, teamwork: 77 },
-  { month: 'Mar', healthScore: 75, technical: 72, communication: 77, teamwork: 76 },
-  { month: 'Apr', healthScore: 79, technical: 75, communication: 80, teamwork: 82 },
-  { month: 'May', healthScore: 76, technical: 74, communication: 78, teamwork: 76 },
-  { month: 'Jun', healthScore: 81, technical: 78, communication: 83, teamwork: 82 },
-  { month: 'Jul', healthScore: 83, technical: 81, communication: 84, teamwork: 84 },
-  { month: 'Aug', healthScore: 85, technical: 86, communication: 85, teamwork: 84 },
-  { month: 'Sep', healthScore: 87, technical: 88, communication: 86, teamwork: 87 },
-  { month: 'Oct', healthScore: 88, technical: 90, communication: 86, teamwork: 88 },
-  { month: 'Nov', healthScore: 91, technical: 92, communication: 89, teamwork: 92 },
-  { month: 'Dec', healthScore: 93, technical: 94, communication: 91, teamwork: 94 },
-];
-
-// Mock radar data
-const mockCurrentSkillsData = [
-  { skill: 'Technical', value: 94 },
-  { skill: 'Communication', value: 91 },
-  { skill: 'Leadership', value: 85 },
-  { skill: 'Problem Solving', value: 92 },
-  { skill: 'Teamwork', value: 94 },
-  { skill: 'Adaptability', value: 88 },
-];
-
-// Mock strengths
-const mockStrengths = [
-  "Exceptional technical knowledge in system architecture",
-  "Clear and effective communication with stakeholders",
-  "Strong team collaboration and knowledge sharing",
-  "Proactive problem-solving approach",
-  "Consistently delivers high-quality work on schedule"
-];
-
-// Mock support areas
-const mockSupportAreas = [
-  "Could benefit from more leadership opportunities",
-  "Additional mentoring on project management methodologies",
-  "Room for growth in strategic planning skills"
-];
-
-// Mock recommendations
-const mockRecommendations = [
-  "Enroll in the Advanced Leadership Program",
-  "Schedule monthly mentoring sessions with Tech Director",
-  "Lead the upcoming architecture review meeting",
-  "Consider cross-training with the Product team"
-];
-
-// New Mock Data for additional sections
-const mockActionItems = Array(5).fill("MOCKDATA");
+// Keep only the mock data that's actually being used
 const mockNewStrengths = Array(5).fill("MOCKDATA");
 const mockNewAreasForSupport = Array(5).fill("MOCKDATA");
 

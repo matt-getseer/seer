@@ -1,0 +1,88 @@
+Implementation Plan: V1 Product with Feature Flags
+Executive Summary
+This document outlines our approach for implementing the V1 product focused only on Manager and User roles, without organization management or admin capabilities. The plan establishes a feature flag system allowing easy activation of multi-organization support later, and implements a team member invitation system for managers.
+1. Feature Flag Architecture
+Purpose
+Create a feature flag system that allows us to disable organizations and admin roles initially while maintaining the existing data model, ensuring an easy transition in the future.
+Implementation
+Create environment variables to control feature flags
+Build a centralized configuration module for both frontend and backend
+Default all users to a single organization behind the scenes
+Key Flags
+ENABLE_ORGANIZATIONS: Controls multi-organization features
+ENABLE_ADMIN_ROLE: Controls admin-specific UI and functionality
+2. Default Organization Setup
+Database Approach
+Create one master organization during initial database setup
+Assign all users to this organization automatically
+Maintain existing schema and data relationships
+User Assignment Process
+Auto-assign all new users to default organization during registration
+Ensure auth middleware assigns default organization ID when feature is disabled
+Modify user creation and Clerk webhook handlers to respect feature flag
+3. Frontend Modifications
+UI Adaptations
+Modify organization check wrapper to bypass organization validation
+Conditionally render admin-specific UI sections based on feature flags
+Authentication Flow
+Maintain existing auth flow but skip organization choice screens
+Ensure feature flag is checked before any organization-related UI is shown
+4. Backend Adjustments
+Access Control
+Modify access control services to use default organization when feature is disabled
+Maintain security boundaries based on manager hierarchies within the default organization
+Ensure queries consistently filter by organization ID even when feature is disabled
+API Endpoints
+Update organization-dependent endpoints to use default organization ID
+Add feature flag checks to bypass organization validation when appropriate
+5. Manager Team Invitation System Implementation Plan
+Database Model
+Create Invitation table with fields for status, expiry date, team assignment, and manager reference
+Add indexes for efficient querying by manager and status
+Clerk Integration
+Use Clerk's user invitation API for the authentication aspect
+Implement custom logic to track invitation counts and enforce manager limits
+Store additional invitation metadata in our database
+Modify Clerk webhooks to handle invitation acceptance events
+Backend APIs
+Create endpoints to manage custom invitation tracking
+Implement invitation count validation (max 3 active per manager)
+Add expiration logic (7-day TTL)
+Respect organization feature flag in all operations
+SendGrid Integration
+Use Clerk's email service or integrate SendGrid for custom invitation emails
+Create templates with secure acceptance links (via Clerk)
+Add tracking for invitation status
+Frontend Components
+Create invitation form with Clerk API integration
+Implement status indicators and remaining quota display
+Add revocation functionality
+Acceptance Flow
+Leverage Clerk's secure authentication for user signup
+Connect new user accounts to the appropriate team/organization
+Implement default organization assignment based on feature flag
+Testing
+Verify invitation limits
+Test expiration functionality
+Validate Clerk integration
+Ensure proper feature flag handling
+6. Testing Strategy
+Verify all features work with organization feature flag off
+Test database integrity with feature flags in both states
+Ensure invitation system honors the 3-invitation limit
+Validate proper role assignment during invitation acceptance
+7. Future Enablement Process
+Organization Feature Enablement
+Set environment variables to enable organizations
+Deploy configuration changes
+No code changes or migrations required
+Organization management UI will appear automatically
+Admin Role Enablement
+Set environment variable to enable admin role
+Deploy configuration changes
+Admin-specific UI and functionality will become available
+8. Documentation & Training
+Create user guide explaining manager invitation process
+Document feature flag system for development team
+Prepare future documentation for organization management features
+This implementation approach minimizes development effort while providing a clear path to the full-featured product in future versions.

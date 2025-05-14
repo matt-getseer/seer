@@ -1,7 +1,6 @@
 import { Question, CaretRight } from '@phosphor-icons/react'
-import { FC, useState, useEffect, useCallback, useMemo, memo } from 'react'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { useClerk } from '@clerk/clerk-react'
+import { FC, useState, useEffect, useMemo, memo } from 'react'
+import { useLocation, Link } from 'react-router-dom'
 import { employeeService } from '../api/client'
 
 // Cache for employee name lookups
@@ -32,9 +31,7 @@ const BreadcrumbItem = memo(({ breadcrumb, isLast, index }: {
 ));
 
 const Navbar: FC = memo(() => {
-  const navigate = useNavigate()
   const location = useLocation()
-  const { signOut } = useClerk()
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
   const [isScrolled, setIsScrolled] = useState(false);
 

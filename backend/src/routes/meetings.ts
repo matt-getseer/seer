@@ -1,13 +1,15 @@
-import express, { Response } from 'express';
+import express, { Response, Request } from 'express';
 import { PrismaClient, MeetingType, User } from '@prisma/client';
-import { authenticate, extractUserInfo, RequestWithUser } from '../middleware/auth';
-import { inviteBotToMeeting } from '../services/meetingBaasService';
-import { getAuthenticatedGoogleClient } from '../services/googleAuthService';
-import { createCalendarEvent } from '../services/googleCalendarService';
-import { createZoomMeeting, getAuthenticatedZoomClient } from '../services/zoomAuthService';
+import { authenticate, extractUserInfo } from '../middleware/auth.js';
+import { RequestWithUser } from '../middleware/types.js';
+import { inviteBotToMeeting } from '../services/meetingBaasService.js';
+import { getAuthenticatedGoogleClient } from '../services/googleAuthService.js';
+import { createCalendarEvent } from '../services/googleCalendarService.js';
+import { createZoomMeeting, getAuthenticatedZoomClient } from '../services/zoomAuthService.js';
 import axios from 'axios';
-import { getAccessibleMeetings } from '../services/accessControlService';
+import { getAccessibleMeetings } from '../services/accessControlService.js';
 import { formatInTimeZone } from 'date-fns-tz';
+import { withOrganizationFilter, getQueryOrganizationId } from '../utils/queryBuilder.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -47,9 +49,9 @@ function formatMeetingType(type: MeetingType): string {
 }
 
 // POST /api/meetings/record - Invite bot and create meeting record
-router.post('/record', authenticate, extractUserInfo, async (req: RequestWithUser, res: Response) => {
-  const { meetingUrl, title, employeeId } = req.body as RecordMeetingRequestBody;
-  const managerId = req.user?.userId;
+router.post('/record', authenticate, extractUserInfo, async (req: Request, res: Response) => {
+  const { meetingUrl, title, employeeId } = (req as RequestWithUser).body as RecordMeetingRequestBody;
+  const managerId = (req as RequestWithUser).user?.id;
 
   if (!meetingUrl || !employeeId || !managerId) {
     return res.status(400).json({ message: 'Missing required fields: meetingUrl, employeeId, or managerId could not be determined from token' });
@@ -138,7 +140,7 @@ router.post('/record', authenticate, extractUserInfo, async (req: RequestWithUse
 });
 
 // POST /api/meetings/schedule - Updated to handle different platforms
-router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithUser, res: Response) => {
+router.post('/schedule', authenticate, extractUserInfo, async (req: Request, res: Response) => {
   // Destructure platform, default to Google Meet if not provided
   const { 
     employeeId, 
@@ -148,9 +150,9 @@ router.post('/schedule', authenticate, extractUserInfo, async (req: RequestWithU
     timeZone, 
     meetingType, 
     platform = 'Google Meet' // Default to Google Meet
-  } = req.body as ScheduleMeetingRequestBody;
+  } = (req as RequestWithUser).body as ScheduleMeetingRequestBody;
   
-  const managerId = req.user?.userId;
+  const managerId = (req as RequestWithUser).user?.id;
 
   // Basic validation
   if (!employeeId || !startDateTime || !endDateTime || !timeZone || !meetingType || !managerId) {
@@ -370,8 +372,8 @@ function extractPlatform(url: string): string | undefined {
 }
 
 // GET /api/meetings - Temporarily removing Redis caching
-router.get('/', authenticate, extractUserInfo, async (req: RequestWithUser, res: Response) => {
-  const managerId = req.user?.userId;
+router.get('/', authenticate, extractUserInfo, async (req: Request, res: Response) => {
+  const managerId = (req as RequestWithUser).user?.id;
   // const skipCache = req.query.skipCache === 'true'; // Cache logic commented out
 
   if (!managerId) {
@@ -406,9 +408,9 @@ router.get('/', authenticate, extractUserInfo, async (req: RequestWithUser, res:
 });
 
 // GET /api/meetings/:id - Temporarily removing Redis caching
-router.get('/:id', authenticate, extractUserInfo, async (req: RequestWithUser, res: Response) => {
+router.get('/:id', authenticate, extractUserInfo, async (req: Request, res: Response) => {
   const meetingId = parseInt(req.params.id, 10);
-  const userId = req.user?.userId;
+  const userId = (req as RequestWithUser).user?.id;
 
   if (isNaN(meetingId)) {
     return res.status(400).json({ message: 'Invalid meeting ID.' });
@@ -480,23 +482,48 @@ router.get('/:id', authenticate, extractUserInfo, async (req: RequestWithUser, r
 });
 
 // Function to get all meetings accessible by the current user
-const getAllAccessibleMeetings = async (req: RequestWithUser, res: Response) => {
-  const managerId = req.user?.userId; // Assuming userId from token is the managerId or current user ID
-
-  if (!managerId) {
-    return res.status(401).json({ message: 'User not authenticated or userId not found in token' });
+const getAllAccessibleMeetings = async (req: Request, res: Response) => {
+  const user = (req as RequestWithUser).user;
+  
+  if (!user || !user.id) {
+    return res.status(401).json({ message: 'User not authenticated or user ID missing' });
   }
 
   try {
-    const currentUser = await prisma.user.findUnique({
-      where: { id: managerId },
+    // Get organization ID using utility that respects feature flags
+    const organizationId = getQueryOrganizationId(req);
+    
+    // Use organization filter in query
+    const meetings = await prisma.meeting.findMany({
+      where: withOrganizationFilter({
+        OR: [
+          { managerId: user.id }, // Meetings where user is manager
+          {
+            employee: {
+              userId: user.id // Meetings where user is the employee
+            }
+          }
+        ]
+      }, organizationId),
+      include: {
+        employee: {
+          select: { id: true, name: true, email: true, title: true }
+        },
+        manager: {
+          select: { id: true, name: true, email: true }
+        },
+        transcript: {
+          select: { id: true, updatedAt: true }
+        },
+        insights: {
+          select: { id: true, type: true, updatedAt: true }
+        }
+      },
+      orderBy: {
+        scheduledTime: 'desc'
+      }
     });
 
-    if (!currentUser) {
-      return res.status(404).json({ message: 'User not found in database' });
-    }
-
-    const meetings = await getAccessibleMeetings(currentUser);
     res.json(meetings);
   } catch (error) {
     console.error('Error fetching accessible meetings:', error);
@@ -508,8 +535,8 @@ const getAllAccessibleMeetings = async (req: RequestWithUser, res: Response) => 
   }
 };
 
-// Register the new GET route for all accessible meetings
-router.get('/', authenticate, extractUserInfo, getAllAccessibleMeetings);
+// Register route for accessible meetings (renamed to avoid conflict)
+router.get('/accessible', authenticate, extractUserInfo, getAllAccessibleMeetings);
 
 // TODO: Add Webhook endpoint for Meeting BaaS notifications
 

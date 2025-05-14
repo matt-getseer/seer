@@ -8,8 +8,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// MODEL ORDERING: Based on your last provided schema that worked up to Employee.
-// If issues arise, consider reordering to: Team, Organization, User, Department, Employee, Meeting etc.
 
 model Organization {
   id                  String       @id @db.Uuid
@@ -20,6 +18,7 @@ model Organization {
   Team                Team[]
   departments         Department[]
   User                User[]
+  invitations         Invitation[]
 
   @@index([clerkOrganizationId])
 }
@@ -33,7 +32,6 @@ model Department {
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id])
   head           User?        @relation("DepartmentHead", fields: [headId], references: [id])
-  teams          Team[]
 
   @@unique([name, organizationId])
   @@index([organizationId])
@@ -45,14 +43,16 @@ model Team {
   name           String
   organizationId String       @db.Uuid
   Organization   Organization @relation(fields: [organizationId], references: [id])
-  departmentId   Int
-  department     Department   @relation(fields: [departmentId], references: [id])
   userId         Int? // Keeping TeamManager relation commented for now
   user           User?        @relation("TeamManager", fields: [userId], references: [id])
   Employee       Employee[] // Using your casing from previous schema
+  invitations    Invitation[]
+  isDefaultTeam  Boolean      @default(false)
 
-  createdAt DateTime @default(now()) // <--- ADD THIS LINE
-  updatedAt DateTime @updatedAt // <--- ADD THIS LINE
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, isDefaultTeam])
 }
 
 model User {
@@ -76,6 +76,7 @@ model User {
   role               UserRole      @default(USER)
   Employee           Employee[] // Using your casing
   meetings           Meeting[]     @relation("ManagerMeetings") // Relation to Meeting
+  sentInvitations    Invitation[]
 
   teams Team[] @relation("TeamManager") // Keeping commented for now
 
@@ -176,4 +177,34 @@ enum MeetingType {
   ONE_ON_ONE
   SIX_MONTH_REVIEW
   TWELVE_MONTH_REVIEW
+}
+
+// Add a new model for team member invitations
+model Invitation {
+  id                 String           @id @db.Uuid
+  email              String
+  status             InvitationStatus @default(PENDING)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  expiresAt          DateTime
+  teamId             Int
+  managerId          Int
+  organizationId     String           @db.Uuid
+  clerkInvitationId  String           @unique
+  
+  team               Team             @relation(fields: [teamId], references: [id])
+  manager            User             @relation(fields: [managerId], references: [id])
+  organization       Organization     @relation(fields: [organizationId], references: [id])
+
+  @@index([email])
+  @@index([managerId])
+  @@index([status])
+  @@index([organizationId])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
 }

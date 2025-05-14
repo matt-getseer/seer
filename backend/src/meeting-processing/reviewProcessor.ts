@@ -1,6 +1,6 @@
 import { Meeting, MeetingType, PrismaClient } from '@prisma/client';
-import { InsightData } from './types';
-import { callClaudeWithRetry, MeetingInsights } from '../services/nlpService';
+import { InsightData } from './types.js';
+import { callClaudeWithRetry, MeetingInsights } from '../services/nlpService.js';
 
 const prisma = new PrismaClient();
 

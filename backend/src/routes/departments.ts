@@ -1,58 +1,43 @@
 import express, { Request, Response } from 'express';
 import { PrismaClient, Prisma, UserRole } from '@prisma/client'; // Import necessary types
-import { authenticate, extractUserInfo } from '../middleware/auth'; // Use existing auth middleware
+import { authenticate, extractUserInfo } from '../middleware/auth.js'; // Use existing auth middleware, add .js
+import { RequestWithUser } from '../middleware/types.js'; // Import RequestWithUser directly
+import { withOrganizationFilter, getQueryOrganizationId } from '../utils/queryBuilder.js'; // add .js
 
 // Define AuthenticatedRequest if not already globally available
 // (Copied from teams.ts for encapsulation, consider moving to a shared types file later)
-interface AuthenticatedRequest extends Request {
-  user?: {
-    clerkId?: string;
-    userId?: number;
-    email?: string;
-    iat?: number;
-    exp?: number;
-    organizationId?: string; // Ensure organizationId is expected here from middleware
-  };
-  auth?: {
-    userId: string;
-    sessionId: string;
-  };
-}
+// interface AuthenticatedRequest extends Request {
+//   user?: {
+//     clerkId?: string;
+//     userId?: number;
+//     email?: string;
+//     iat?: number;
+//     exp?: number;
+//     organizationId?: string; // Ensure organizationId is expected here from middleware
+//   };
+//   auth?: {
+//     userId: string;
+//     sessionId: string;
+//   };
+// }
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
 // GET /api/departments - List all departments for the user's organization
-const getAllDepartments = async (req: AuthenticatedRequest, res: Response): Promise<Response | void> => {
+const getAllDepartments = async (req: RequestWithUser, res: Response): Promise<Response | void> => {
   try {
-    if (!req.user?.userId) {
+    if (!req.user?.id) {
       return res.status(401).json({ error: 'User not authenticated properly' });
     }
 
-    // Fetch organizationId directly from the authenticated user's token/session info
-    // Assumes your extractUserInfo middleware adds organizationId to req.user
-    let organizationId = req.user.organizationId; // Use let to allow reassignment if fetched
+    // Get organization ID from request (middleware should have set this already)
+    // Use the utility function that respects feature flags
+    const organizationId = getQueryOrganizationId(req as RequestWithUser);
 
-    if (!organizationId) {
-        // If orgId is not in the token, try fetching the user from DB
-        console.warn(`Organization ID not found directly on req.user for userId: ${req.user.userId}. Fetching from DB.`);
-        const userWithOrg = await prisma.user.findUnique({
-            where: { id: req.user.userId },
-            select: { organizationId: true }
-        });
-        if (!userWithOrg?.organizationId) {
-            console.error(`User ${req.user.userId} is not associated with an organization.`);
-            return res.status(400).json({ message: 'User is not associated with an organization.' });
-        }
-        // Assign fetched organizationId if found
-        organizationId = userWithOrg.organizationId; 
-    }
-
-
+    // Use the withOrganizationFilter utility to build query
     const departments = await prisma.department.findMany({
-      where: {
-        organizationId: organizationId, // Use the determined organizationId
-      },
+      where: withOrganizationFilter({}, organizationId),
       orderBy: {
         name: 'asc', // Order alphabetically by name
       },
@@ -86,25 +71,17 @@ const getAllDepartments = async (req: AuthenticatedRequest, res: Response): Prom
 };
 
 // POST /api/departments - Create a new department
-const createDepartment = async (req: AuthenticatedRequest, res: Response): Promise<Response | void> => {
+const createDepartment = async (req: RequestWithUser, res: Response): Promise<Response | void> => {
   try {
-    if (!req.user?.userId) {
-      return res.status(401).json({ error: 'User not authenticated properly' });
+    if (!req.user?.id || !req.user.role || !req.user.organizationId) {
+      return res.status(401).json({ error: 'User not authenticated or missing role/organization information.' });
     }
+    const currentUserRole = req.user.role;
+    const currentUserOrganizationId = req.user.organizationId;
 
-    // Determine organizationId (same logic as GET)
-    let organizationId = req.user.organizationId;
-    if (!organizationId) {
-      console.warn(`Organization ID not found directly on req.user for userId: ${req.user.userId} during create. Fetching from DB.`);
-      const userWithOrg = await prisma.user.findUnique({
-          where: { id: req.user.userId },
-          select: { organizationId: true }
-      });
-      if (!userWithOrg?.organizationId) {
-          console.error(`User ${req.user.userId} is not associated with an organization.`);
-          return res.status(400).json({ message: 'User is not associated with an organization.' });
-      }
-      organizationId = userWithOrg.organizationId; 
+    // Authorization: Only ADMIN or MANAGER can create departments
+    if (currentUserRole !== UserRole.ADMIN && currentUserRole !== UserRole.MANAGER) {
+      return res.status(403).json({ error: 'Forbidden: Only admins or managers can create departments.' });
     }
 
     // Get department name from request body
@@ -117,11 +94,14 @@ const createDepartment = async (req: AuthenticatedRequest, res: Response): Promi
     const trimmedName = name.trim();
 
     // Check if department with the same name already exists in the organization
+    // Use the withOrganizationFilter utility with simplified case insensitive check
     const existingDepartment = await prisma.department.findFirst({
-      where: {
-        name: { equals: trimmedName, mode: 'insensitive' }, // Case-insensitive check
-        organizationId: organizationId,
-      },
+      where: withOrganizationFilter({
+        name: {
+          mode: Prisma.QueryMode.insensitive,
+          equals: trimmedName
+        }
+      }, currentUserOrganizationId),
       select: { id: true } // Only need to know if it exists
     });
 
@@ -133,7 +113,7 @@ const createDepartment = async (req: AuthenticatedRequest, res: Response): Promi
     const newDepartment = await prisma.department.create({
       data: {
         name: trimmedName,
-        organizationId: organizationId,
+        organizationId: currentUserOrganizationId,
         // headId: null // Head is not assigned on creation via this endpoint
       },
        select: { // Select only needed fields to return
@@ -161,27 +141,29 @@ const createDepartment = async (req: AuthenticatedRequest, res: Response): Promi
 };
 
 // PUT /api/departments/:departmentId/assign-head - Assign a user as department head (Admin only)
-const assignDepartmentHead = async (req: AuthenticatedRequest, res: Response): Promise<Response | void> => {
+const assignDepartmentHead = async (req: RequestWithUser, res: Response): Promise<Response | void> => {
   try {
-    if (!req.user?.userId) {
-      return res.status(401).json({ error: 'User not authenticated properly' });
+    if (!req.user?.id || !req.user.role || !req.user.organizationId) {
+      return res.status(401).json({ error: 'User not authenticated or missing role/organization information.' });
     }
+    const currentUserRole = req.user.role;
+    const currentUserOrganizationId = req.user.organizationId;
 
     // 1. Verify the requesting user is an ADMIN
-    const requestingUser = await prisma.user.findUnique({
-      where: { id: req.user.userId },
-      select: { role: true, organizationId: true },
-    });
+    // const requestingUser = await prisma.user.findUnique({ // REMOVED
+    //   where: { id: req.user.id },
+    //   select: { role: true, organizationId: true },
+    // });
 
-    if (!requestingUser) {
-      return res.status(404).json({ error: 'Requesting user not found.' });
-    }
-    if (requestingUser.role !== UserRole.ADMIN) {
+    // if (!requestingUser) { // Should not happen if req.user.id is valid
+    //   return res.status(404).json({ error: 'Requesting user not found.' });
+    // }
+    if (currentUserRole !== UserRole.ADMIN) {
       return res.status(403).json({ error: 'Forbidden: Only admins can assign department heads.' });
     }
-    if (!requestingUser.organizationId) {
-        return res.status(400).json({ message: 'Admin user is not associated with an organization.'});
-    }
+    // if (!currentUserOrganizationId) { // Covered by initial check
+    //     return res.status(400).json({ message: 'Admin user is not associated with an organization.'});
+    // }
 
 
     // 2. Get departmentId from URL params and userIdToAssign from request body
@@ -206,7 +188,7 @@ const assignDepartmentHead = async (req: AuthenticatedRequest, res: Response): P
     if (!department) {
       return res.status(404).json({ error: 'Department not found.' });
     }
-    if (department.organizationId !== requestingUser.organizationId) {
+    if (department.organizationId !== currentUserOrganizationId) {
         return res.status(403).json({ error: "Forbidden: Department does not belong to the admin\'s organization." });
     }
 
@@ -219,7 +201,7 @@ const assignDepartmentHead = async (req: AuthenticatedRequest, res: Response): P
       if (!userToAssign) {
         return res.status(404).json({ error: 'User to assign as department head not found.' });
       }
-      if (userToAssign.organizationId !== requestingUser.organizationId) {
+      if (userToAssign.organizationId !== currentUserOrganizationId) {
           return res.status(403).json({ error: "Forbidden: User to assign does not belong to the admin\'s organization." });
       }
       if (userToAssign.role !== UserRole.MANAGER) {

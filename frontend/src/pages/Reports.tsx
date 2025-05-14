@@ -1,6 +1,6 @@
 import { ArrowRight } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
-import { reportCategories, ReportCategory } from '../../src/constants/reportConstants'
+import { reportCategories } from '../../src/constants/reportConstants'
 
 const Reports = () => {
   return (

@@ -1,3 +1,4 @@
+/* eslint-env node */
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
@@ -7,6 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+// eslint-disable-next-line no-undef
 const PORT = process.env.PORT || 5173;
 
 // Serve static files
@@ -20,5 +22,6 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
+  // eslint-disable-next-line no-undef
   console.log(`Server running at http://localhost:${PORT}`);
 }); 

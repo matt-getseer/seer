@@ -14,7 +14,7 @@ import {
 } from '@phosphor-icons/react'
 import { UserButton, useUser } from '@clerk/clerk-react'
 import { useAppContext } from '../context/AppContext'
-import { reportCategories } from '../constants/reportConstants'
+import { useFeatureFlags } from '../context/FeatureFlagContext'
 
 interface SidebarProps {
   onSearchClick: () => void;
@@ -58,6 +58,7 @@ const NavLinkItem = memo(({
 const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: SidebarProps) => {
   const { user: clerkUser } = useUser();
   const { currentUser, isLoadingUser } = useAppContext();
+  const { isAdminRoleEnabled } = useFeatureFlags();
 
   const toggleCollapse = useCallback(() => {
     if (onToggleCollapse) {
@@ -73,7 +74,12 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
     );
   }
 
+  // Determine effective role - treat ADMIN as MANAGER when admin role is disabled
   const userRole = currentUser?.role || null;
+  const effectiveRole = (!isAdminRoleEnabled() && userRole === 'ADMIN') ? 'MANAGER' : userRole;
+  
+  // Determine if user should see manager-level items
+  const hasManagerAccess = effectiveRole === 'MANAGER' || effectiveRole === 'ADMIN';
 
   return (
     <aside className={`bg-[#f4f4f5] fixed h-screen flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16' : 'w-sidebar'}`}>
@@ -129,7 +135,7 @@ const Sidebar = memo(({ onSearchClick, isCollapsed = false, onToggleCollapse }: 
             label="Meetings"
           />
           
-          {(userRole === 'ADMIN' || userRole === 'MANAGER') && (
+          {hasManagerAccess && (
             <>
               <NavLinkItem 
                 to="/employees"
